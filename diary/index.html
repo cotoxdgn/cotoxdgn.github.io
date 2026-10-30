@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ひな形">
+<title>ひな形</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="../shared/apps.css">
+<style>
+  main { max-width: 640px; margin: 0 auto; padding: 16px 16px 48px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  h1 { font-size: 20px; margin: 8px 0; }
+  ul { list-style: none; padding: 0; }
+  li { display: flex; gap: 8px; align-items: center; justify-content: space-between;
+       background: var(--ax-surface); border: 1px solid var(--ax-line); border-radius: var(--ax-radius); padding: 8px 12px; margin: 8px 0; }
+  .pending { font-size: 12px; color: var(--ax-muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>ひな形</h1>
+    <button class="ax-btn ax-btn-ghost" type="button" id="settings" aria-label="接続の設定">接続</button>
+  </header>
+  <form id="form" class="ax-row">
+    <input class="ax-input" id="text" placeholder="メモ" style="flex:1;margin:0" required>
+    <button class="ax-btn ax-btn-primary">追加</button>
+  </form>
+  <p id="status" class="ax-note"></p>
+  <ul id="list"></ul>
+</main>
+<script src="../shared/apps.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
