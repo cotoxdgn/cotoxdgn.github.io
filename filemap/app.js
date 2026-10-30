@@ -76,8 +76,10 @@
     var ids = [it.id].concat(descendants(it).map(function (x) { return x.id; }));
     return S.links.filter(function (l) { return (l.d.items || []).some(function (i) { return ids.indexOf(i) >= 0; }); }).length;
   }
+  function latest(id) { var r = db.get(id); return r ? r.data : null; } // put 直後の値も含めた最新
   function putItem(it, patch) {
-    var d = Object.assign({}, it.d, patch);
+    if (typeof patch === 'function') patch = patch(latest(it.id) || it.d);
+    var d = Object.assign({}, latest(it.id) || it.d, patch);
     return db.put(d, it.id);
   }
 
@@ -286,11 +288,11 @@
     closeSheet();
     var ov = document.createElement('div');
     ov.className = 'ov';
-    ov.innerHTML = '<div class="sheet" role="dialog" aria-modal="true">' + '<div class="grab"></div>' + html + '</div>';
+    ov.innerHTML = '<div class="bsheet" role="dialog" aria-modal="true">' + '<div class="grab"></div>' + html + '</div>';
     ov.addEventListener('click', function (e) { if (e.target === ov) closeSheet(); });
     $('sheet-root').appendChild(ov);
     S.lastFocus = document.activeElement;
-    if (mount) mount(ov.querySelector('.sheet'));
+    if (mount) mount(ov.querySelector('.bsheet'));
   }
   function closeSheet() {
     $('sheet-root').innerHTML = '';
@@ -464,7 +466,7 @@
   // ---------- 操作 ----------
   document.addEventListener('click', function (e) {
     var b = e.target.closest('[data-act]');
-    if (!b || b.closest('.sheet')) return;
+    if (!b || b.closest('.bsheet')) return;
     var act = b.getAttribute('data-act');
     var id = b.getAttribute('data-id');
     var cur = S.cur && S.cur.v === 'item' ? S.items[S.cur.id] : null;
@@ -475,18 +477,18 @@
     else if (act === 'edit-item') itemSheet(S.items[id]);
     else if (act === 'add-link') linkSheet(null, cur ? cur.id : null);
     else if (act === 'edit-link') { var l = S.links.filter(function (x) { return x.id === id; })[0]; if (l) linkSheet(l); }
-    else if (act === 'star') { var s = S.links.filter(function (x) { return x.id === id; })[0]; if (s) db.put(Object.assign({}, s.d, { star: !s.d.star }), s.id); }
+    else if (act === 'star') { var s = S.links.filter(function (x) { return x.id === id; })[0]; if (s) { var sd = latest(s.id) || s.d; db.put(Object.assign({}, sd, { star: !sd.star }), s.id); } }
     else if (act === 'settings') Apps.openConnectSheet(APP);
     else if (act === 'edit-goals') { S.editGoals = !S.editGoals; render(); }
-    else if (act === 'del-goal' && cur) putItem(cur, { goals: (cur.d.goals || []).filter(function (g) { return g.id !== id; }) });
-    else if (act === 'reset-goals' && cur) putItem(cur, { goals: (cur.d.goals || []).map(function (g) { return Object.assign({}, g, { done: false }); }) });
+    else if (act === 'del-goal' && cur) putItem(cur, function (d) { return { goals: (d.goals || []).filter(function (g) { return g.id !== id; }) }; });
+    else if (act === 'reset-goals' && cur) putItem(cur, function (d) { return { goals: (d.goals || []).map(function (g) { return Object.assign({}, g, { done: false }); }) }; });
   });
   document.addEventListener('change', function (e) {
     var t = e.target;
-    if (t.getAttribute('data-act') !== 'goal' || t.closest('.sheet')) return;
+    if (t.getAttribute('data-act') !== 'goal' || t.closest('.bsheet')) return;
     var cur = S.items[S.cur.id];
     if (!cur) return;
-    putItem(cur, { goals: (cur.d.goals || []).map(function (g) { return g.id === t.getAttribute('data-id') ? Object.assign({}, g, { done: t.checked }) : g; }) });
+    putItem(cur, function (d) { return { goals: (d.goals || []).map(function (g) { return g.id === t.getAttribute('data-id') ? Object.assign({}, g, { done: t.checked }) : g; }) }; });
   });
   document.addEventListener('submit', function (e) {
     var f = e.target;
@@ -497,7 +499,8 @@
     var t = inp.value.trim();
     if (!cur || !t) return;
     S.refocusGoal = true;
-    putItem(cur, { goals: (cur.d.goals || []).concat([{ id: Apps.uuid().slice(0, 8), text: t, done: false }]) });
+    inp.value = '';
+    putItem(cur, function (d) { return { goals: (d.goals || []).concat([{ id: Apps.uuid().slice(0, 8), text: t, done: false }]) }; });
   });
   document.addEventListener('input', function (e) {
     var t = e.target;

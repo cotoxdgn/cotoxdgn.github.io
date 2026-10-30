@@ -131,7 +131,7 @@ a { color: inherit; }
 .ft.doc { background: var(--sky-soft); color: var(--sky); } .ft.sheet { background: var(--mint-soft); color: var(--mint); }
 .ft.pdf { background: var(--pink-soft); color: var(--pink); } .ft.folder { background: var(--sun-soft); color: var(--sun); }
 .ft.slide { background: var(--lilac-soft); color: var(--lilac); } .ft.other { background: var(--grid); color: var(--muted); }
-.fn { flex: 1; min-width: 0; background: none; border: 0; padding: 0; text-align: left; color: inherit; }
+.fn { flex: 1; min-width: 0; overflow: hidden; display: block; background: none; border: 0; padding: 0; text-align: left; color: inherit; }
 .fn b { display: block; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fn small { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .star { border: 0; background: none; width: 34px; height: 34px; color: var(--line); font-size: 18px; border-radius: 9px; flex: none; padding: 0; }
@@ -156,9 +156,9 @@ a { color: inherit; }
 
 /* 下から出るシート */
 .ov { position: fixed; inset: 0; z-index: 50; background: var(--shade); display: flex; align-items: flex-end; justify-content: center; }
-.sheet { width: 100%; max-width: 560px; max-height: 92vh; overflow: auto; background: var(--paper); border-radius: 26px 26px 0 0;
+.bsheet { width: 100%; max-width: 560px; max-height: 92vh; overflow: auto; background: var(--paper); border-radius: 26px 26px 0 0;
   padding: 10px max(16px, env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 14px; }
-.sheet > * { flex-shrink: 0; }
+.bsheet > * { flex-shrink: 0; }
 .grab { width: 40px; height: 5px; border-radius: 5px; background: var(--line); margin: 0 auto; flex: none; }
 .sheet-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .sheet-h h3 { font-size: 18px; text-align: center; flex: 1; }
@@ -208,7 +208,7 @@ textarea.ax-input { resize: vertical; min-height: 72px; }
   .tabbar, .fab { display: none; }
   .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); align-items: start; gap: 18px; }
   .ov { align-items: center; padding: 24px; }
-  .sheet { border-radius: 24px; padding-bottom: 22px; }
+  .bsheet { border-radius: 24px; padding-bottom: 22px; }
   .grab { display: none; }
 }
 @media (max-width: 899px) { .pc-only { display: none !important; } }
