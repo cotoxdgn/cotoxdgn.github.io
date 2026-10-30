@@ -5,34 +5,189 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="ひな形">
-<title>ひな形</title>
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="琴音日記">
+<meta name="theme-color" content="#FBFAF7">
+<title>琴音日記</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&family=Zen+Maru+Gothic:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="../shared/apps.css">
 <style>
-  main { max-width: 640px; margin: 0 auto; padding: 16px 16px 48px; }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  h1 { font-size: 20px; margin: 8px 0; }
-  ul { list-style: none; padding: 0; }
-  li { display: flex; gap: 8px; align-items: center; justify-content: space-between;
-       background: var(--ax-surface); border: 1px solid var(--ax-line); border-radius: var(--ax-radius); padding: 8px 12px; margin: 8px 0; }
-  .pending { font-size: 12px; color: var(--ax-muted); }
+/* 色：モックと同じ（くすみローズ＋セージ＋マスタード） */
+:root {
+  --paper: #FBFAF7; --well: #EEF1F3; --ink: #3B3A44; --muted: #85828F; --line: #E2DFE6;
+  --rose: #B8667A; --rose-soft: #F5E4E8; --sage: #6E9A80; --sage-soft: #E3EEE7; --mustard: #D2A845; --sky: #5F82AE;
+  --display: "Klee One", "Zen Maru Gothic", "Hiragino Mincho ProN", serif;
+  --ax-bg: var(--paper); --ax-surface: #FFFFFF; --ax-text: var(--ink); --ax-muted: var(--muted); --ax-line: var(--line);
+  --ax-accent: var(--rose); --ax-accent-text: #FFFFFF; --ax-radius: 14px;
+  --ax-font: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #232329; --well: #2E2E36; --ink: #ECEBF0; --muted: #A3A0AD; --line: #3C3B45;
+  --rose: #E09AAA; --rose-soft: #46313A; --sage: #9CC2AC; --sage-soft: #2F3E36; --mustard: #E3C47A; --sky: #93B2DA;
+  --ax-surface: #2A2A31; --ax-accent-text: #2A1C21;
+} }
+:root[data-theme="dark"] {
+  --paper: #232329; --well: #2E2E36; --ink: #ECEBF0; --muted: #A3A0AD; --line: #3C3B45;
+  --rose: #E09AAA; --rose-soft: #46313A; --sage: #9CC2AC; --sage-soft: #2F3E36; --mustard: #E3C47A; --sky: #93B2DA;
+  --ax-surface: #2A2A31; --ax-accent-text: #2A1C21;
+}
+
+body { background: var(--paper); }
+main { max-width: 560px; margin: 0 auto; padding: 8px max(16px, env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 4px; }
+.brand { font-family: var(--display); font-weight: 600; font-size: 15px; color: var(--muted); letter-spacing: .08em; }
+.icons { display: flex; gap: 2px; }
+.icon-btn { min-height: 40px; min-width: 40px; padding: 6px 10px; border: 0; background: transparent; color: var(--muted);
+  border-radius: 12px; font-size: 13px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.icon-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+.icon-btn:focus-visible, .tab:focus-visible, .cal button:focus-visible, .nav button:focus-visible { outline: 3px solid var(--rose); outline-offset: 2px; }
+.status { font-size: 12px; color: var(--muted); min-height: 1.5em; margin: 2px 0 0; }
+.status.err { color: var(--ax-danger); }
+
+.view { display: flex; flex-direction: column; gap: 14px; }
+.date { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
+.date small { display: block; color: var(--muted); font-size: 12px; letter-spacing: .08em; }
+.date strong { font-family: var(--display); font-size: 28px; font-weight: 600; line-height: 1.3; }
+.date strong span { font-size: 17px; color: var(--rose); margin-left: 4px; }
+.chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: var(--sage-soft); color: var(--sage); font-weight: 700; white-space: nowrap; }
+.chip.pend { background: var(--rose-soft); color: var(--rose); }
+
+/* 写真 */
+.photo { position: relative; border-radius: 18px; overflow: hidden; background: var(--well); }
+.photo img { display: block; width: 100%; max-height: 420px; object-fit: cover; }
+.photo .acts { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; }
+.photo .acts button, .photo .acts label { font-size: 12px; font-weight: 700; padding: 6px 10px; border-radius: 999px; border: 0;
+  background: rgba(255,255,255,.9); color: #3B3A44; cursor: pointer; min-height: 32px; display: inline-flex; align-items: center; }
+.addphoto { border: 1.5px dashed var(--line); border-radius: 18px; padding: 14px; display: flex; gap: 12px; align-items: center;
+  color: var(--muted); font-size: 14px; cursor: pointer; background: transparent; }
+.addphoto i { font-style: normal; width: 38px; height: 38px; flex: none; border-radius: 12px; background: var(--rose-soft); color: var(--rose);
+  display: grid; place-items: center; font-size: 22px; font-weight: 700; }
+.addphoto:focus-within { outline: 3px solid var(--rose); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.uploading { padding: 18px; text-align: center; color: var(--muted); font-size: 14px; }
+
+/* 入力欄 */
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label, .entry h3 { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 7px; margin: 0; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.d-ev { background: var(--rose); } .d-th { background: var(--sage); } .d-mo { background: var(--mustard); } .d-fr { background: var(--muted); }
+.field textarea, .field input { width: 100%; border: 1px solid transparent; border-radius: 14px; background: var(--well); color: var(--ink);
+  padding: 10px 12px; line-height: 1.7; resize: vertical; }
+.field textarea { min-height: 4.6em; }
+.field textarea.free { min-height: 7em; }
+.field textarea:focus, .field input:focus { outline: none; border-color: var(--rose); background: var(--ax-surface); }
+.field .motto { font-family: var(--display); font-size: 17px; }
+::placeholder { color: var(--muted); opacity: .8; }
+.save { width: 100%; min-height: 50px; font-size: 17px; }
+.hint { font-size: 12px; color: var(--muted); text-align: center; margin: -6px 0 0; }
+
+/* カレンダー */
+.month { display: flex; justify-content: space-between; align-items: center; }
+.month strong { font-family: var(--display); font-size: 24px; font-weight: 600; }
+.nav { display: flex; gap: 6px; }
+.nav button { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--ax-surface); color: var(--ink);
+  cursor: pointer; font-size: 18px; font-weight: 700; padding: 0; }
+.stat { display: flex; gap: 8px; }
+.stat div { flex: 1; background: var(--sage-soft); border-radius: 14px; padding: 8px 12px; font-size: 12px; color: var(--muted); }
+.stat b { display: block; font-size: 20px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px 2px; text-align: center; font-variant-numeric: tabular-nums; }
+.cal .w { font-size: 12px; color: var(--muted); padding-bottom: 2px; }
+.cal .w.sun { color: var(--rose); } .cal .w.sat { color: var(--sky); }
+.cal button { height: 48px; border: 0; background: transparent; color: var(--ink); border-radius: 12px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 15px; padding: 0; }
+.cal button .m { width: 7px; height: 7px; border-radius: 50%; background: transparent; }
+.cal button.has .m { background: var(--sage); }
+.cal button.pic .m { background: var(--mustard); }
+.cal button.today { color: var(--rose); font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--rose-soft); }
+.cal button:disabled { color: var(--line); cursor: default; }
+.cal button:not(:disabled):hover { background: var(--well); }
+.legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); }
+.legend span { display: flex; align-items: center; gap: 6px; }
+
+/* 読む */
+.bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.link { border: 0; background: none; color: var(--rose); font-weight: 700; font-size: 14px; cursor: pointer; padding: 6px 0; min-height: 40px; }
+.entry { display: flex; flex-direction: column; gap: 2px; }
+.entry p { margin: 0; font-family: var(--display); font-size: 17px; line-height: 1.85; white-space: pre-wrap; overflow-wrap: anywhere;
+  background-image: linear-gradient(transparent calc(1.85em - 1px), var(--line) 0); background-size: 100% 1.85em; }
+.entry p.none { color: var(--muted); background: none; font-size: 14px; }
+.empty { text-align: center; color: var(--muted); padding: 24px 8px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.daynav { display: flex; justify-content: space-between; gap: 8px; }
+
+/* 下のタブ */
+.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: flex; justify-content: center; gap: 48px;
+  background: var(--paper); border-top: 1px solid var(--line);
+  padding: 8px max(16px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+.tab { border: 0; background: none; color: var(--muted); font-size: 12px; font-weight: 500; display: flex; flex-direction: column;
+  align-items: center; gap: 2px; cursor: pointer; min-width: 72px; min-height: 44px; }
+.tab svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+.tab.on { color: var(--rose); font-weight: 700; }
+
+/* 通知の設定 */
+.steps { margin: 8px 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 8px; }
+.steps b { color: var(--rose); }
+.copy { display: flex; gap: 8px; align-items: center; background: var(--well); border-radius: 12px; padding: 6px 6px 6px 12px; }
+.copy code { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; user-select: all; }
 </style>
 </head>
 <body>
 <main>
-  <header>
-    <h1>ひな形</h1>
-    <button class="ax-btn ax-btn-ghost" type="button" id="settings" aria-label="接続の設定">接続</button>
-  </header>
-  <form id="form" class="ax-row">
-    <input class="ax-input" id="text" placeholder="メモ" style="flex:1;margin:0" required>
-    <button class="ax-btn ax-btn-primary">追加</button>
-  </form>
-  <p id="status" class="ax-note"></p>
-  <ul id="list"></ul>
+  <div class="top">
+    <span class="brand">琴音日記</span>
+    <div class="icons">
+      <button class="icon-btn" type="button" id="btn-notify" aria-label="通知の設定">
+        <svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>通知</button>
+      <button class="icon-btn" type="button" id="btn-conn" aria-label="接続の設定">
+        <svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>接続</button>
+    </div>
+  </div>
+  <p class="status" id="status" role="status"></p>
+
+  <!-- 書く -->
+  <section class="view" id="v-write">
+    <div class="date">
+      <div><small id="w-label">TODAY</small><strong id="w-date"></strong></div>
+      <span class="chip" id="w-chip" hidden></span>
+    </div>
+    <div id="w-photo"></div>
+    <div class="field"><label for="f-events"><span class="dot d-ev"></span>出来事</label>
+      <textarea id="f-events" rows="3" placeholder="今日あったこと"></textarea></div>
+    <div class="field"><label for="f-thanks"><span class="dot d-th"></span>感謝したこと</label>
+      <textarea id="f-thanks" rows="2" placeholder="ありがとうと思ったこと"></textarea></div>
+    <div class="field"><label for="f-motto"><span class="dot d-mo"></span>今日の格言</label>
+      <input id="f-motto" class="motto" placeholder="今日の自分にひとこと" autocomplete="off"></div>
+    <div class="field"><label for="f-free"><span class="dot d-fr"></span>自由に</label>
+      <textarea id="f-free" class="free" rows="4" placeholder="なんでも書いてOK"></textarea></div>
+    <button class="ax-btn ax-btn-primary save" type="button" id="btn-save">保存する</button>
+    <p class="hint">写真は1日1枚・Googleドライブに保存されます</p>
+  </section>
+
+  <!-- カレンダー -->
+  <section class="view" id="v-cal" hidden>
+    <div class="month"><strong id="c-title"></strong>
+      <div class="nav"><button type="button" id="c-prev" aria-label="前の月">‹</button><button type="button" id="c-next" aria-label="次の月">›</button></div></div>
+    <div class="stat"><div>この月に書いた日<b id="c-n"></b></div><div>写真のある日<b id="c-p"></b></div></div>
+    <div class="cal" id="cal"></div>
+    <div class="legend"><span><i class="dot" style="background:var(--sage)"></i>書いた日</span><span><i class="dot" style="background:var(--mustard)"></i>写真もある日</span></div>
+  </section>
+
+  <!-- 読む -->
+  <section class="view" id="v-read" hidden>
+    <div class="bar"><button class="link" type="button" id="r-back">‹ カレンダー</button>
+      <button class="ax-btn" type="button" id="r-edit">書き直す</button></div>
+    <div class="date"><div><small id="r-label"></small><strong id="r-date"></strong></div></div>
+    <div id="r-body" class="view"></div>
+    <div class="daynav"><button class="link" type="button" id="r-prev">‹ 前の日記</button><button class="link" type="button" id="r-next">次の日記 ›</button></div>
+  </section>
 </main>
+
+<nav class="tabs" aria-label="画面の切り替え">
+  <button class="tab on" type="button" data-tab="write"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>今日</button>
+  <button class="tab" type="button" data-tab="cal"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>カレンダー</button>
+</nav>
+
 <script src="../shared/apps.js"></script>
 <script src="app.js"></script>
 </body>

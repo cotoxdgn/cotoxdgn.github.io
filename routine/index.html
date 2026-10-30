@@ -5,34 +5,203 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="ひな形">
-<title>ひな形</title>
+<meta name="apple-mobile-web-app-title" content="ルーティン">
+<meta name="theme-color" content="#F3EFE8">
+<title>ルーティン</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap">
 <link rel="stylesheet" href="../shared/apps.css">
 <style>
-  main { max-width: 640px; margin: 0 auto; padding: 16px 16px 48px; }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  h1 { font-size: 20px; margin: 8px 0; }
-  ul { list-style: none; padding: 0; }
-  li { display: flex; gap: 8px; align-items: center; justify-content: space-between;
-       background: var(--ax-surface); border: 1px solid var(--ax-line); border-radius: var(--ax-radius); padding: 8px 12px; margin: 8px 0; }
-  .pending { font-size: 12px; color: var(--ax-muted); }
+/* くすみカラー・北欧。共通CSSの --ax-* もここで上書き */
+:root {
+  --bg: #F3EFE8; --card: #FFFDF9; --ink: #3E4447; --muted: #80868A; --line: #DDD7CD;
+  --sage: #9CAF9C; --sage-soft: #DFE6DC; --rose: #C9A19A; --rose-soft: #F0E1DC; --mustard: #CFAE6B; --blue: #8FA3B3;
+  --display: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Hiragino Sans", sans-serif;
+  --ax-bg: var(--bg); --ax-surface: var(--card); --ax-text: var(--ink); --ax-muted: var(--muted);
+  --ax-line: var(--line); --ax-accent: #6F8A73; --ax-accent-text: #FFFFFF;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #22262A; --card: #2F3539; --ink: #E8E4DD; --muted: #A2A6A6; --line: #454C50;
+    --sage: #8FA38F; --sage-soft: #3A453B; --rose: #C29790; --rose-soft: #4A3B39; --mustard: #C8A865; --blue: #8EA2B2;
+    --ax-accent: #9CB39F; --ax-accent-text: #1C2420;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #22262A; --card: #2F3539; --ink: #E8E4DD; --muted: #A2A6A6; --line: #454C50;
+  --sage: #8FA38F; --sage-soft: #3A453B; --rose: #C29790; --rose-soft: #4A3B39; --mustard: #C8A865; --blue: #8EA2B2;
+  --ax-accent: #9CB39F; --ax-accent-text: #1C2420;
+}
+html, body { min-height: 100%; }
+main { max-width: 560px; margin: 0 auto; padding: 12px 16px calc(96px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 16px; }
+h1, h2, .num { font-family: var(--display); }
+.head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.head h1 { font-size: 22px; margin: 8px 0 0; }
+.sub { font-size: 13px; color: var(--muted); }
+.view[hidden] { display: none !important; }
+.view { display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--card); border-radius: 20px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+
+/* 今日 */
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stats div { background: var(--card); border-radius: 16px; padding: 10px 14px; display: flex; flex-direction: column; }
+.stats b { font-size: 28px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.stats small { font-size: 12px; color: var(--muted); }
+.habits { display: flex; flex-direction: column; gap: 14px; }
+.habit { background: var(--card); border-radius: 22px; padding: 18px; display: flex; align-items: center; gap: 16px; }
+.habit .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.habit .name { font-weight: 700; font-size: 18px; overflow-wrap: anywhere; }
+.habit .meta { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.check { width: 84px; height: 84px; border-radius: 50%; border: 3px solid var(--line); background: transparent; cursor: pointer; display: grid; place-items: center; flex: none; padding: 0; color: var(--card); transition: background .2s, border-color .2s, transform .15s; -webkit-tap-highlight-color: transparent; }
+.check svg { width: 40px; height: 40px; opacity: 0; transition: opacity .2s; }
+.check:active { transform: scale(.94); }
+.check:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+.check.on { background: var(--c); border-color: var(--c); }
+.check.on svg { opacity: 1; }
+.alldone { background: var(--sage-soft); border-radius: 18px; padding: 12px 14px; display: flex; gap: 12px; align-items: center; font-size: 15px; }
+.hint { font-size: 12px; color: var(--muted); text-align: center; margin: 0; }
+.empty { padding: 20px; text-align: center; color: var(--muted); }
+
+/* カレンダー */
+.monthnav { display: flex; justify-content: space-between; align-items: center; }
+.monthnav h2 { font-size: 20px; margin: 0; }
+.navbtn { width: 44px; height: 44px; border-radius: 50%; border: none; background: var(--card); color: var(--ink); font-size: 20px; cursor: pointer; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; text-align: center; }
+.cal .wd { font-size: 12px; color: var(--muted); padding-bottom: 2px; }
+.cal .wd.sun { color: var(--rose); } .cal .wd.sat { color: var(--blue); }
+.day { min-height: 52px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; padding-top: 4px; gap: 3px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.day.today { box-shadow: inset 0 0 0 2px var(--ink); }
+.day.future { color: var(--line); }
+.day.full { background: var(--rose-soft); }
+.dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; min-height: 18px; align-items: center; max-width: 100%; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: block; }
+.flower { width: 18px; height: 18px; display: block; flex: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
+.legend span { display: flex; align-items: center; gap: 5px; }
+.summary { padding: 14px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+.summary div { display: flex; flex-direction: column; min-width: 0; }
+.summary b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.summary small { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+
+/* 習慣・設定 */
+.list { background: var(--card); border-radius: 20px; overflow: hidden; }
+.row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); min-height: 56px; }
+.row:last-child { border-bottom: none; }
+.row .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; }
+.row .txt small { color: var(--muted); font-size: 12px; }
+button.row { width: 100%; background: transparent; border-left: 0; border-right: 0; border-top: 0; text-align: left; cursor: pointer; color: inherit; font-size: 16px; }
+.swatch { width: 24px; height: 24px; border-radius: 50%; flex: none; }
+.mini { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; font-size: 16px; padding: 0; }
+.mini:disabled { opacity: .3; cursor: default; }
+.sect { font-size: 12px; letter-spacing: .08em; color: var(--muted); padding-left: 6px; margin-bottom: -8px; }
+.form { padding: 16px; display: flex; flex-direction: column; gap: 4px; }
+.form h2 { font-size: 16px; margin: 0 0 4px; }
+.form label { font-size: 13px; color: var(--muted); }
+.form .ax-input { margin: 2px 0 8px; }
+.colors { display: flex; gap: 12px; flex-wrap: wrap; margin: 4px 0 10px; }
+.colors button { width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer; padding: 0; }
+.colors button[aria-pressed="true"] { outline: 3px solid var(--ink); outline-offset: 2px; }
+.pill { font-size: 12px; border-radius: 999px; padding: 2px 10px; background: var(--sage-soft); color: var(--ink); white-space: nowrap; }
+.steps { padding: 16px 16px 16px 36px; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.steps li { padding-left: 4px; }
+.url { display: flex; gap: 8px; align-items: center; padding: 12px 14px; }
+.url code { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; user-select: all; }
+.back { align-self: flex-start; }
+
+/* 下のタブ */
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: var(--bg); border-top: 1px solid var(--line);
+  display: flex; justify-content: center; padding: 6px max(16px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+.tabbar .in { width: 100%; max-width: 560px; display: flex; justify-content: space-around; }
+.tabbar a { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: var(--muted); text-decoration: none; min-width: 72px; padding: 4px; border-radius: 12px; }
+.tabbar a[aria-current="page"] { color: var(--ink); font-weight: 700; }
+.tabbar svg { width: 24px; height: 24px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 <main>
-  <header>
-    <h1>ひな形</h1>
-    <button class="ax-btn ax-btn-ghost" type="button" id="settings" aria-label="接続の設定">接続</button>
-  </header>
-  <form id="form" class="ax-row">
-    <input class="ax-input" id="text" placeholder="メモ" style="flex:1;margin:0" required>
-    <button class="ax-btn ax-btn-primary">追加</button>
-  </form>
-  <p id="status" class="ax-note"></p>
-  <ul id="list"></ul>
+  <!-- 今日 -->
+  <section class="view" id="v-today">
+    <div class="head"><h1 id="todayTitle">今日</h1><span class="sub" id="syncState"></span></div>
+    <div class="stats">
+      <div><b class="num" id="stAll">0</b><small>日連続　全部できた</small></div>
+      <div><b class="num" id="stMonth">0</b><small>今月の花スタンプ</small></div>
+    </div>
+    <div class="habits" id="habits"></div>
+    <div class="alldone" id="alldone" hidden></div>
+    <p class="hint">丸をタップで記録／もう一度タップで取り消し。深夜3時までは前の日として記録します</p>
+  </section>
+
+  <!-- カレンダー -->
+  <section class="view" id="v-calendar" hidden>
+    <div class="monthnav">
+      <button class="navbtn" type="button" id="prevM" aria-label="前の月">‹</button>
+      <h2 id="monthTitle"></h2>
+      <button class="navbtn" type="button" id="nextM" aria-label="次の月">›</button>
+    </div>
+    <div class="cal" id="cal"></div>
+    <div class="legend" id="legend"></div>
+    <div class="card summary" id="summary"></div>
+  </section>
+
+  <!-- 習慣の編集・設定 -->
+  <section class="view" id="v-habits" hidden>
+    <div class="head"><h1>習慣</h1><span class="sub">並べ替え・追加・編集</span></div>
+    <div class="list" id="habitList"></div>
+    <button class="ax-btn" type="button" id="addHabit">＋ 習慣を追加</button>
+    <form class="card form" id="habitForm" hidden>
+      <h2 id="formTitle">習慣を追加</h2>
+      <label for="hName">名前</label>
+      <input class="ax-input" id="hName" maxlength="30" required placeholder="例：ストレッチ">
+      <label for="hTime">目安の時刻（なくてもよい）</label>
+      <input class="ax-input" id="hTime" type="time">
+      <span class="small muted">色</span>
+      <div class="colors" id="hColors"></div>
+      <div class="ax-row" style="margin:0">
+        <button class="ax-btn ax-btn-primary" type="submit" id="hSave">保存</button>
+        <button class="ax-btn ax-btn-ghost" type="button" id="hCancel">やめる</button>
+        <button class="ax-btn ax-btn-danger" type="button" id="hArchive" hidden>この習慣をやめる</button>
+      </div>
+      <p class="small muted" id="archiveNote" hidden>やめた習慣は今日の画面から消えます。これまでの記録はカレンダーに残ります。</p>
+    </form>
+    <div class="sect">やめた習慣</div>
+    <div class="list" id="archivedList"></div>
+    <div class="sect">設定</div>
+    <div class="list">
+      <a class="row" href="#notify" style="color:inherit;text-decoration:none"><div class="txt"><span>通知の設定</span><small>iPhoneのショートカットで毎日お知らせ</small></div><span aria-hidden="true">›</span></a>
+      <button class="row" type="button" id="connBtn"><div class="txt"><span>スプレッドシートとの接続</span><small id="connState"></small></div><span aria-hidden="true">›</span></button>
+      <div class="row"><div class="txt"><span>1日の区切り</span><small>この時刻までは前の日として記録</small></div><span>午前3時</span></div>
+    </div>
+  </section>
+
+  <!-- 通知の設定 -->
+  <section class="view" id="v-notify" hidden>
+    <a class="ax-btn ax-btn-ghost back" href="#habits">‹ 習慣へ戻る</a>
+    <div class="head"><h1>通知の設定</h1></div>
+    <p class="small" style="margin:0">iPhoneの「ショートカット」アプリで、決まった時刻にお知らせを出し、タップするとこのアプリが開くようにします。習慣ごと（例：22:30お風呂）に1つずつ作ります。</p>
+    <ol class="card steps">
+      <li>「ショートカット」アプリを開き、下の「オートメーション」→ 右上の「＋」をタップ</li>
+      <li>「時刻」を選び、時刻（例：22:15）と「毎日」を設定</li>
+      <li>「実行前に確認」を選んで「次へ」</li>
+      <li>「新規の空のオートメーション」→「アクションを追加」で「URLを開く」を選ぶ</li>
+      <li>URLの欄に、下のアドレスを貼り付けて「完了」</li>
+      <li>その時刻になると通知が出ます。タップするとこのアプリが開きます</li>
+    </ol>
+    <div class="card url"><code id="appUrl"></code><button class="ax-btn" type="button" id="copyUrl">コピー</button></div>
+    <p class="small muted" style="margin:0">通知をタップすると Safari で開きます。初めて Safari で開いたときは、接続（QRでつなぐ）を一度だけ行ってください。</p>
+  </section>
 </main>
+
+<nav class="tabbar" aria-label="画面の切り替え"><div class="in">
+  <a href="#today" data-v="today"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>今日</a>
+  <a href="#calendar" data-v="calendar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 10h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>カレンダー</a>
+  <a href="#habits" data-v="habits"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>習慣</a>
+</div></nav>
+
 <script src="../shared/apps.js"></script>
 <script src="app.js"></script>
 </body>
