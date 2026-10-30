@@ -123,7 +123,6 @@ const serverList = () => gas.ctx.handle_({ key: KEY, action: 'list', app: 'archm
     await page.waitForFunction(() => Apps.pendingCount().then(n => n === 0));
     await page.waitForFunction(() => !document.querySelector('.badge.wait'));
     const recs = serverList();
-    if (!recs.length) console.log('status:', await page.textContent('#status'), JSON.stringify(gas.ctx.handle_({ key: KEY, action: 'ping', app: 'archmap' })));
     assert.strictEqual(recs.length, 1);
     const d = recs[0].data;
     assert.strictEqual(d.photos.length, 2);
@@ -163,10 +162,10 @@ const serverList = () => gas.ctx.handle_({ key: KEY, action: 'list', app: 'archm
   });
 
   await t('カテゴリで絞り込み（ピンも連動）', async () => {
-    await page.waitForFunction(() => document.querySelectorAll('.am-pin').length === 2);
+    await page.waitForFunction(() => document.querySelectorAll('#map .am-pin').length === 2);
     await page.locator('.chip', { hasText: '行きたい' }).click();
     assert.strictEqual(await page.locator('.spot').count(), 1);
-    assert.strictEqual(await page.locator('.am-pin').count(), 1);
+    assert.strictEqual(await page.locator('#map .am-pin').count(), 1);
     await page.locator('.chip', { hasText: 'すべて' }).click();
     await page.screenshot({ path: path.join(SHOT, 'phone-1-home.png') });
   });
@@ -195,7 +194,7 @@ const serverList = () => gas.ctx.handle_({ key: KEY, action: 'list', app: 'archm
     await p2.goto(BASE + '/archmap/' + hash);
     await p2.waitForFunction(() => document.querySelectorAll('.spot').length === 2);
     await p2.reload();
-    await p2.waitForFunction(() => document.querySelectorAll('.spot').length === 2 && document.querySelectorAll('.am-pin').length === 2);
+    await p2.waitForFunction(() => document.querySelectorAll('.spot').length === 2 && document.querySelectorAll('#map .am-pin').length === 2);
     await p2.waitForTimeout(400);
     await p2.screenshot({ path: path.join(SHOT, 'pc-1-home.png') });
     await other.close();

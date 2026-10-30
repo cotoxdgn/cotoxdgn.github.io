@@ -18,4 +18,4 @@
 .am-pin.on { background: var(--am-hi); }
 .am-pin.on b { color: var(--am-hi-ink); }
 .map-off { display: grid; place-items: center; padding: 16px; text-align: center; font-size: 13px; }
-.leaflet-container { font-family: inherit; }
+.leaflet-container { font-family: inherit; isolation: isolate; z-index: 0; } /* 地図の操作ボタンが上に重ねた画面より前に出ないように */
