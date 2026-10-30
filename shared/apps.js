@@ -698,6 +698,16 @@
     });
   }
 
+  // すでに（全アプリ共通で）つながっていても、つなぐ画面を出す（アプリ専用のスプシにつなぎ直すとき用）
+  function openConnect(app) {
+    return new Promise(function (ok) {
+      var ov = overlay('この端末をつなぐ', connectBody(app, function (conn) {
+        setTimeout(function () { ov.close(); }, 700);
+        ok(conn);
+      }));
+    });
+  }
+
   // 接続状態の確認・他の端末の追加・つなぎ直し・解除
   function openConnectSheet(app) {
     var c = getConnection(app);
@@ -765,6 +775,7 @@
     connectLink: connectLink,
     ensureConnected: ensureConnected,
     openConnectSheet: openConnectSheet,
+    openConnect: openConnect,
     // データ
     call: call,
     collection: collection,

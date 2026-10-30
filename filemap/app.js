@@ -103,6 +103,9 @@
     var r = route();
     if (r.v === 'item' && !S.items[r.id]) r = { v: 'home' };
     S.cur = r;
+    var gi = $('goal-new');
+    var keepGoal = gi && r.v === 'item' && S.goalFor === r.id ? { v: gi.value, f: document.activeElement === gi } : null;
+    S.goalFor = r.v === 'item' ? r.id : null;
     renderSide(r);
     var m = $('main');
     if (S.q) m.innerHTML = viewSearch();
@@ -114,6 +117,7 @@
       var on = (t.getAttribute('data-to') || 'home') === (r.v === 'item' ? 'home' : r.v);
       if (on) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
     });
+    if (keepGoal) { var g2 = $('goal-new'); if (g2) { g2.value = keepGoal.v; if (keepGoal.f) g2.focus(); } }
     var qi = $('q');
     if (qi && S.focusQ) { qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
     S.focusQ = false;

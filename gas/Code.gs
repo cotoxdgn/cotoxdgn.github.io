@@ -10,7 +10,7 @@
  *  POST（Content-Type: text/plain）で JSON を送る → JSON が返る。
  *  text/plain の POST は「単純リクエスト」なので、ブラウザの事前確認（CORS preflight）が起きない。
  *  { key, action, app, ... }  →  { ok: true, now, ... } / { ok: false, error }
- *  action: ping / list / put / delete / batch / image / imageData / imageDelete
+ *  action: ping / list / put / delete / batch / image / imageData / imageDelete / names
  */
 
 var CONNECT_URL = 'https://cotoxdgn.github.io/connect/';
@@ -29,6 +29,10 @@ var CELL_KEY = 'B1';     // 合言葉（自動）
 var CELL_URL = 'B2';     // 接続URL（自動）
 var CELL_TARGET = 'B3';  // 対象アプリ（空＝全アプリ共通、例：wanko）
 var CELL_FOLDER = 'B4';  // 画像フォルダID（自動）
+// 名前表（家族用＝B3 が wanko のスプシだけ作る）。A列＝見出し、B列＝名前を手で入力
+var NAMES_TITLE_ROW = 8;
+var NAMES_LABELS = ['わんこ1', 'わんこ2', '家族1', '家族2', '家族3', '家族4'];
+var NAMES_FIRST_ROW = NAMES_TITLE_ROW + 1;
 
 // ---------- 準備 ----------
 function setup() {
@@ -55,7 +59,24 @@ function conf_() {
     key = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
     conf.getRange(CELL_KEY).setValue(key);
   }
+  if (String(conf.getRange(CELL_TARGET).getValue()).trim() === 'wanko') namesTable_(conf);
   return conf;
+}
+
+// 名前表の見出しを用意する（B列の入力済みの名前には触れない）
+function namesTable_(conf) {
+  conf.getRange('A' + NAMES_TITLE_ROW).setValue('名前（B列に入力。アプリに表示されます）');
+  conf.getRange('A' + NAMES_TITLE_ROW).setFontWeight('bold');
+  for (var i = 0; i < NAMES_LABELS.length; i++) {
+    conf.getRange('A' + (NAMES_FIRST_ROW + i)).setValue(NAMES_LABELS[i]);
+  }
+}
+
+// names：名前表を読むだけ（空欄は ''。アプリ側で既定の呼び名を使う）
+function names_(conf) {
+  var vals = conf.getRange(NAMES_FIRST_ROW, 2, NAMES_LABELS.length, 1).getValues();
+  var v = vals.map(function (r) { return String(r[0] == null ? '' : r[0]).trim().slice(0, 20); });
+  return { names: { dogs: v.slice(0, 2), members: v.slice(2, 6) } };
 }
 
 // 画像の保存先フォルダ（なければ作る）
@@ -187,6 +208,7 @@ function handle_(req) {
       case 'image': res = image_(conf, req); break;
       case 'imageData': res = imageData_(conf, req); break;
       case 'imageDelete': res = imageDelete_(conf, req); break;
+      case 'names': res = names_(conf); break;
       default: res = { error: 'bad_action' };
     }
     if (res.error) return { ok: false, error: res.error };

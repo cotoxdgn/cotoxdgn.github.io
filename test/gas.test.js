@@ -142,6 +142,22 @@ t('接続リンク：connect ページ＋#c=（u,k,n、対象アプリ a）', ()
   assert.strictEqual(p.a, 'wanko');
   conf.getRange('B3').setValue('');
 });
+t('names：家族用スプシの名前表（setup で見出し、B列を読むだけ）', () => {
+  assert.deepStrictEqual(call({ key: KEY, action: 'names' }).names, { dogs: ['', ''], members: ['', '', '', ''] });
+  assert.strictEqual(String(conf.getRange('A9').getValue()), ''); // 自分用スプシには表を作らない
+  conf.getRange('B3').setValue('wanko');
+  ctx.setup();
+  assert.strictEqual(String(conf.getRange('A9').getValue()), 'わんこ1');
+  assert.strictEqual(String(conf.getRange('A14').getValue()), '家族4');
+  conf.getRange('B9').setValue(' こむぎ '); conf.getRange('B10').setValue('しらたま');
+  conf.getRange('B11').setValue('パパ'); conf.getRange('B14').setValue('にいに');
+  ctx.setup(); // やり直しても入力済みの名前は消えない
+  const r = call({ key: KEY, action: 'names' });
+  assert.ok(r.ok && r.now);
+  assert.deepStrictEqual(r.names, { dogs: ['こむぎ', 'しらたま'], members: ['パパ', '', '', 'にいに'] });
+  assert.strictEqual(call({ key: 'wrong', action: 'names' }).error, 'bad_key');
+  conf.getRange('B3').setValue('');
+});
 t('doGet は ok を返し接続URLを覚える', () => {
   assert.ok(JSON.parse(ctx.doGet().text).ok);
   assert.ok(/\/exec$/.test(String(conf.getRange('B2').getValue())));

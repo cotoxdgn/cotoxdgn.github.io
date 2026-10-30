@@ -2,8 +2,9 @@
 (function () {
   'use strict';
   var APP = 'wanko';
-  var SETTINGS_ID = 'settings';
+  var OLD_SETTINGS_ID = 'settings';         // 旧版がアプリ内で保存していた名前（今は使わない・書かない）
   var ME_KEY = 'wanko.me.v1';               // この端末で使う人（家族のID）
+  var NAMES_KEY = 'wanko.names.v1';         // スプシの名前表の控え（オフラインでも表示するため）
   var DOGS = ['a', 'b'];
   var DEFAULTS = {
     dogs: { a: 'わんこA', b: 'わんこB' },
@@ -11,7 +12,7 @@
   };
   var WD = ['日', '月', '火', '水', '木', '金', '土'];
 
-  var db = Apps.collection(APP);
+  var db = Apps.collection(APP, { autoSync: false });   // 同期は家族用スプシにつながっているときだけ（下の syncAll）
   var $ = function (id) { return document.getElementById(id); };
   var list = [];
   var view = 'today';
@@ -27,16 +28,36 @@
   function longDate(k) { var d = parseKey(k); return (d.getMonth() + 1) + '月' + d.getDate() + '日（' + WD[d.getDay()] + '）'; }
   function recId(k, dog) { return k + '_' + dog; }     // 1頭につき1日1件（同じ id は上書き）
 
-  // ---------- 設定（家族共通：レコード id=settings） ----------
+  // ---------- 名前（正本は家族用スプシの「設定」シート B9〜B14。アプリからは書かない） ----------
+  var names = null;     // { dogs: [a, b], members: [1..4] }
+  var namesState = '';  // '' | 'ok' | 'old'（スプシのプログラムが古い） | 'err'
+  try { names = JSON.parse(localStorage.getItem(NAMES_KEY) || 'null'); } catch (e) { names = null; }
   function settings() {
-    var r = db.get(SETTINGS_ID);
-    var s = r && r.data ? r.data : {};
-    var dogs = { a: (s.dogs && s.dogs.a) || DEFAULTS.dogs.a, b: (s.dogs && s.dogs.b) || DEFAULTS.dogs.b };
-    var members = DEFAULTS.members.map(function (m, i) {
-      var got = s.members && s.members[i];
-      return { id: m.id, name: (got && got.name) || m.name };
-    });
-    return { dogs: dogs, members: members };
+    var n = names || {};
+    var d = n.dogs || [], m = n.members || [];
+    return {
+      dogs: { a: d[0] || DEFAULTS.dogs.a, b: d[1] || DEFAULTS.dogs.b },
+      members: DEFAULTS.members.map(function (x, i) { return { id: x.id, name: m[i] || x.name }; })
+    };
+  }
+  var namesBusy = null;
+  function loadNames() {
+    if (!familyConn() || namesBusy) return namesBusy || Promise.resolve();
+    namesBusy = Apps.call(APP, 'names').then(function (res) {
+      names = res.names || null;
+      namesState = 'ok';
+      try { localStorage.setItem(NAMES_KEY, JSON.stringify(names)); } catch (e) { /* 控えなしでも表示はできる */ }
+    }, function (e) {
+      namesState = e && e.code === 'bad_action' ? 'old' : 'err';
+    }).then(function () { namesBusy = null; render(); });
+    return namesBusy;
+  }
+
+  // ---------- 接続：wanko は家族用スプシ専用の接続（B3=wanko のQR）だけを使う ----------
+  // 自分用スプシ（全アプリ共通の接続）に流れると、記録も名前も家族と別の場所に保存されてしまう
+  function familyConn() {
+    var c = Apps.parseConnect(Apps.connectLink(APP));
+    return c && c.app === APP ? c : null;
   }
   function memberName(id, fallback) {
     var m = settings().members.filter(function (x) { return x.id === id; })[0];
@@ -49,11 +70,12 @@
 
   // ---------- 記録 ----------
   function brushRecords() {
-    return list.filter(function (r) { return r.id !== SETTINGS_ID && r.data && r.data.date && r.data.dog; });
+    return list.filter(function (r) { return r.id !== OLD_SETTINGS_ID && r.data && r.data.date && r.data.dog; });
   }
   function recordFor(k, dog) { var r = db.get(recId(k, dog)); return r && r.data ? r : null; }
 
   function markDone(dog) {
+    if (!familyConn()) { connectFamily(); return; }   // 自分用スプシには書かない
     var k = dayKey(new Date());
     if (recordFor(k, dog)) return;         // 今日はもう記録済み（1日1回）
     var who = me();
@@ -87,6 +109,7 @@
     return li;
   }
   function show(v) {
+    if (view === 'settings' && v !== 'settings') hideQr();
     view = v;
     ['today', 'log', 'who', 'settings'].forEach(function (x) { $('v-' + x).hidden = x !== v; });
     render();
@@ -213,16 +236,52 @@
   }
 
   // ---------- 表示：設定 ----------
-  var formDirty = false;
-  function fillSettings() {
-    var s = settings();
-    $('nameA').value = s.dogs.a; $('nameB').value = s.dogs.b;
-    s.members.forEach(function (m, i) { $('m' + (i + 1)).value = m.name; });
-    formDirty = false;
-  }
   function renderSettings() {
-    if (!formDirty) fillSettings();
+    var s = settings();
+    var box = $('nameList');
+    box.innerHTML = '';
+    [['わんこ1', s.dogs.a], ['わんこ2', s.dogs.b]].concat(s.members.map(function (m, i) { return ['家族' + (i + 1), m.name]; }))
+      .forEach(function (p) {
+        var row = el('div', 'kv');
+        row.appendChild(el('span', 'k', p[0]));
+        row.appendChild(el('b', null, p[1]));
+        box.appendChild(row);
+      });
+    $('namesNote').textContent = namesState === 'old'
+      ? '家族用スプシのプログラムが古いため、名前を読めません。Code.gs を新しいものに貼り替えてください。'
+      : namesState === 'err' ? '名前を読み込めませんでした（通信を確認）。前回の名前を表示しています。' : '';
     $('meNow').textContent = memberName(me());
+    var c = Apps.getConnection(APP);
+    $('connNow').textContent = !c ? 'つながっていません' : (c.name || 'スプレッドシート') + (familyConn() ? '（家族用）' : '（自分用・全アプリ共通）');
+    $('connWarn').hidden = !c || !!familyConn();
+    $('qrStart').disabled = !familyConn();
+  }
+
+  // ---------- 家族に配る：この端末の接続から QR を出す ----------
+  function showQr() {
+    var link = familyConn() ? Apps.connectLink(APP) : '';
+    if (!link) return;
+    Apps.loadScript('../shared/lib/qrcode.js').then(function () {
+      var q = window.qrcode(0, 'M');
+      q.addData(link);
+      q.make();
+      var box = $('qrBox');
+      box.innerHTML = '';
+      var img = document.createElement('img');
+      img.src = q.createDataURL(6, 12);
+      img.alt = '家族用スプシにつなぐQR';
+      img.id = 'qrImg';
+      box.appendChild(img);
+      $('qrLink').textContent = link;
+      $('qrWarn').hidden = true;
+      $('qrShown').hidden = false;
+    }, function () { Apps.toast('QRを表示できませんでした（通信を確認）', true); });
+  }
+  function hideQr() {
+    $('qrBox').innerHTML = '';
+    $('qrLink').textContent = '';
+    $('qrShown').hidden = true;
+    $('qrWarn').hidden = true;
   }
 
   function render() {
@@ -230,6 +289,7 @@
     else if (view === 'log') renderLog();
     else if (view === 'who') renderWho();
     else if (view === 'settings') renderSettings();
+    $('connBanner').hidden = !(Apps.getConnection(APP) && !familyConn()) || view === 'settings';
   }
 
   // ---------- 取り消し（記録直後） ----------
@@ -268,24 +328,18 @@
     b.addEventListener('click', function () { show(b.getAttribute('data-go')); });
   });
   $('toLog').addEventListener('click', function () { show('log'); });
-  $('toSettings').addEventListener('click', function () { formDirty = false; show('settings'); });
+  $('toSettings').addEventListener('click', function () { show('settings'); loadNames(); });
   $('meChip').addEventListener('click', function () { show('who'); });
   $('changeMe').addEventListener('click', function () { show('who'); });
   $('conn').addEventListener('click', function () { Apps.openConnectSheet(APP); });
-  $('setForm').addEventListener('input', function () { formDirty = true; });
-  $('setForm').addEventListener('submit', function (e) {
-    e.preventDefault();
-    var v = function (id) { return $(id).value.trim(); };
-    var data = {
-      dogs: { a: v('nameA') || DEFAULTS.dogs.a, b: v('nameB') || DEFAULTS.dogs.b },
-      members: DEFAULTS.members.map(function (m, i) { return { id: m.id, name: v('m' + (i + 1)) || m.name }; })
-    };
-    db.put(data, SETTINGS_ID).then(function () {
-      formDirty = false;
-      Apps.toast('保存しました');
-      show('today');
-    });
-  });
+  $('reloadNames').addEventListener('click', function () { loadNames().then(function () { if (namesState === 'ok') Apps.toast('名前を読み込みました'); }); });
+  $('qrStart').addEventListener('click', function () { $('qrWarn').hidden = false; $('qrShown').hidden = true; });
+  $('qrOk').addEventListener('click', showQr);
+  $('qrCancel').addEventListener('click', hideQr);
+  $('qrHide').addEventListener('click', hideQr);
+  $('connFix').addEventListener('click', connectFamily);
+  $('connFix2').addEventListener('click', connectFamily);
+  function connectFamily() { Apps.openConnect(APP); }
 
   db.onChange(function (l) { list = l; render(); });
   Apps.on('error', function (d) {
@@ -294,9 +348,31 @@
     st.textContent = Apps.errorText(d.error);
   });
 
+  // つなぐ先が変わったら（自分用→家族用など）、前のスプシの控えを捨てて全件取り直す
+  function connSig() { var c = Apps.getConnection(APP); return c ? c.url + '|' + c.key + '|' + (familyConn() ? 'f' : '') : ''; }
+  var lastUrl = connSig();
+  Apps.on('connection', function () {
+    var u = connSig();
+    if (u === lastUrl) { render(); return; }
+    lastUrl = u;
+    names = null; namesState = '';
+    try { localStorage.removeItem(NAMES_KEY); } catch (e) { /* 無視 */ }
+    render();
+    if (familyConn()) db.sync({ full: true }).then(loadNames, function () {});
+  });
+  // 起動時・画面に戻ったとき・電波が戻ったときに、記録と名前を取りに行く
+  function syncAll() {
+    if (!familyConn() || !navigator.onLine) return Promise.resolve();
+    return Promise.all([db.sync().catch(function () { /* 'error' で表示 */ }), loadNames()]);
+  }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') syncAll(); });
+  window.addEventListener('online', syncAll);
+
   // 起動：つながっていなければ接続画面 → 使う人が未設定なら「あなたはだれ？」
   show(me() ? 'today' : 'who');
-  Apps.ensureConnected(APP).then(function () { return db.sync(); }).then(function () {
+  Apps.ensureConnected(APP).then(function () {
+    return syncAll();                     // 自分用スプシにつながっているときは何もしない（画面上の案内からつなぎ直す）
+  }).then(function () {
     var st = $('status'); st.className = 'status'; st.textContent = '';
   }).catch(function () { /* 'error' で表示済み */ });
 
