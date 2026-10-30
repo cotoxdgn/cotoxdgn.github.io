@@ -77,7 +77,7 @@ try:
         # タイマー
         pg.locator('#carry .task .cb').click()
         pg.click('#tToggle')
-        pg.wait_for_timeout(1200)
+        pg.wait_for_timeout(2200)
         check('タイマーが進む', pg.inner_text('#shTimer') != '00:00:00')
         pg.click('#shLater')
         check('計測中の印', pg.locator('#carry .task', has_text='計測中').count() == 1)

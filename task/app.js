@@ -379,6 +379,7 @@
   $('pasteBtn').addEventListener('click', function () { finishConnect(parseConnect($('paste').value)); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden && conn() && $('sheet').hidden) load(true); });
 
+  window.addEventListener('hashchange', function () { if (consumeHash()) { start(); toast('この端末をつなぎました'); } });
   var hashed = consumeHash();
   start();
   if (hashed) toast('この端末をつなぎました');
