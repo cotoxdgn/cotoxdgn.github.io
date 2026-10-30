@@ -180,7 +180,7 @@
     for (var j = 0; j < 30; j++) {
       var k = dayKey(addDays(today, -j));
       var h = el('h3', null, longDate(k) + (j === 0 ? ' 今日' : j === 1 ? ' 昨日' : ''));
-      var ul = el('ul', 'log');
+      var ul = el('ul', 'log nod');
       DOGS.forEach(function (dog) {
         var r = recordFor(k, dog);
         if (r) ul.appendChild(logRow(r, s, false));
@@ -216,7 +216,7 @@
   var formDirty = false;
   function fillSettings() {
     var s = settings();
-    $('dogA').value = s.dogs.a; $('dogB').value = s.dogs.b;
+    $('nameA').value = s.dogs.a; $('nameB').value = s.dogs.b;
     s.members.forEach(function (m, i) { $('m' + (i + 1)).value = m.name; });
     formDirty = false;
   }
@@ -277,7 +277,7 @@
     e.preventDefault();
     var v = function (id) { return $(id).value.trim(); };
     var data = {
-      dogs: { a: v('dogA') || DEFAULTS.dogs.a, b: v('dogB') || DEFAULTS.dogs.b },
+      dogs: { a: v('nameA') || DEFAULTS.dogs.a, b: v('nameB') || DEFAULTS.dogs.b },
       members: DEFAULTS.members.map(function (m, i) { return { id: m.id, name: v('m' + (i + 1)) || m.name }; })
     };
     db.put(data, SETTINGS_ID).then(function () {

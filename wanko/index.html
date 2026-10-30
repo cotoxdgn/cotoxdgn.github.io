@@ -82,6 +82,8 @@
   .log .n { font-weight: 700; overflow-wrap: anywhere; }
   .log .none { color: var(--amber); font-weight: 700; }
   .log .p { font-size: 11px; color: var(--muted); font-weight: 400; }
+  .log.nod li { grid-template-columns: 5.6em 1fr auto; }
+  .log.nod .d { display: none; }
   .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 12px 0; }
 
   .weekgrid { display: grid; grid-template-columns: 5em repeat(7, 1fr); gap: 6px 2px; align-items: center; text-align: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -212,8 +214,8 @@
       <div class="bar"><button class="back" type="button" data-go="today">← 設定</button></div>
       <form class="panel" id="setForm">
         <h2>わんこの名前</h2>
-        <div class="fld"><label for="dogA">1頭目</label><input class="ax-input" id="dogA" maxlength="12" required></div>
-        <div class="fld"><label for="dogB">2頭目</label><input class="ax-input" id="dogB" maxlength="12" required></div>
+        <div class="fld"><label for="nameA">1頭目</label><input class="ax-input" id="nameA" maxlength="12" required></div>
+        <div class="fld"><label for="nameB">2頭目</label><input class="ax-input" id="nameB" maxlength="12" required></div>
         <h2>家族の呼び名</h2>
         <div class="fld"><label for="m1">1人目</label><input class="ax-input" id="m1" maxlength="10" required></div>
         <div class="fld"><label for="m2">2人目</label><input class="ax-input" id="m2" maxlength="10" required></div>
