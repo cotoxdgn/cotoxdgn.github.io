@@ -17,7 +17,7 @@
 /* くすみカラー・北欧。共通CSSの --ax-* もここで上書き */
 :root {
   --bg: #F3EFE8; --card: #FFFDF9; --ink: #3E4447; --muted: #80868A; --line: #DDD7CD;
-  --sage: #9CAF9C; --sage-soft: #DFE6DC; --rose: #C9A19A; --rose-soft: #F0E1DC; --mustard: #CFAE6B; --blue: #8FA3B3;
+  --sage: #9CAF9C; --sage-soft: #DFE6DC; --rose: #C9A19A; --rose-soft: #F0E1DC; --mustard: #CFAE6B; --blue: #8FA3B3; --lilac: #A99CB3;
   --display: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Hiragino Sans", sans-serif;
   --ax-bg: var(--bg); --ax-surface: var(--card); --ax-text: var(--ink); --ax-muted: var(--muted);
   --ax-line: var(--line); --ax-accent: #6F8A73; --ax-accent-text: #FFFFFF;
@@ -25,13 +25,13 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #22262A; --card: #2F3539; --ink: #E8E4DD; --muted: #A2A6A6; --line: #454C50;
-    --sage: #8FA38F; --sage-soft: #3A453B; --rose: #C29790; --rose-soft: #4A3B39; --mustard: #C8A865; --blue: #8EA2B2;
+    --sage: #8FA38F; --sage-soft: #3A453B; --rose: #C29790; --rose-soft: #4A3B39; --mustard: #C8A865; --blue: #8EA2B2; --lilac: #A597AF;
     --ax-accent: #9CB39F; --ax-accent-text: #1C2420;
   }
 }
 :root[data-theme="dark"] {
   --bg: #22262A; --card: #2F3539; --ink: #E8E4DD; --muted: #A2A6A6; --line: #454C50;
-  --sage: #8FA38F; --sage-soft: #3A453B; --rose: #C29790; --rose-soft: #4A3B39; --mustard: #C8A865; --blue: #8EA2B2;
+  --sage: #8FA38F; --sage-soft: #3A453B; --rose: #C29790; --rose-soft: #4A3B39; --mustard: #C8A865; --blue: #8EA2B2; --lilac: #A597AF;
   --ax-accent: #9CB39F; --ax-accent-text: #1C2420;
 }
 html, body { min-height: 100%; }
@@ -62,6 +62,8 @@ h1, h2, .num { font-family: var(--display); }
 .check:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
 .check.on { background: var(--c); border-color: var(--c); }
 .check.on svg { opacity: 1; }
+.check.pop { animation: pop .35s ease-out; }
+@keyframes pop { 0% { transform: scale(.85); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
 .alldone { background: var(--sage-soft); border-radius: 18px; padding: 12px 14px; display: flex; gap: 12px; align-items: center; font-size: 15px; }
 .hint { font-size: 12px; color: var(--muted); text-align: center; margin: 0; }
 .empty { padding: 20px; text-align: center; color: var(--muted); }

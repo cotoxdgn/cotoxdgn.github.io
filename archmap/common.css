@@ -1,0 +1,21 @@
+/* おしゃれ建築map：地図のピンなど、記録用と公開版で共通の見た目 */
+:root {
+  --am-pin: #1F3FD1;
+  --am-pin-ink: #FFFFFF;
+  --am-hi: #FFE14D;
+  --am-hi-ink: #16181D;
+  --am-ring: #FBFBF8;
+  --am-num: "Archivo Narrow", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --am-disp: "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", serif;
+}
+.am-pin-wrap { background: none; border: 0; }
+.am-pin {
+  display: grid; place-items: center; width: 28px; height: 28px;
+  border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+  background: var(--am-pin); border: 2px solid var(--am-ring); box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+}
+.am-pin b { transform: rotate(45deg); color: var(--am-pin-ink); font: 700 12px/1 var(--am-num); }
+.am-pin.on { background: var(--am-hi); }
+.am-pin.on b { color: var(--am-hi-ink); }
+.map-off { display: grid; place-items: center; padding: 16px; text-align: center; font-size: 13px; }
+.leaflet-container { font-family: inherit; }

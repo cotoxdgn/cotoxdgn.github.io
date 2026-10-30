@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="建築map">
+<title>おしゃれ建築map</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@600;900&family=Archivo+Narrow:wght@500;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<link rel="stylesheet" href="../shared/apps.css">
+<link rel="stylesheet" href="common.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="home" class="view">
+  <header class="am-head">
+    <div>
+      <h1>建築map</h1>
+      <div class="meta" id="meta">0 SPOTS</div>
+    </div>
+    <div class="ax-row">
+      <button class="ax-btn ax-btn-ghost small" type="button" id="exportBtn">公開データ</button>
+      <button class="ax-btn ax-btn-ghost small" type="button" id="settings" aria-label="接続の設定">接続</button>
+    </div>
+  </header>
+  <div class="map-box"><div id="map" class="map"></div></div>
+  <div class="chips" id="chips" role="tablist" aria-label="カテゴリ別リスト"></div>
+  <p id="status" class="ax-note status" aria-live="polite"></p>
+  <ol class="spots" id="list"></ol>
+  <div class="empty" id="empty" hidden>
+    <p class="empty-h">まだ記録がありません</p>
+    <p>右下の「＋ 記録する」から、名称と写真だけでも保存できます。</p>
+  </div>
+  <button class="fab" type="button" id="addBtn">＋ 記録する</button>
+</div>
+
+<!-- 1件の記録 -->
+<section id="editor" class="view sheet" hidden aria-label="記録を編集">
+  <header class="am-head bar">
+    <button class="ax-btn ax-btn-ghost small" type="button" id="edClose">閉じる</button>
+    <div class="bar-title" id="edTitle">新しい記録</div>
+    <button class="ax-btn ax-btn-primary small" type="button" id="edSaveTop">保存</button>
+  </header>
+  <form class="form" id="edForm" novalidate>
+    <div class="fld"><label for="f-name">名称</label><input class="ax-input" id="f-name" autocomplete="off" placeholder="建物の名前"></div>
+
+    <div class="fld"><span class="lbl">写真（Googleドライブに保存）</span>
+      <div class="photos" id="photos"></div>
+      <input type="file" id="f-photo" accept="image/*" multiple hidden>
+      <span class="hint">写真の「公開」を押した1枚だけがHPに載ります</span>
+    </div>
+
+    <div class="fld"><span class="lbl">場所（地図をタップでピンを置く）</span>
+      <div class="map pick" id="pickMap"></div>
+      <div class="ax-row loc-row">
+        <button class="ax-btn small" type="button" id="locBtn">現在地を使う</button>
+        <span class="loc-txt" id="locTxt">未設定</span>
+      </div>
+      <details class="manual" id="manual">
+        <summary>緯度・経度を手入力</summary>
+        <div class="ax-row">
+          <input class="ax-input" id="f-latlng" placeholder="34.6937, 135.5023 またはGoogleマップのURL" autocomplete="off">
+          <button class="ax-btn small" type="button" id="latlngBtn">反映</button>
+        </div>
+      </details>
+    </div>
+
+    <div class="two">
+      <div class="fld"><label for="f-arch">設計者</label><input class="ax-input" id="f-arch" autocomplete="off"></div>
+      <div class="fld"><label for="f-date">訪問日</label><input class="ax-input" id="f-date" type="date"></div>
+    </div>
+    <div class="fld"><label for="f-list">リスト</label><select class="ax-input" id="f-list"></select></div>
+    <div class="fld"><label for="f-one">ひとことメモ（公開されます）</label><textarea class="ax-input" id="f-one" rows="2"></textarea></div>
+    <div class="fld"><span class="lbl">ディテールのメモ</span>
+      <button class="ax-btn" type="button" id="detBtn">ディテールのメモを開く</button></div>
+    <div class="fld"><label for="f-tags">タグ（スペース区切り）</label><input class="ax-input" id="f-tags" autocomplete="off" placeholder="RC打放し 階段 水辺"></div>
+    <div class="toggle">
+      <div><b>HPで公開する</b><p>オンにした記録だけ公開データに入ります</p></div>
+      <button type="button" class="sw" id="f-pub" aria-pressed="false" aria-label="HPで公開する"></button>
+    </div>
+    <button class="ax-btn ax-btn-primary save" type="submit" id="edSave">保存</button>
+    <button class="ax-btn ax-btn-danger" type="button" id="edDelete" hidden>この記録を削除</button>
+  </form>
+</section>
+
+<!-- ディテールのメモ -->
+<section id="detail" class="view sheet" hidden aria-label="ディテールのメモ">
+  <header class="am-head bar">
+    <button class="ax-btn ax-btn-ghost small" type="button" id="dtBack">戻る</button>
+    <div class="bar-title">ディテール</div>
+    <button class="ax-btn ax-btn-ghost small" type="button" id="dtAddNoPhoto">＋ 写真なし</button>
+  </header>
+  <div class="dt-thumbs" id="dtThumbs"></div>
+  <div class="dt-photo" id="dtPhoto"></div>
+  <p class="hint pad">写真をタップした位置に番号が付きます。番号ごとに部位・寸法・素材を書けます。</p>
+  <ol class="notes" id="notes"></ol>
+</section>
+
+<!-- 公開データ -->
+<section id="exportSheet" class="view sheet" hidden aria-label="公開データ">
+  <header class="am-head bar">
+    <button class="ax-btn ax-btn-ghost small" type="button" id="exClose">閉じる</button>
+    <div class="bar-title">公開データ</div>
+    <span></span>
+  </header>
+  <div class="form">
+    <p id="exSummary"></p>
+    <p class="hint">「公開する」がオンの記録だけを public.json にまとめます。設計者・訪問日・タグ・公開を選んでいない写真とメモは入りません。書き出したファイルを、HPの公開版（archmap/public/）に置くと反映されます。</p>
+    <button class="ax-btn ax-btn-primary" type="button" id="exDownload">public.json を書き出す</button>
+    <button class="ax-btn" type="button" id="exCopy">中身をコピー</button>
+    <textarea class="ax-input mono" id="exText" rows="10" readonly aria-label="公開データの中身"></textarea>
+  </div>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="../shared/apps.js"></script>
+<script src="common.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

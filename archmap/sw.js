@@ -1,6 +1,6 @@
-/* このアプリをオフラインでも開けるようにする仕組み。CACHE の名前はアプリごとに変え、更新のたびに番号を上げる */
-var CACHE = 'template-v1';
-var SHELL = ['./', 'index.html', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png',
+/* このアプリをオフラインでも開けるようにする仕組み（公開版 public/ は対象外：常に最新の public.json を読む）。CACHE の名前はアプリごとに変え、更新のたびに番号を上げる */
+var CACHE = 'archmap-v1';
+var SHELL = ['./', 'index.html', 'app.js', 'app.css', 'common.js', 'common.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png',
   '../shared/apps.js', '../shared/apps.css'];
 
 self.addEventListener('install', function (e) {
@@ -18,7 +18,8 @@ self.addEventListener('activate', function (e) {
 // 自分のサイトの GET だけ扱う（スプシ・画像の通信には触れない）。新しい版を優先し、つながらない時だけ保存済みを使う
 self.addEventListener('fetch', function (e) {
   var req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  var u = new URL(req.url);
+  if (req.method !== 'GET' || u.origin !== self.location.origin || u.pathname.indexOf('/archmap/public/') !== -1) return;
   e.respondWith(fetch(req).then(function (res) {
     if (res && res.ok) {
       var copy = res.clone();

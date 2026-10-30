@@ -32,6 +32,7 @@
   .grid .desc { font-size: 13px; color: var(--ax-muted); }
   .grid .tag { font-size: 12px; color: var(--ax-accent); }
   .section { font-size: 14px; color: var(--ax-muted); margin: 24px 0 0; }
+.soon{opacity:.45;pointer-events:none}
 </style>
 </head>
 <body>
@@ -52,7 +53,7 @@
   // アプリを足すときは、ここに1行追加する（path はフォルダ名）
   var APPS = [
     { path: 'routine', name: 'ルーティン', desc: '毎日の習慣を記録', group: 'mine' },
-    { path: 'diary', name: '日記', desc: '日々の記録と写真', group: 'mine' },
+    { path: 'diary', name: '日記', desc: '出来事・感謝・今日の格言', group: 'mine', ready: true },
     { path: 'archmap', name: '建築map', desc: '見に行った・行きたい建築', group: 'mine' },
     { path: 'filemap', name: '仕事ファイルの地図', desc: 'どこに何があるか', group: 'mine' },
     { path: 'brain', name: '脳みそポートフォリオ', desc: '考えたことの置き場', group: 'mine' },
@@ -60,8 +61,8 @@
   ];
   APPS.forEach(function (a) {
     var li = document.createElement('li');
-    var link = document.createElement('a');
-    link.href = a.path + '/';
+    var link = document.createElement(a.ready ? 'a' : 'span');
+    if (a.ready) link.href = a.path + '/'; else { link.className = 'soon'; a.desc = '準備中'; }
     link.innerHTML = '<span class="name"></span><span class="desc"></span>';
     link.querySelector('.name').textContent = a.name;
     link.querySelector('.desc').textContent = a.desc;

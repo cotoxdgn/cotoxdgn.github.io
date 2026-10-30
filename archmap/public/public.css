@@ -1,0 +1,60 @@
+/* 公開版（HP埋め込み）。HPの白い地に合わせ、明るい配色だけで作る */
+:root {
+  --pm-paper: #FBFBF8;
+  --pm-card: #FFFFFF;
+  --pm-ink: #16181D;
+  --pm-mute: #686C75;
+  --pm-line: #DCDDD7;
+  --pm-block: #E4E6DF;
+  --pm-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--pm-paper); color: var(--pm-ink); }
+body { font-family: var(--pm-body); font-size: 15px; line-height: 1.7; -webkit-text-size-adjust: 100%; }
+a { color: inherit; }
+.pm { max-width: 1200px; margin: 0 auto; container-type: inline-size; }
+
+.pm-intro {
+  display: grid; gap: 6px;
+  padding-block: 24px 14px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.kicker { font: 700 12px/1.4 var(--am-num); letter-spacing: .14em; text-transform: uppercase; color: var(--pm-mute); }
+.pm-intro h1 { margin: 0; font: 900 clamp(26px, 5cqi, 44px)/1.15 var(--am-disp); text-wrap: balance; }
+.pm-intro p { margin: 0; color: var(--pm-mute); max-width: 60ch; font-size: 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font: 500 12px/1.6 var(--am-num); color: var(--pm-mute); font-variant-numeric: tabular-nums; }
+
+.pm-body { display: grid; grid-template-columns: minmax(0, 1fr); border-top: 2px solid var(--pm-ink); }
+.pm-map { position: relative; min-width: 0; }
+.map { height: 320px; background: var(--pm-block); }
+.pm-list { list-style: none; margin: 0; padding: 0 max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)); min-width: 0; }
+@container (min-width: 760px) {
+  .pm-body { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+  .pm-map .map { position: sticky; top: 0; height: 640px; }
+  .pm-list { border-left: 1px solid var(--pm-line); max-height: 640px; overflow-y: auto; padding: 0 20px; }
+}
+
+.item { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; padding: 16px 0; border-bottom: 1px solid var(--pm-line); cursor: pointer; }
+.item:focus-visible { outline: 2px solid var(--am-pin); outline-offset: 2px; }
+.item .n { font: 700 26px/1 var(--am-num); color: var(--am-pin); font-variant-numeric: tabular-nums; }
+.item .n.none { font-size: 13px; color: var(--pm-mute); padding-top: 6px; }
+.item h2 { margin: 0; font: 600 17px/1.4 var(--am-disp); }
+.item.on h2 span { background: linear-gradient(transparent 60%, var(--am-hi) 60%); }
+.item .one { margin: 4px 0 0; font-size: 14px; }
+.item .det { margin: 8px 0 0; padding: 0 0 0 10px; border-left: 3px solid var(--am-hi); list-style: none; display: grid; gap: 4px; font-size: 13px; color: var(--pm-mute); }
+.item .det b { color: var(--pm-ink); font-weight: 700; margin-right: 6px; }
+.item .det .spec { font-family: var(--am-num); color: var(--pm-ink); }
+.item .pic { display: block; margin-top: 10px; width: 100%; max-width: 100%; aspect-ratio: 3 / 2; object-fit: cover; border-radius: 2px; background: var(--pm-block); }
+.empty { padding: 24px 0; color: var(--pm-mute); font-size: 14px; }
+
+.pm-cta {
+  display: grid; gap: 10px; border-top: 2px solid var(--pm-ink); background: var(--pm-card);
+  padding-block: 20px 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.pm-cta p { margin: 0; font-size: 14px; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.btns a { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border: 1px solid var(--pm-ink); border-radius: 999px; text-decoration: none; font-size: 14px; font-weight: 700; }
+.btns a.primary { background: var(--pm-ink); color: var(--pm-paper); }
+.btns a:focus-visible { outline: 3px solid var(--am-pin); outline-offset: 2px; }

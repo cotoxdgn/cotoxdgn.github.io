@@ -5,33 +5,244 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="ひな形">
-<title>ひな形</title>
+<meta name="apple-mobile-web-app-title" content="歯磨きしたかな">
+<meta name="theme-color" content="#EEF4F3">
+<title>ワンコの歯磨きしたかな</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="../shared/apps.css">
 <style>
-  main { max-width: 640px; margin: 0 auto; padding: 16px 16px 48px; }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  h1 { font-size: 20px; margin: 8px 0; }
-  ul { list-style: none; padding: 0; }
-  li { display: flex; gap: 8px; align-items: center; justify-content: space-between;
-       background: var(--ax-surface); border: 1px solid var(--ax-line); border-radius: var(--ax-radius); padding: 8px 12px; margin: 8px 0; }
-  .pending { font-size: 12px; color: var(--ax-muted); }
+  /* 色：歯みがき粉のミント地。した＝ミント、まだ＝オレンジ。わんこA＝茶、わんこB＝白×グレー */
+  :root {
+    --bg: #EEF4F3; --card: #FFFFFF; --ink: #24302F; --muted: #5E6D6B; --line: #D5E2E0;
+    --mint: #2F9C8A; --mint-deep: #1F6E61; --mint-soft: #DCF1EC;
+    --amber: #D9801F; --amber-deep: #A35A16; --amber-soft: #FDEEDB;
+    --furA: #D9A46A; --furA-dark: #A8713C; --furB: #F2EFE9; --furB-dark: #8D8A86;
+    --muzzle: #FFFFFF; --face: #2B2522; --tongue: #EF8A8F;
+    --round: "Hiragino Maru Gothic ProN", "Hiragino Maru Gothic Pro", "Zen Maru Gothic", "M PLUS Rounded 1c", var(--ax-font);
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #141B1A; --card: #1D2625; --ink: #E8EFEE; --muted: #9FB0AD; --line: #2E3B39;
+    --mint: #4CC3AE; --mint-deep: #2A8B7A; --mint-soft: #1F3A35;
+    --amber: #F0A14D; --amber-deep: #9A5A1C; --amber-soft: #3A2C1C;
+    --furA: #D29B62; --furA-dark: #9C6A38; --furB: #E6E2DA; --furB-dark: #8A8782; --muzzle: #F4F1EC; --face: #231D1A; --tongue: #E3858A; } }
+  :root[data-theme="dark"] {
+    --bg: #141B1A; --card: #1D2625; --ink: #E8EFEE; --muted: #9FB0AD; --line: #2E3B39;
+    --mint: #4CC3AE; --mint-deep: #2A8B7A; --mint-soft: #1F3A35;
+    --amber: #F0A14D; --amber-deep: #9A5A1C; --amber-soft: #3A2C1C;
+    --furA: #D29B62; --furA-dark: #9C6A38; --furB: #E6E2DA; --furB-dark: #8A8782; --muzzle: #F4F1EC; --face: #231D1A; --tongue: #E3858A; }
+
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--ink); }
+  body { margin: 0; font-family: var(--ax-font); font-size: 16px; line-height: 1.55; -webkit-text-size-adjust: 100%; }
+  main { max-width: 520px; margin: 0 auto;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) max(14px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 40px) max(14px, env(safe-area-inset-left, 0px));
+    display: flex; flex-direction: column; gap: 14px; }
+  button { font: inherit; color: inherit; }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+  .bar h1 { font-family: var(--round); font-weight: 800; font-size: 18px; margin: 0; }
+  .bar .r { display: flex; gap: 6px; align-items: center; }
+  .chip { appearance: none; border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 6px 12px; font-size: 14px; cursor: pointer; min-height: 36px; }
+  .back { appearance: none; border: 0; background: none; font-family: var(--round); font-weight: 800; font-size: 17px; padding: 6px 0; cursor: pointer; }
+
+  .date { font-family: var(--round); font-weight: 800; font-size: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+  .summary { border-radius: 16px; padding: 10px 14px; font-family: var(--round); font-weight: 800; text-align: center; }
+  .summary.yet { background: var(--amber); color: #fff; }
+  .summary.part { background: var(--card); border: 2px solid var(--amber); color: var(--amber); }
+  .summary.all { background: var(--mint); color: #fff; }
+
+  .dogs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .dogcard { border-radius: 24px; padding: 14px 10px 12px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; min-width: 0; }
+  .dogcard.yet { background: var(--amber-soft); }
+  .dogcard.done { background: var(--mint-soft); }
+  .dogcard .nm { font-family: var(--round); font-weight: 800; font-size: 18px; overflow-wrap: anywhere; }
+  .dogcard .verdict { font-family: var(--round); font-weight: 800; font-size: 26px; line-height: 1.2; }
+  .dogcard.yet .verdict { color: var(--amber); }
+  .dogcard.done .verdict { color: var(--mint); }
+  .dogcard .who { font-size: 14px; line-height: 1.35; min-height: 2.7em; }
+  .dog { width: 104px; height: auto; max-width: 100%; }
+  .dogbtn { appearance: none; border: 0; width: 100%; min-height: 76px; border-radius: 20px; font-family: var(--round); font-weight: 800; font-size: 18px; line-height: 1.25;
+    color: #fff; background: var(--amber); box-shadow: 0 5px 0 var(--amber-deep); cursor: pointer; margin-top: auto; touch-action: manipulation; }
+  .dogbtn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--amber-deep); }
+  .dogbtn.ok { background: transparent; color: var(--mint); border: 2px dashed var(--mint); box-shadow: none; font-size: 16px; cursor: default; transform: none; }
+  .undo { appearance: none; border: 0; background: none; color: var(--muted); text-decoration: underline; font-size: 13px; padding: 6px; cursor: pointer; min-height: 32px; }
+  .hint { font-size: 13px; color: var(--muted); text-align: center; margin: -4px 0 0; }
+
+  h2.sec { font-family: var(--round); font-weight: 800; font-size: 16px; margin: 4px 0 0; display: flex; justify-content: space-between; align-items: baseline; }
+  .linkbtn { appearance: none; border: 0; background: none; color: var(--mint); font-size: 14px; cursor: pointer; padding: 4px 0; }
+  .log { list-style: none; margin: 0; padding: 0; }
+  .log li { display: grid; grid-template-columns: 5.4em 5em 1fr auto; gap: 8px; align-items: center; padding: 10px 2px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  .log li:last-child { border-bottom: 0; }
+  .log .d { color: var(--muted); font-size: 13px; }
+  .log .w { font-size: 13px; font-weight: 700; border-radius: 999px; padding: 1px 4px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .log .w.a { background: color-mix(in srgb, var(--furA) 32%, transparent); }
+  .log .w.b { background: color-mix(in srgb, var(--furB-dark) 24%, transparent); }
+  .log .n { font-weight: 700; overflow-wrap: anywhere; }
+  .log .none { color: var(--amber); font-weight: 700; }
+  .log .p { font-size: 11px; color: var(--muted); font-weight: 400; }
+  .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 12px 0; }
+
+  .weekgrid { display: grid; grid-template-columns: 5em repeat(7, 1fr); gap: 6px 2px; align-items: center; text-align: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .weekgrid .rl { text-align: left; font-weight: 700; color: var(--ink); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dot { width: 30px; height: 30px; border-radius: 50%; margin: 0 auto; display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+  .dot.ok { background: var(--mint); color: #fff; }
+  .dot.ng { border: 2px dashed var(--amber); color: var(--amber); }
+  .dot.td { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .daygroup h3 { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+
+  .welcome { display: grid; justify-items: center; gap: 6px; text-align: center; }
+  .welcome .pair { display: flex; gap: 4px; }
+  .welcome h2 { font-family: var(--round); font-weight: 800; font-size: 24px; margin: 0; }
+  .welcome p { margin: 0; color: var(--muted); font-size: 14px; }
+  .names { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .namebtn { appearance: none; border: 2px solid var(--line); background: var(--card); border-radius: 20px; min-height: 84px; padding: 8px;
+    font-family: var(--round); font-weight: 800; font-size: 20px; cursor: pointer; overflow-wrap: anywhere; }
+  .namebtn[aria-pressed="true"] { border-color: var(--mint); background: var(--mint-soft); }
+
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px; display: grid; gap: 10px; }
+  .panel h2 { font-family: var(--round); font-weight: 800; font-size: 17px; margin: 0; }
+  .panel p, .panel ol { margin: 0; font-size: 14px; }
+  .panel ol { padding-left: 1.3em; display: grid; gap: 4px; }
+  .fld { display: grid; grid-template-columns: 5.5em 1fr; gap: 8px; align-items: center; }
+  .fld label { font-size: 14px; font-weight: 700; }
+  .fld .ax-input { margin: 0; font-size: 16px; }
+  .big { width: 100%; min-height: 56px; font-size: 17px; font-weight: 700; }
+  .note { font-size: 13px; color: var(--muted); }
+  .status { font-size: 13px; color: var(--muted); text-align: center; min-height: 1.2em; margin: 0; }
+  .status.err { color: var(--ax-danger); }
+
+  .undo-toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+    width: min(480px, calc(100% - 28px)); background: var(--ink); color: var(--bg); border-radius: 14px; padding: 12px 14px;
+    display: flex; justify-content: space-between; align-items: center; gap: 10px; z-index: 50; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
+  .undo-toast button { appearance: none; border: 0; background: none; color: var(--bg); text-decoration: underline; font-weight: 700; cursor: pointer; padding: 6px; white-space: nowrap; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
+<!-- わんこの絵（オリジナル）：A＝茶色のたれ耳、B＝白にグレーの立ち耳 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="dogA">
+      <ellipse cx="46" cy="80" rx="24" ry="42" fill="var(--furA-dark)" transform="rotate(14 46 80)"/>
+      <ellipse cx="154" cy="80" rx="24" ry="42" fill="var(--furA-dark)" transform="rotate(-14 154 80)"/>
+      <ellipse cx="100" cy="92" rx="62" ry="58" fill="var(--furA)"/>
+    </g>
+    <g id="dogB">
+      <path d="M44 70 L52 10 L92 50 Z" fill="var(--furB-dark)"/>
+      <path d="M156 70 L148 10 L108 50 Z" fill="var(--furB-dark)"/>
+      <ellipse cx="100" cy="92" rx="62" ry="58" fill="var(--furB)" stroke="var(--furB-dark)" stroke-width="2"/>
+      <ellipse cx="124" cy="80" rx="18" ry="16" fill="var(--furB-dark)" opacity=".35"/>
+    </g>
+    <g id="faceYet">
+      <ellipse cx="100" cy="118" rx="34" ry="26" fill="var(--muzzle)" opacity=".9"/>
+      <circle cx="78" cy="86" r="7.5" fill="var(--face)"/><circle cx="122" cy="86" r="7.5" fill="var(--face)"/>
+      <circle cx="80" cy="83" r="2.4" fill="#fff"/><circle cx="124" cy="83" r="2.4" fill="#fff"/>
+      <ellipse cx="100" cy="106" rx="10" ry="7" fill="var(--face)"/>
+      <path d="M88 118 Q94 124 100 118 Q106 124 112 118" stroke="var(--face)" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <g transform="rotate(-30 170 140)"><rect x="140" y="136" width="54" height="8" rx="4" fill="var(--amber)"/><rect x="186" y="128" width="12" height="9" rx="2" fill="#fff" stroke="var(--line)"/></g>
+    </g>
+    <g id="faceDone">
+      <ellipse cx="100" cy="120" rx="36" ry="28" fill="var(--muzzle)" opacity=".9"/>
+      <path d="M70 86 Q78 76 86 86" stroke="var(--face)" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+      <path d="M114 86 Q122 76 130 86" stroke="var(--face)" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+      <ellipse cx="100" cy="104" rx="10" ry="7" fill="var(--face)"/>
+      <path d="M82 116 Q100 142 118 116 Z" fill="var(--face)"/>
+      <rect x="90" y="116" width="8" height="6" rx="1.5" fill="#fff"/><rect x="102" y="116" width="8" height="6" rx="1.5" fill="#fff"/>
+      <ellipse cx="100" cy="132" rx="8" ry="6" fill="var(--tongue)"/>
+      <path d="M166 30 l4 10 10 4 -10 4 -4 10 -4 -10 -10 -4 10 -4z" fill="var(--mint)"/>
+      <path d="M28 24 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3z" fill="var(--mint)"/>
+    </g>
+  </defs>
+</svg>
+
 <main>
-  <header>
-    <h1>ひな形</h1>
-    <button class="ax-btn ax-btn-ghost" type="button" id="settings" aria-label="接続の設定">接続</button>
-  </header>
-  <form id="form" class="ax-row">
-    <input class="ax-input" id="text" placeholder="メモ" style="flex:1;margin:0" required>
-    <button class="ax-btn ax-btn-primary">追加</button>
-  </form>
-  <p id="status" class="ax-note"></p>
-  <ul id="list"></ul>
+  <!-- 今日 -->
+  <section id="v-today" hidden>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="bar">
+        <h1>歯磨きしたかな</h1>
+        <div class="r">
+          <button class="chip" type="button" id="meChip" aria-label="使う人を変える">—</button>
+          <button class="chip" type="button" id="toSettings">設定</button>
+        </div>
+      </div>
+      <div class="date" id="todayDate"></div>
+      <div class="summary" id="summary" role="status"></div>
+      <div class="dogs" id="dogs"></div>
+      <p class="hint" id="hint"></p>
+      <h2 class="sec">直近の記録 <button class="linkbtn" type="button" id="toLog">すべて見る</button></h2>
+      <ul class="log" id="recent"></ul>
+      <p class="status" id="status" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <!-- 記録一覧 -->
+  <section id="v-log" hidden>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="bar"><button class="back" type="button" data-go="today">← 記録</button></div>
+      <h2 class="sec">この1週間</h2>
+      <div class="weekgrid" id="week" aria-label="この1週間の状況"></div>
+      <div class="note"><span style="color:var(--mint)">●</span> した　<span style="color:var(--amber)">◌</span> 記録なし</div>
+      <h2 class="sec">ぜんぶの記録（30日分）</h2>
+      <div class="daygroup" id="allLog"></div>
+    </div>
+  </section>
+
+  <!-- 使う人をえらぶ -->
+  <section id="v-who" hidden>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="bar"><button class="back" type="button" id="whoBack" data-go="today">← もどる</button></div>
+      <div class="welcome">
+        <div class="pair">
+          <svg class="dog" viewBox="0 0 200 170" aria-hidden="true"><use href="#dogA"/><use href="#faceYet"/></svg>
+          <svg class="dog" viewBox="0 0 200 170" aria-hidden="true"><use href="#dogB"/><use href="#faceYet"/></svg>
+        </div>
+        <h2>あなたはだれ？</h2>
+        <p>この端末で使う人をえらんでください。<br>あとで右上の名前から変えられます。</p>
+      </div>
+      <div class="names" id="names" role="group" aria-label="家族の名前"></div>
+    </div>
+  </section>
+
+  <!-- 設定 -->
+  <section id="v-settings" hidden>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="bar"><button class="back" type="button" data-go="today">← 設定</button></div>
+      <form class="panel" id="setForm">
+        <h2>わんこの名前</h2>
+        <div class="fld"><label for="dogA">1頭目</label><input class="ax-input" id="dogA" maxlength="12" required></div>
+        <div class="fld"><label for="dogB">2頭目</label><input class="ax-input" id="dogB" maxlength="12" required></div>
+        <h2>家族の呼び名</h2>
+        <div class="fld"><label for="m1">1人目</label><input class="ax-input" id="m1" maxlength="10" required></div>
+        <div class="fld"><label for="m2">2人目</label><input class="ax-input" id="m2" maxlength="10" required></div>
+        <div class="fld"><label for="m3">3人目</label><input class="ax-input" id="m3" maxlength="10" required></div>
+        <div class="fld"><label for="m4">4人目</label><input class="ax-input" id="m4" maxlength="10" required></div>
+        <p class="note">名前は家族全員のアプリに反映されます。これまでの記録も新しい名前で表示されます。</p>
+        <button class="ax-btn ax-btn-primary big" type="submit">保存</button>
+      </form>
+      <div class="panel">
+        <h2>この端末</h2>
+        <p>使う人：<b id="meNow">—</b></p>
+        <div class="ax-row">
+          <button class="ax-btn" type="button" id="changeMe">使う人を変える</button>
+          <button class="ax-btn" type="button" id="conn">スプシとの接続</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>家族に配る</h2>
+        <ol>
+          <li>家族のスマホの Safari（Android は Chrome）で <b>cotoxdgn.github.io/wanko/</b> を開く</li>
+          <li>共有ボタン →［ホーム画面に追加］。以後はそのアイコンから開く</li>
+          <li>アイコンから開くと「この端末をつなぐ」が出るので［QRでつなぐ］</li>
+          <li>パソコンで家族用スプシの［アプリ設定］→［この端末をつなぐ］に出るQRを、その場で読み取ってもらう</li>
+          <li>「あなたはだれ？」で自分の名前を選んだら完了</li>
+        </ol>
+        <p class="note">QRには合言葉が入っています。写真やLINEで送らず、その場で読み取ってもらってください。</p>
+      </div>
+    </div>
+  </section>
 </main>
 <script src="../shared/apps.js"></script>
 <script src="app.js"></script>
