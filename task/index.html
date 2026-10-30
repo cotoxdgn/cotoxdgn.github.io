@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="タスク">
+<meta name="theme-color" content="#EEF1F3">
+<title>タスク</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="main">
+  <header class="top">
+    <div>
+      <h1 id="title">今日</h1>
+      <span class="d" id="today"></span>
+    </div>
+    <div class="top-btns">
+      <button type="button" class="icon-btn" id="reload" aria-label="読み込み直す">↻</button>
+      <button type="button" class="icon-btn" id="settings" aria-label="接続の設定">⚙</button>
+    </div>
+  </header>
+
+  <!-- つながっていないとき -->
+  <section id="connect" class="card" hidden>
+    <h2>この端末をつなぐ</h2>
+    <p class="note">パソコンで接続リンクを開いたあと、その画面の「他の端末を追加（QR）」を、このアプリで読み取ります。</p>
+    <p class="note" id="iosHint" hidden>iPhone では、ホーム画面に追加したアイコンから開いてつないでください（Safari でつないでも引き継がれません）。</p>
+    <div class="row">
+      <button type="button" class="btn" id="scanBtn">QRでつなぐ</button>
+      <button type="button" class="btn ghost" id="photoBtn">写真から読み取る</button>
+    </div>
+    <video id="video" playsinline muted hidden></video>
+    <input type="file" id="photo" accept="image/*" hidden>
+    <details>
+      <summary>リンクを貼り付けてつなぐ</summary>
+      <textarea id="paste" rows="2" placeholder="https://cotoxdgn.github.io/task/#t=…"></textarea>
+      <button type="button" class="btn ghost" id="pasteBtn">つなぐ</button>
+    </details>
+    <p class="msg" id="connectMsg" aria-live="polite"></p>
+  </section>
+
+  <div id="app" hidden>
+    <div class="sum" id="sum">
+      <span>未完了<strong id="sOpen">–</strong></span>
+      <span>予定 工<strong id="sKo">–</strong></span>
+      <span>実働<strong id="sAct">–</strong></span>
+    </div>
+
+    <section id="carryBox" hidden>
+      <p class="lbl">持ち越し（昨日以前の未完了）</p>
+      <div class="list" id="carry"></div>
+    </section>
+
+    <section>
+      <p class="lbl" id="todayLbl">今日</p>
+      <div class="list" id="todayList"></div>
+      <p class="empty" id="todayEmpty" hidden>今日のタスクはありません。下の欄から追加できます。</p>
+    </section>
+
+    <section>
+      <p class="lbl">タスクを追加</p>
+      <form class="card add" id="addForm" autocomplete="off">
+        <div class="f">
+          <label for="aTodo">タスク（ToDo）</label>
+          <input id="aTodo" required maxlength="200" placeholder="例）施主へ仕様確認の連絡">
+        </div>
+        <div class="quick-meta" id="quickMeta"></div>
+        <div id="more" hidden>
+          <div class="f">
+            <label for="aPj">案件名（PJ）</label>
+            <input id="aPj" list="pjList" maxlength="60">
+            <datalist id="pjList"></datalist>
+          </div>
+          <div class="f">
+            <label for="aParent">親タスク</label>
+            <input id="aParent" maxlength="100" placeholder="空欄でも可">
+          </div>
+          <div class="f">
+            <label for="aDetail">詳細（メモ・リンク）</label>
+            <input id="aDetail" maxlength="300" placeholder="空欄でも可">
+          </div>
+          <div class="two">
+            <div class="f">
+              <label for="aKo">工（h）</label>
+              <input id="aKo" type="number" inputmode="decimal" step="0.25" min="0" max="24" value="0.5">
+            </div>
+            <div class="f">
+              <label for="aDate">作業日 📅</label>
+              <input id="aDate" type="date">
+            </div>
+          </div>
+          <div class="f">
+            <span class="flabel">時間帯 ⏰</span>
+            <div class="seg" id="aSlot" role="radiogroup" aria-label="時間帯">
+              <button type="button" data-v="朝" class="on" role="radio" aria-checked="true">🌅 朝</button>
+              <button type="button" data-v="昼" role="radio" aria-checked="false">☀️ 昼</button>
+              <button type="button" data-v="夕" role="radio" aria-checked="false">🌙 夕</button>
+            </div>
+          </div>
+          <p class="note" id="preview"></p>
+        </div>
+        <div class="row">
+          <button type="button" class="btn ghost" id="moreBtn" aria-expanded="false">詳しく入力</button>
+          <button type="submit" class="btn" id="addBtn">追加する</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="doneBox" hidden>
+      <p class="lbl">今日完了</p>
+      <div class="list" id="doneList"></div>
+    </section>
+    <p class="note foot" id="status"></p>
+  </div>
+</main>
+
+<!-- 完了チェック時のシート -->
+<div class="dim" id="dim" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="shTitle" hidden>
+  <span class="grab"></span>
+  <div>
+    <h3 id="shTitle"></h3>
+    <div class="meta" id="shMeta"></div>
+  </div>
+  <div class="timer" id="shTimer">00:00:00</div>
+  <div class="row">
+    <button type="button" class="btn ghost" id="tToggle">▶ タイマー開始</button>
+    <button type="button" class="btn ghost" id="tReset">リセット</button>
+  </div>
+  <div class="cmp">
+    <div>予定（工）<strong id="shKo">–</strong></div>
+    <div>実働<strong id="shAct">–</strong></div>
+    <div id="shDiffBox">差<strong id="shDiff">–</strong></div>
+  </div>
+  <div class="steps" id="steps">
+    <button type="button" data-d="-0.5">−0.5</button>
+    <button type="button" data-d="-0.25">−0.25</button>
+    <button type="button" data-d="0.25">+0.25</button>
+    <button type="button" data-d="0.5">+0.5</button>
+  </div>
+  <button type="button" class="btn" id="shDone">完了にする</button>
+  <button type="button" class="btn ghost" id="shLater">閉じる（タイマーは続く）</button>
+  <p class="note" id="shNote"></p>
+</div>
+
+<!-- 接続の設定 -->
+<div class="sheet" id="conf" role="dialog" aria-modal="true" aria-labelledby="confTitle" hidden>
+  <span class="grab"></span>
+  <h3 id="confTitle">この端末の接続</h3>
+  <p id="confName"></p>
+  <div class="row">
+    <button type="button" class="btn ghost" id="qrBtn">他の端末を追加（QR）</button>
+    <button type="button" class="btn ghost" id="pingBtn">確認</button>
+  </div>
+  <div class="qr" id="qrBox" hidden></div>
+  <details>
+    <summary>接続を外す</summary>
+    <p class="note">この端末の接続設定だけを消します。スプシのデータは消えません。</p>
+    <button type="button" class="btn danger" id="discBtn">この端末の接続を外す</button>
+  </details>
+  <button type="button" class="btn ghost" id="confClose">閉じる</button>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>
