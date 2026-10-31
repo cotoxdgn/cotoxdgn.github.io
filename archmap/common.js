@@ -194,7 +194,7 @@
         if (!pick) {
           pick = new maplibregl.Marker({ element: pinEl('●', true, '', '場所（ドラッグで移動）'), anchor: 'bottom', draggable: true });
           pick.on('dragend', function () { var p = pick.getLngLat(); if (onDrag) onDrag(p.lat, p.lng); });
-          pick.addTo(map);
+          pick.setLngLat([lng, lat]).addTo(map); // 位置を決めてから地図に載せる
         }
         pick.setLngLat([lng, lat]);
       }

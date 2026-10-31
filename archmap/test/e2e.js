@@ -1,6 +1,7 @@
 // おしゃれ建築map の画面試験（Playwright の Chromium）
 // 実行：node archmap/test/e2e.js [スクショの保存先]
-//   LEAFLET_DIR に leaflet@1.9.4 の dist フォルダを指定（試験環境は CDN に出られないため、同じ版を差し替えて読む）
+//   MAPLIBRE_DIR に maplibre-gl@4.7.1 の dist フォルダを指定（試験環境は CDN に出られないため、同じ版を差し替えて読む）
+//   OpenFreeMap のタイルも外に出られないため、試験用のベクタータイルで代用する（機能と配色の確認用）
 // スプシ（Apps Script）は test/gas-mock.js の Code.gs に、地図タイル・ドライブの画像は試験用の画像につなぐ。
 'use strict';
 const http = require('http');
@@ -12,8 +13,8 @@ const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..', '..');
 const SHOT = process.argv[2] || path.join(require('os').tmpdir(), 'archmap-shots');
-const LEAFLET = process.env.LEAFLET_DIR;
-if (!LEAFLET) { console.error('LEAFLET_DIR を指定してください'); process.exit(2); }
+const MAPLIBRE = process.env.MAPLIBRE_DIR;
+if (!MAPLIBRE) { console.error('MAPLIBRE_DIR を指定してください'); process.exit(2); }
 fs.mkdirSync(SHOT, { recursive: true });
 
 const gas = require(path.join(ROOT, 'test', 'gas-mock.js'))();
@@ -32,29 +33,11 @@ function png(w, h, rgb) {
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const o = y * (w * 3 + 1) + 1 + x * 3; const s = ((x >> 4) + (y >> 4)) % 2 ? 0 : 18; raw[o] = rgb[0] - s; raw[o + 1] = rgb[1] - s; raw[o + 2] = rgb[2] - s; }
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
-// 地図タイルの代わり：OSM 標準の配色に近い色（地・道・水・公園）で塗った画像
-function tilePng() {
-  const w = 256, h = 256, buf = png(w, h, [242, 239, 233]);
-  const raw = Buffer.alloc((w * 3 + 1) * h);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const o = y * (w * 3 + 1) + 1 + x * 3;
-    let c = [242, 239, 233];
-    if (y > 150 && y < 190) c = [170, 211, 223];
-    else if (x > 170 && y < 120) c = [200, 250, 204];
-    else if (Math.abs(x - 90) < 5 || Math.abs(y - 60) < 4) c = [255, 255, 255];
-    else if (Math.abs(x - 210) < 4) c = [252, 214, 164];
-    raw[o] = c[0]; raw[o + 1] = c[1]; raw[o + 2] = c[2];
-  }
-  const idat = zlib.deflateSync(raw);
-  return rebuild(buf, idat);
-}
-function rebuild(pngBuf, idat) {
-  const crcT = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crcT[n] = c >>> 0; }
-  const crc = b => { let c = 0xffffffff; for (const x of b) c = crcT[(c ^ x) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
-  const chunk = (t, d) => { const l = Buffer.alloc(4); l.writeUInt32BE(d.length); const td = Buffer.concat([Buffer.from(t), d]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([l, td, c]); };
-  return Buffer.concat([pngBuf.subarray(0, 33), chunk('IDAT', idat), chunk('IEND', Buffer.alloc(0))]);
-}
-const TILE = tilePng();
+// 地図の代わり：OpenMapTiles と同じレイヤー名で作った試験用ベクタータイル（make-tile.js で作成）を全タイルに返す
+const VTILE = fs.readFileSync(path.join(__dirname, 'fixture-tile.pbf'));
+const TILEJSON = JSON.stringify({ tilejson: '3.0.0', minzoom: 0, maxzoom: 14,
+  tiles: ['https://tiles.openfreemap.org/planet/test/{z}/{x}/{y}.pbf'],
+  vector_layers: ['water', 'waterway', 'park', 'building', 'transportation', 'place'].map(id => ({ id, fields: {} })) });
 const PHOTO = png(800, 600, [190, 200, 210]);
 
 let publicJson = null; // 書き出した public.json を公開版に渡す
@@ -76,10 +59,15 @@ const server = http.createServer((req, res) => {
 async function wire(ctx) {
   await ctx.route('https://cdnjs.cloudflare.com/**', r => {
     const name = new URL(r.request().url()).pathname.split('/').pop();
-    return r.fulfill({ path: path.join(LEAFLET, name) });
+    return r.fulfill({ path: path.join(MAPLIBRE, name) });
   });
   await ctx.route('https://fonts.googleapis.com/**', r => r.fulfill({ contentType: 'text/css', body: '' }));
-  await ctx.route('https://tile.openstreetmap.org/**', r => r.fulfill({ contentType: 'image/png', body: TILE }));
+  await ctx.route('https://tiles.openfreemap.org/**', r => {
+    const u = new URL(r.request().url()).pathname;
+    if (u === '/planet') return r.fulfill({ contentType: 'application/json', body: TILEJSON });
+    if (u.startsWith('/planet/test/')) return r.fulfill({ contentType: 'application/x-protobuf', body: VTILE });
+    return r.fulfill({ status: 404, body: '' }); // 文字の形（glyphs）は無し：日本語は端末の文字で描かれる
+  });
   await ctx.route('https://drive.google.com/**', r => r.fulfill({ contentType: 'image/png', body: PHOTO }));
   await ctx.route('https://script.google.com/**', r => {
     gas.clockBox.t += 1000;
@@ -95,7 +83,7 @@ const serverList = () => gas.ctx.handle_({ key: KEY, action: 'list', app: 'archm
 (async () => {
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const BASE = 'http://127.0.0.1:' + server.address().port;
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   const errors = [];
 
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, acceptDownloads: true,
@@ -106,9 +94,11 @@ const serverList = () => gas.ctx.handle_({ key: KEY, action: 'list', app: 'archm
 
   await t('接続リンクで開くと、空の状態が出る', async () => {
     await page.goto(BASE + '/archmap/' + hash);
-    await page.waitForFunction(() => window.L && document.querySelector('.leaflet-tile'));
+    await page.waitForFunction(() => window.maplibregl && document.querySelector('#map .maplibregl-canvas'));
     await page.waitForSelector('#empty:not([hidden])');
-    assert.ok(await page.locator('.leaflet-control-attribution', { hasText: 'OpenStreetMap' }).first().isVisible());
+    const attr = page.locator('#map .maplibregl-ctrl-attrib');
+    assert.ok(await attr.isVisible());
+    assert.ok(/OpenStreetMap contributors/.test(await attr.textContent()) && /OpenFreeMap/.test(await attr.textContent()));
     assert.strictEqual(await page.locator('.ax-overlay').count(), 0);
   });
 
@@ -189,6 +179,7 @@ const serverList = () => gas.ctx.handle_({ key: KEY, action: 'list', app: 'archm
     assert.strictEqual(await page.locator('.spot').count(), 1);
     assert.strictEqual(await page.locator('#map .am-pin').count(), 1);
     await page.locator('.chip', { hasText: 'すべて' }).click();
+    await page.waitForTimeout(800);
     await page.screenshot({ path: path.join(SHOT, 'phone-1-home.png') });
   });
 
@@ -242,14 +233,15 @@ const serverList = () => gas.ctx.handle_({ key: KEY, action: 'list', app: 'archm
       assert.strictEqual(await p.locator('.am-pin').count(), 1);
       const text = await p.textContent('body');
       assert.ok(text.includes('川沿いの小さな美術館') && text.includes('手摺') && !text.includes('段板') && !text.includes('試験設計事務所') && !text.includes('2026-10'));
-      assert.ok(await p.locator('.leaflet-control-attribution', { hasText: 'OpenStreetMap' }).isVisible());
+      assert.ok(await p.locator('.maplibregl-ctrl-attrib', { hasText: 'OpenStreetMap contributors' }).isVisible());
+      assert.ok(await p.locator('.maplibregl-ctrl-attrib', { hasText: 'OpenFreeMap' }).isVisible());
       assert.ok(await p.locator('.item .pic').isVisible());
       const sw = await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
       assert.ok(sw, '横にはみ出していない');
       await p.click('.item');
       await p.waitForSelector('.am-pin.on');
-      await p.waitForTimeout(400);
-      await p.screenshot({ path: path.join(SHOT, 'public-' + label + '.png'), fullPage: true });
+      await p.waitForTimeout(1500); // 地図の描画が落ち着くのを待つ
+      await p.screenshot({ path: path.join(SHOT, 'public-' + label + '.png') });
       await c.close();
     });
   }
