@@ -76,7 +76,8 @@ function namesTable_(conf) {
 function names_(conf) {
   var vals = conf.getRange(NAMES_FIRST_ROW, 2, NAMES_LABELS.length, 1).getValues();
   var v = vals.map(function (r) { return String(r[0] == null ? '' : r[0]).trim().slice(0, 20); });
-  return { names: { dogs: v.slice(0, 2), members: v.slice(2, 6) } };
+  // target：B3 の値（wanko でなければ、名前表は作られていない）
+  return { names: { dogs: v.slice(0, 2), members: v.slice(2, 6) }, target: String(conf.getRange(CELL_TARGET).getValue()).trim() };
 }
 
 // 画像の保存先フォルダ（なければ作る）

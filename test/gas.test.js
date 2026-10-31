@@ -145,6 +145,7 @@ t('接続リンク：connect ページ＋#c=（u,k,n、対象アプリ a）', ()
 t('names：家族用スプシの名前表（setup で見出し、B列を読むだけ）', () => {
   assert.deepStrictEqual(call({ key: KEY, action: 'names' }).names, { dogs: ['', ''], members: ['', '', '', ''] });
   assert.strictEqual(String(conf.getRange('A9').getValue()), ''); // 自分用スプシには表を作らない
+  assert.strictEqual(call({ key: KEY, action: 'names' }).target, '');
   conf.getRange('B3').setValue('wanko');
   ctx.setup();
   assert.strictEqual(String(conf.getRange('A9').getValue()), 'わんこ1');
@@ -155,6 +156,7 @@ t('names：家族用スプシの名前表（setup で見出し、B列を読む�
   const r = call({ key: KEY, action: 'names' });
   assert.ok(r.ok && r.now);
   assert.deepStrictEqual(r.names, { dogs: ['こむぎ', 'しらたま'], members: ['パパ', '', '', 'にいに'] });
+  assert.strictEqual(r.target, 'wanko');
   assert.strictEqual(call({ key: 'wrong', action: 'names' }).error, 'bad_key');
   conf.getRange('B3').setValue('');
 });

@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var APP = 'wanko';
-  var VERSION = '3';                        // version.json と sw.js の CACHE（wanko-v3）と一緒に上げる
+  var VERSION = '4';                        // version.json と sw.js の CACHE（wanko-v3）と一緒に上げる
   var OLD_SETTINGS_ID = 'settings';         // 旧版がアプリ内で保存していた名前（今は使わない・書かない）
   var ME_KEY = 'wanko.me.v1';               // この端末で使う人（家族のID）
   var NAMES_KEY = 'wanko.names.v1';         // スプシの名前表の控え（オフラインでも表示するため）
@@ -32,6 +32,8 @@
   // ---------- 名前（正本は家族用スプシの「設定」シート B9〜B14。アプリからは書かない） ----------
   var names = null;     // { dogs: [a, b], members: [1..4] }
   var namesState = '';  // '' | 'ok' | 'old'（スプシのプログラムが古い） | 'err'
+  var namesErr = null;  // 読めなかったときのエラー（code・detail をそのまま出す）
+  var namesTarget = null; // スプシの B3（wanko でなければ名前表がない）
   try { names = JSON.parse(localStorage.getItem(NAMES_KEY) || 'null'); } catch (e) { names = null; }
   function settings() {
     var n = names || {};
@@ -46,10 +48,12 @@
     if (!familyConn() || namesBusy) return namesBusy || Promise.resolve();
     namesBusy = Apps.call(APP, 'names').then(function (res) {
       names = res.names || null;
-      namesState = 'ok';
+      namesState = 'ok'; namesErr = null;
+      namesTarget = typeof res.target === 'string' ? res.target : null;
       try { localStorage.setItem(NAMES_KEY, JSON.stringify(names)); } catch (e) { /* 控えなしでも表示はできる */ }
     }, function (e) {
       namesState = e && e.code === 'bad_action' ? 'old' : 'err';
+      namesErr = e;
     }).then(function () { namesBusy = null; render(); });
     return namesBusy;
   }
@@ -76,7 +80,7 @@
   function recordFor(k, dog) { var r = db.get(recId(k, dog)); return r && r.data ? r : null; }
 
   function markDone(dog) {
-    if (!familyConn()) { connectFamily(); return; }   // 自分用スプシには書かない
+    if (!familyConn()) { show('connect'); return; }   // 家族用スプシ以外には書かない
     var k = dayKey(new Date());
     if (recordFor(k, dog)) return;         // 今日はもう記録済み（1日1回）
     var who = me();
@@ -110,9 +114,15 @@
     return li;
   }
   function show(v) {
+    if (v !== 'connect' && v !== 'settings' && !familyConn()) v = 'connect';   // 家族用につながるまでは、つなぐ画面だけ
     if (view === 'settings' && v !== 'settings') hideQr();
+    if (view === 'connect' && v !== 'connect') { stopCam(); $('connMsg').hidden = true; $('connNext').hidden = true; }
     view = v;
-    ['today', 'log', 'who', 'settings'].forEach(function (x) { $('v-' + x).hidden = x !== v; });
+    if (v === 'connect') {
+      $('connBack').hidden = !familyConn();
+      $('iosHint').hidden = !(Apps.isIOS() && !Apps.isStandalone());
+    }
+    ['today', 'log', 'who', 'settings', 'connect'].forEach(function (x) { $('v-' + x).hidden = x !== v; });
     render();
     window.scrollTo(0, 0);
   }
@@ -252,7 +262,6 @@
     $('meNow').textContent = memberName(me());
     var c = Apps.getConnection(APP);
     $('connNow').textContent = !c ? '未接続' : (familyConn() ? '家族用（wanko）✓' : '自分用 ×') + '　' + (c.name || '');
-    $('connWarn').hidden = !c || !!familyConn();
     $('qrStart').disabled = !familyConn();
   }
 
@@ -289,13 +298,16 @@
     var st = !c ? 'none' : familyConn() ? 'family' : 'own';
     var el2 = $('connState');
     el2.className = 'connstate ' + st;
-    el2.textContent = 'つながっているスプシ：' + (st === 'family' ? '家族用（wanko）✓' : st === 'own' ? '自分用 ×' : '未接続');
+    el2.textContent = 'つながっているスプシ：' + (st === 'family' ? '家族用（wanko）✓' : st === 'own' ? '自分用 ×（ワンコには使えません）' : '未接続');
+    $('connState2').className = el2.className;
+    $('connState2').textContent = el2.textContent;
   }
   // 名前表が読めない・空のときの案内（'' なら問題なし）
   function namesProblem() {
     if (!familyConn()) return '';
     if (namesState === 'old') return '家族用スプシのプログラムが古いため、名前を読めません。Code.gs を新しいものに貼り替えて、新バージョンでデプロイしてください。';
-    if (namesState === 'err') return '名前を読み込めませんでした（通信を確認）。' + (names ? '前回の名前を表示しています。' : '');
+    if (namesState === 'err') return '名前を読み込めませんでした：' + errDetail(namesErr) + (names ? '（前回の名前を表示しています）' : '');
+    if (namesState === 'ok' && namesTarget !== null && namesTarget !== APP) return '家族用スプシの「設定」シート B3 に wanko が入っていません。B3 に wanko と入れ、メニュー［アプリ設定］→［準備をやり直す（setup）］を実行してください。';
     var n = names || {};
     var empty = !(n.dogs || []).concat(n.members || []).some(function (x) { return x; });
     if (namesState === 'ok' && empty) return 'スプシの設定シート（B9〜B14）で名前を入れてください。いまは「わんこA」「家族A」などを表示しています。';
@@ -307,7 +319,6 @@
     else if (view === 'log') renderLog();
     else if (view === 'who') renderWho();
     else if (view === 'settings') renderSettings();
-    $('connBanner').hidden = !(Apps.getConnection(APP) && !familyConn()) || view === 'settings';
     renderConn();
     var np = namesProblem();
     $('namesHint').textContent = np;
@@ -353,15 +364,122 @@
   $('toSettings').addEventListener('click', function () { show('settings'); loadNames(); });
   $('meChip').addEventListener('click', function () { show('who'); });
   $('changeMe').addEventListener('click', function () { show('who'); });
-  $('conn').addEventListener('click', function () { Apps.openConnectSheet(APP); });
+  $('reconnect').addEventListener('click', function () { show('connect'); });
   $('reloadNames').addEventListener('click', function () { loadNames().then(function () { if (namesState === 'ok') Apps.toast('名前を読み込みました'); }); });
   $('qrStart').addEventListener('click', function () { $('qrWarn').hidden = false; $('qrShown').hidden = true; });
   $('qrOk').addEventListener('click', showQr);
   $('qrCancel').addEventListener('click', hideQr);
   $('qrHide').addEventListener('click', hideQr);
-  $('connFix').addEventListener('click', connectFamily);
-  $('connFix2').addEventListener('click', connectFamily);
-  function connectFamily() { Apps.openConnect(APP); }
+
+  // ---------- 家族用スプシにつなぐ（ワンコ専用の読み取り。家族用以外のQRは保存しない） ----------
+  function errDetail(e) {
+    if (!e) return '';
+    var t = Apps.errorText(e);
+    var code = e.code || e.message || '';
+    return t + '［' + code + (e.detail ? '：' + String(e.detail).slice(0, 200) : '') + '］';
+  }
+  function connMsg(text, ok) {
+    var m = $('connMsg');
+    m.className = 'msgbox ' + (ok ? 'ok' : 'ng');
+    m.textContent = text;
+    m.hidden = false;
+  }
+  var cam = { stream: null, raf: 0 };
+  function stopCam() {
+    if (cam.raf) cancelAnimationFrame(cam.raf);
+    cam.raf = 0;
+    if (cam.stream) cam.stream.getTracks().forEach(function (t) { t.stop(); });
+    cam.stream = null;
+    $('camVideo').hidden = true;
+    $('scanStop').hidden = true;
+  }
+  function decodeImage(src, w, h) {
+    var s = Math.min(1, 1000 / Math.max(w, h));
+    var cv = document.createElement('canvas');
+    cv.width = Math.round(w * s); cv.height = Math.round(h * s);
+    var ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(src, 0, 0, cv.width, cv.height);
+    var hit = window.jsQR(ctx.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height, { inversionAttempts: 'attemptBoth' });
+    return hit && hit.data ? hit.data : null;
+  }
+  // 読んだQR・リンクの中身を確かめて、家族用（a=wanko）のときだけ保存する
+  function tryConnect(text) {
+    var c = Apps.parseConnect(text || '');
+    if (!c) {
+      connMsg('つなぐ用のQR・リンクではありません。家族用スプシのメニュー［アプリ設定］→［この端末をつなぐ（リンクとQR）］に出るQRを読んでください。');
+      return false;
+    }
+    if (c.app !== APP) {
+      connMsg('これは自分用のQRです（つなぐ先：' + (c.app ? c.app + ' だけ' : '全アプリ共通') + (c.name ? '、' + c.name : '') + '）。\n'
+        + '家族用スプシ「ワンコの歯磨き（家族）」のメニュー［アプリ設定］→［この端末をつなぐ（リンクとQR）］のQRを読んでください。\n'
+        + '（家族用スプシの「設定」シート B3 が wanko でないと、家族用のQRになりません）');
+      return false;
+    }
+    stopCam();
+    Apps.saveConnection(c);
+    connMsg('つながりました（' + (c.name || 'スプレッドシート') + '）。名前を読み込んでいます…', true);
+    syncAll().then(function () {
+      if (namesState === 'ok') {
+        var s = settings();
+        var warn = namesProblem();
+        connMsg('つながりました（' + (c.name || 'スプレッドシート') + '）\n'
+          + 'わんこ：' + s.dogs.a + '・' + s.dogs.b + '\n家族：' + s.members.map(function (m) { return m.name; }).join('・')
+          + (warn ? '\n\n' + warn : ''), !warn);
+      } else {
+        connMsg('つながりましたが、名前を読めませんでした。\n' + (namesState === 'old'
+          ? '家族用スプシのプログラムが古いようです（' + errDetail(namesErr) + '）。Code.gs を貼り替え、［デプロイを管理］→ 新バージョンでデプロイしてください。'
+          : errDetail(namesErr)));
+      }
+      $('connNext').hidden = false;
+    });
+    return true;
+  }
+  $('scanCam').addEventListener('click', function () {
+    connMsg('カメラを準備しています…', true);
+    Apps.loadScript('../shared/lib/jsQR.js').then(function () {
+      return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    }).then(function (stream) {
+      cam.stream = stream;
+      var v = $('camVideo');
+      v.srcObject = stream; v.hidden = false; $('scanStop').hidden = false;
+      connMsg('パソコンに出ている家族用スプシのQRを映してください', true);
+      v.play().catch(function () {});
+      var last = '';
+      (function loop() {
+        if (!cam.stream) return;
+        if (v.readyState >= 2 && v.videoWidth) {
+          var t = decodeImage(v, v.videoWidth, v.videoHeight);
+          if (t && t !== last) { last = t; if (tryConnect(t)) return; }
+        }
+        cam.raf = requestAnimationFrame(loop);
+      })();
+    }).catch(function (e) {
+      stopCam();
+      connMsg('カメラを使えませんでした（' + (e && (e.name || e.code || e.message) || '') + '）。「写真から読み取る」か、リンクの貼り付けを使ってください。');
+    });
+  });
+  $('scanStop').addEventListener('click', stopCam);
+  $('scanFile').addEventListener('click', function () { $('fileIn').click(); });
+  $('fileIn').addEventListener('change', function () {
+    var f = this.files && this.files[0];
+    this.value = '';
+    if (!f) return;
+    Apps.loadScript('../shared/lib/jsQR.js').then(function () {
+      return new Promise(function (ok, ng) {
+        var img = new Image();
+        img.onload = function () { ok(img); };
+        img.onerror = ng;
+        img.src = URL.createObjectURL(f);
+      });
+    }).then(function (img) {
+      var t = decodeImage(img, img.naturalWidth, img.naturalHeight);
+      if (!t) connMsg('写真からQRを読み取れませんでした。QRが大きく写った写真で試してください。');
+      else tryConnect(t);
+    }, function () { connMsg('写真を読み込めませんでした。'); });
+  });
+  $('pasteGo').addEventListener('click', function () { tryConnect($('pasteIn').value.trim()); });
+  $('connNext').addEventListener('click', function () { show(me() ? 'today' : 'who'); });
+  $('connBack').addEventListener('click', function () { show(me() ? 'today' : 'who'); });
 
   db.onChange(function (l) { list = l; render(); });
   Apps.on('error', function (d) {
@@ -391,12 +509,11 @@
   window.addEventListener('online', syncAll);
 
   // 起動：つながっていなければ接続画面 → 使う人が未設定なら「あなたはだれ？」
-  show(me() ? 'today' : 'who');
-  Apps.ensureConnected(APP).then(function () {
-    return syncAll();                     // 自分用スプシにつながっているときは何もしない（画面上の案内からつなぎ直す）
-  }).then(function () {
+  // 共通の接続画面（Apps.ensureConnected）は使わない：どのQRでも保存してしまうため
+  show(!familyConn() ? 'connect' : me() ? 'today' : 'who');
+  syncAll().then(function () {
     var st = $('status'); st.className = 'status'; st.textContent = '';
-  }).catch(function () { /* 'error' で表示済み */ });
+  });
 
   // ---------- 新しい版が出たら確実に切り替える ----------
   // version.json を毎回サーバーに聞き、違えば裏の仕組み（sw.js）も更新して1回だけ自動で読み直す。

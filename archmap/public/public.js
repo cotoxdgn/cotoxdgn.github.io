@@ -11,8 +11,7 @@
 
   var A = window.ArchMap;
   var $ = function (id) { return document.getElementById(id); };
-  var map = A.makeMap($('map'), { scrollWheelZoom: false });
-  var layer = map ? L.layerGroup().addTo(map) : null;
+  var map = A.makeMap($('map'), { scrollZoom: false });
   var items = [], cur = null;
 
   if (LINKS.works) { $('ctaWorks').href = LINKS.works; $('ctaWorks').hidden = false; }
@@ -48,14 +47,11 @@
       li.onkeydown = function (e) { if (e.key === 'Enter') select(x.id, true); };
       ol.appendChild(li);
     });
-    if (layer) {
-      layer.clearLayers();
-      items.forEach(function (x) {
-        if (!x._loc) return;
-        L.marker([x.lat, x.lng], { icon: A.pinIcon(A.pad2(x._n), x.id === cur, x.list), title: x.name, keyboard: true })
-          .on('click', function () { select(x.id, false); })
-          .addTo(layer);
-      });
+    if (map) {
+      map.setPins(items.filter(function (x) { return x._loc; }).map(function (x) {
+        return { lat: x.lat, lng: x.lng, label: A.pad2(x._n), on: x.id === cur, list: x.list, title: x.name,
+          onClick: function () { select(x.id, false); } };
+      }));
     }
     postHeight();
   }
@@ -73,7 +69,7 @@
     if (!map) return;
     var pts = items.filter(function (x) { return x._loc; }).map(function (x) { return [x.lat, x.lng]; });
     if (pts.length === 1) map.setView(pts[0], 15);
-    else if (pts.length > 1) map.fitBounds(pts, { padding: [30, 30], maxZoom: 16 });
+    else if (pts.length > 1) map.fitBounds(pts, 16);
   }
   // HP に iframe で埋め込んだとき、親ページが高さを合わせられるように知らせる
   function postHeight() {

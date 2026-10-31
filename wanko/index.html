@@ -129,6 +129,11 @@
   .connstate.family { color: var(--mint); }
   .connstate.own, .connstate.none { color: var(--ax-danger); font-weight: 700; }
   .updbox { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--mint-soft); border: 2px solid var(--mint); border-radius: 14px; padding: 10px 12px; font-weight: 700; }
+  .msgbox { border-radius: 14px; padding: 12px; font-size: 14px; display: grid; gap: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .msgbox.ok { background: var(--mint-soft); border: 2px solid var(--mint); }
+  .msgbox.ng { background: var(--amber-soft); border: 2px solid var(--ax-danger); color: var(--ax-danger); font-weight: 700; }
+  #v-connect .dogbtn { margin-top: 0; }
+  .ax-video { width: 100%; border-radius: 14px; background: #000; }
   .undo-toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
     width: min(480px, calc(100% - 28px)); background: var(--ink); color: var(--bg); border-radius: 14px; padding: 12px 14px;
     display: flex; justify-content: space-between; align-items: center; gap: 10px; z-index: 50; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
@@ -190,10 +195,6 @@
       </div>
       <p class="connstate" id="connState">つながっているスプシ：—</p>
       <p class="note err" id="namesHint" hidden></p>
-      <div class="warnbox" id="connBanner" hidden>
-        <p>このアプリは<b>家族用スプシ</b>にだけ保存します。いまは自分用スプシにつながっているので、家族と記録を共有できません。</p>
-        <button class="ax-btn ax-btn-primary" type="button" id="connFix">家族用スプシのQRでつなぐ</button>
-      </div>
       <div class="date" id="todayDate"></div>
       <div class="summary" id="summary" role="status"></div>
       <div class="dogs" id="dogs"></div>
@@ -201,6 +202,37 @@
       <h2 class="sec">直近の記録 <button class="linkbtn" type="button" id="toLog">すべて見る</button></h2>
       <ul class="log" id="recent"></ul>
       <p class="status" id="status" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <!-- 家族用スプシにつなぐ（家族用でなければ必ずここ） -->
+  <section id="v-connect" hidden>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="bar"><h1>家族用スプシにつなぐ</h1><button class="back" type="button" id="connBack" hidden>← もどる</button></div>
+      <p class="connstate" id="connState2"></p>
+      <div class="panel">
+        <h2>QRの出し方（パソコンで）</h2>
+        <ol>
+          <li>家族用スプシ「<b>ワンコの歯磨き（家族）</b>」を開く</li>
+          <li>上のメニュー［<b>アプリ設定</b>］→［<b>この端末をつなぐ（リンクとQR）</b>］</li>
+          <li>「つなぐ先：<b>wanko だけ</b>」と出ていることを確認（出ないときは「設定」シートの B3 に wanko を入れて、メニューを開き直す）</li>
+        </ol>
+        <p class="note">家族の誰かのワンコがもうつながっていれば、その人の［設定］→［家族に配る］→［QRを出す］でも同じQRが出ます。</p>
+      </div>
+      <p class="warnbox" id="iosHint" hidden>iPhone・iPad では、ホーム画面に追加したアイコンから開いた画面でつないでください（Safari でつないでも、ホーム画面のアプリには引き継がれません）。</p>
+      <button class="dogbtn" type="button" id="scanCam">家族用スプシのQRを読む</button>
+      <video class="ax-video" id="camVideo" playsinline muted hidden></video>
+      <div class="ax-row">
+        <button class="ax-btn" type="button" id="scanFile">写真から読み取る</button>
+        <button class="ax-btn" type="button" id="scanStop" hidden>カメラを止める</button>
+      </div>
+      <input type="file" id="fileIn" accept="image/*" hidden>
+      <details class="panel"><summary>リンクを貼り付けてつなぐ</summary>
+        <textarea class="ax-input" id="pasteIn" rows="3" placeholder="https://cotoxdgn.github.io/connect/#c=…"></textarea>
+        <button class="ax-btn" type="button" id="pasteGo">つなぐ</button>
+      </details>
+      <div class="msgbox" id="connMsg" role="status" aria-live="polite" hidden></div>
+      <button class="ax-btn ax-btn-primary big" type="button" id="connNext" hidden>次へ</button>
     </div>
   </section>
 
@@ -248,13 +280,9 @@
         <p>使う人：<b id="meNow">—</b></p>
         <p>つながっているスプシ：<b id="connNow">—</b></p>
         <p class="note">アプリの版：<span id="verNow">—</span></p>
-        <div class="warnbox" id="connWarn" hidden>
-          <p>このアプリは<b>家族用スプシ</b>にだけ保存します。いまは自分用スプシにつながっているので、記録できません。家族用スプシのQRでつないでください。</p>
-          <button class="ax-btn ax-btn-primary" type="button" id="connFix2">家族用スプシのQRでつなぐ</button>
-        </div>
         <div class="ax-row">
           <button class="ax-btn" type="button" id="changeMe">使う人を変える</button>
-          <button class="ax-btn" type="button" id="conn">スプシとの接続</button>
+          <button class="ax-btn" type="button" id="reconnect">つなぎ直す</button>
         </div>
       </div>
       <div class="panel">
