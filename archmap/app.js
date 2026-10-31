@@ -10,7 +10,7 @@
   var LAST_LIST_KEY = 'archmap.lastList';
 
   var state = { filter: 'all', cur: null, list: [] };
-  var mainMap = null, pickMap = null;
+  var mainMap = null, mainLayer = null, pickMap = null, pickMarker = null;
 
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 使えなくても動く */ } }
@@ -76,10 +76,13 @@
     $('empty').hidden = list.length > 0;
 
     if (mainMap) {
-      mainMap.setPins(items.filter(function (r) { return A.hasLoc(r.data); }).map(function (r) {
-        return { lat: r.data.lat, lng: r.data.lng, label: A.pad2(nums[r.id]), on: r.id === state.cur, list: r.data.list,
-          title: r.data.name || '', onClick: function () { focusSpot(r.id); } };
-      }));
+      mainLayer.clearLayers();
+      items.forEach(function (r) {
+        if (!A.hasLoc(r.data)) return;
+        L.marker([r.data.lat, r.data.lng], { icon: A.pinIcon(A.pad2(nums[r.id]), r.id === state.cur, r.data.list), title: r.data.name || '', keyboard: true })
+          .on('click', function () { focusSpot(r.id); })
+          .addTo(mainLayer);
+      });
     }
   }
   function focusSpot(id) {
@@ -93,7 +96,7 @@
     var pts = state.list.filter(function (r) { return (state.filter === 'all' || r.data.list === state.filter) && A.hasLoc(r.data); })
       .map(function (r) { return [r.data.lat, r.data.lng]; });
     if (pts.length === 1) mainMap.setView(pts[0], 15);
-    else if (pts.length > 1) mainMap.fitBounds(pts, 16);
+    else if (pts.length > 1) mainMap.fitBounds(pts, { padding: [30, 30], maxZoom: 16 });
   }
 
   // ---------- 1件の記録 ----------
@@ -126,11 +129,11 @@
     $('editor').scrollTop = 0;
     if (!pickMap) {
       pickMap = A.makeMap($('pickMap'));
-      if (pickMap) pickMap.onClick(function (lat, lng) { setLoc(lat, lng, false); });
+      if (pickMap) pickMap.on('click', function (e) { setLoc(e.latlng.lat, e.latlng.lng, false); });
     }
     if (pickMap) {
       setTimeout(function () {
-        pickMap.resize();
+        pickMap.invalidateSize();
         if (A.hasLoc(draft)) pickMap.setView([draft.lat, draft.lng], 16);
         else if (mainMap) pickMap.setView(mainMap.getCenter(), mainMap.getZoom());
         renderLoc();
@@ -157,9 +160,12 @@
     $('locTxt').textContent = A.hasLoc(draft) ? draft.lat.toFixed(5) + ', ' + draft.lng.toFixed(5) : '未設定';
     if (!pickMap) return;
     if (A.hasLoc(draft)) {
-      pickMap.setPick(draft.lat, draft.lng, function (lat, lng) { setLoc(lat, lng, false); });
-    } else {
-      pickMap.setPick(null);
+      if (!pickMarker) pickMarker = L.marker([draft.lat, draft.lng], { icon: A.pinIcon('●', true), draggable: true })
+        .on('dragend', function (e) { var p = e.target.getLatLng(); setLoc(p.lat, p.lng, false); });
+      pickMarker.setLatLng([draft.lat, draft.lng]);
+      if (!pickMap.hasLayer(pickMarker)) pickMarker.addTo(pickMap);
+    } else if (pickMarker && pickMap.hasLayer(pickMarker)) {
+      pickMap.removeLayer(pickMarker);
     }
   }
   function useHere() {
@@ -398,6 +404,7 @@
   A.LISTS.forEach(function (x) { var o = document.createElement('option'); o.value = x.k; o.textContent = x.l; sel.appendChild(o); });
 
   mainMap = A.makeMap($('map'));
+  if (mainMap) mainLayer = L.layerGroup().addTo(mainMap);
   var firstFit = true;
   db.onChange(function (list) {
     render(list);

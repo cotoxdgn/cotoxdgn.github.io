@@ -13,14 +13,16 @@
   :root:not([data-theme="light"]) {
     --ax-bg: #121317; --ax-surface: #1A1C21; --ax-text: #ECEAE4; --ax-muted: #9A9EA7; --ax-line: #2D3038;
     --ax-accent: #ECEAE4; --ax-accent-text: #121317; --am-block: #262A31;
-    --am-ring: #1A1C21;
+    --am-ring: #1A1C21; --am-mapbg: #2A2630;
   }
 }
 :root[data-theme="dark"] {
   --ax-bg: #121317; --ax-surface: #1A1C21; --ax-text: #ECEAE4; --ax-muted: #9A9EA7; --ax-line: #2D3038;
   --ax-accent: #ECEAE4; --ax-accent-text: #121317; --am-block: #262A31;
-  --am-ring: #1A1C21;
+  --am-ring: #1A1C21; --am-mapbg: #2A2630;
 }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .leaflet-tile-pane { filter: grayscale(1) brightness(.8) contrast(.9); } }
+:root[data-theme="dark"] .leaflet-tile-pane { filter: grayscale(1) brightness(.8) contrast(.9); }
 * { box-sizing: border-box; }
 html, body { background: var(--ax-bg); color: var(--ax-text); }
 body { margin: 0; font-family: var(--ax-font); line-height: 1.6; -webkit-text-size-adjust: 100%; }

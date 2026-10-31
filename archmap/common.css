@@ -10,6 +10,7 @@
   --am-hi: #FFD84D;
   --am-hi-ink: #16181D;
   --am-ring: #FFFFFF;
+  --am-mapbg: #FFF6F1;     /* タイルの下に敷く淡い色（タイルを少し透かして色味をのせる） */
   --am-num: "Archivo Narrow", "Arial Narrow", "Helvetica Neue", sans-serif;
   --am-disp: "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", serif;
 }
@@ -27,8 +28,6 @@
 .am-pin.on { background: var(--am-hi); }
 .am-pin.on b { color: var(--am-hi-ink); }
 .map-off { display: grid; place-items: center; padding: 16px; text-align: center; font-size: 13px; }
-.am-pin-wrap { width: 28px; height: 28px; cursor: pointer; }
-.am-pin-wrap:focus-visible { outline: 2px solid var(--am-pin); outline-offset: 4px; border-radius: 50%; }
-/* isolation：地図の操作ボタンが上に重ねた画面より前に出ないように */
-.maplibregl-map { font-family: inherit; isolation: isolate; z-index: 0; }
-.maplibregl-ctrl-attrib { font-size: 10px; }
+.leaflet-container { font-family: inherit; isolation: isolate; z-index: 0; background: var(--am-mapbg); } /* isolation：地図の操作ボタンが上に重ねた画面より前に出ないように */
+/* OpenStreetMap の標準タイルを淡く明るく見せる（タイル自体は加工せず、表示の色味だけ調整） */
+.leaflet-tile-pane { filter: grayscale(1) brightness(1.04) contrast(.92); opacity: .9; }
