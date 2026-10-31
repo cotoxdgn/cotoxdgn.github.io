@@ -57,7 +57,9 @@
   }
   function errorText(e) {
     var code = e && (e.code || e.message);
-    return ERRORS[code] || ERRORS.network;
+    var t = ERRORS[code] || ERRORS.network;
+    if (code === 'server' && e.detail) t += '（' + String(e.detail).slice(0, 120) + '）';
+    return t;
   }
 
   // ---------- 小物 ----------

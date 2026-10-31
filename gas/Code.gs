@@ -179,7 +179,12 @@ function doPost(e) {
   } catch (err) {
     return out_({ ok: false, error: 'bad_request' });
   }
-  return out_(handle_(req));
+  try {
+    return out_(handle_(req));
+  } catch (err) {
+    // 予期しないエラーも必ずJSONで返す（HTMLのエラー画面だとアプリ側で「通信できません」に見えてしまうため）
+    return out_({ ok: false, error: 'server', detail: String((err && err.message) || err).slice(0, 300) });
+  }
 }
 
 // 本体（テストからも呼べるように、結果はただのオブジェクトで返す）

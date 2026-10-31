@@ -30,4 +30,4 @@
 .map-off { display: grid; place-items: center; padding: 16px; text-align: center; font-size: 13px; }
 .leaflet-container { font-family: inherit; isolation: isolate; z-index: 0; background: var(--am-mapbg); } /* isolation：地図の操作ボタンが上に重ねた画面より前に出ないように */
 /* OpenStreetMap の標準タイルを淡く明るく見せる（タイル自体は加工せず、表示の色味だけ調整） */
-.leaflet-tile-pane { filter: saturate(.85) brightness(1.06) contrast(.9); opacity: .85; }
+.leaflet-tile-pane { filter: grayscale(1) brightness(1.04) contrast(.92); opacity: .9; }
