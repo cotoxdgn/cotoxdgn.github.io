@@ -205,7 +205,13 @@ const inked = async page => {
     await page.evaluate(() => {
       const c = document.getElementById('graph'), r = c.getBoundingClientRect();
       const ev = (type, x, y) => c.dispatchEvent(new PointerEvent(type, { pointerId: 7, clientX: r.left + x, clientY: r.top + y, bubbles: true, pointerType: 'touch', isPrimary: true }));
-      ev('pointerdown', 20, 640); ev('pointermove', 60, 640); ev('pointermove', 120, 640); ev('pointerup', 120, 640);
+      // 点のない場所から始める（点の上だと点を動かす）
+      const ns = window.__brain.graph._state().nodes;
+      let sx = 20, sy = 20;
+      for (let y = 20; y < r.height - 20; y += 10) {
+        if (ns.every(n => Math.hypot(n.x - sx, n.y - y) > n.r + 20 && Math.hypot(n.x - sx - 100, n.y - y) > n.r + 20)) { sy = y; break; }
+      }
+      ev('pointerdown', sx, sy); ev('pointermove', sx + 40, sy); ev('pointermove', sx + 100, sy); ev('pointerup', sx + 100, sy);
     });
     const x1 = await page.evaluate(() => window.__brain.graph._state().view.x);
     assert.ok(Math.abs(x1 - x0 - 100) < 2, '移動 ' + (x1 - x0));
