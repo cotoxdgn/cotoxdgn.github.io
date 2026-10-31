@@ -118,7 +118,7 @@
     $('f-tags').value = (draft.tags || []).join(' ');
     $('f-pub').setAttribute('aria-pressed', draft.isPublic ? 'true' : 'false');
     $('f-latlng').value = '';
-    $('manual').open = false;
+    $('manual').open = false; hideHits();
     $('edDelete').hidden = !r;
     renderPhotos();
     renderLoc();
@@ -416,7 +416,7 @@
     var text = $('f-latlng').value.trim();
     var p = A.parseLatLng(text);
     if (p) { setLoc(p.lat, p.lng, true); hideHits(); return; }
-    if (!text) { Apps.toast('建物名・住所・緯度経度のどれかを入れてください', true); return; }
+    if (!text) { Apps.toast('住所か緯度経度を入れてください', true); return; }
     searchPlace(text);
   };
   $('f-latlng').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('latlngBtn').click(); } });
@@ -425,27 +425,45 @@
   function searchPlace(q) {
     if (!navigator.onLine) { Apps.toast('オフラインのため名前で探せません。地図をタップしてください', true); return; }
     var box = $('geoHits'); box.hidden = false; box.innerHTML = '<p class="geo-msg">探しています…</p>';
-    var url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=ja&countrycodes=jp&q=' + encodeURIComponent(q);
-    fetch(url).then(function (r) { return r.json(); }).then(function (list) {
+    // まずGoogleマップの検索（自分用スプシのプログラム経由）。使えなければ OpenStreetMap で探す
+    Apps.call(APP, 'geocode', { q: q }, { timeout: 20000 }).then(function (d) {
+      return (d.results || []).map(function (x) { return { name: x.name, sub: x.address, lat: x.lat, lng: x.lng }; });
+    }, function () { return null; }).then(function (hits) {
+      if (hits && hits.length) return hits;
+      var url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=ja&countrycodes=jp&q=' + encodeURIComponent(q);
+      return fetch(url).then(function (r) { return r.json(); }).then(function (list) {
+        return (list || []).map(function (x) {
+          var parts = String(x.display_name || '').split(',').map(function (t) { return t.trim(); });
+          return { name: x.name || parts[0], lat: parseFloat(x.lat), lng: parseFloat(x.lon),
+            sub: parts.slice(1).reverse().filter(function (t) { return !/^\d{3}-?\d{4}$/.test(t) && t !== '日本'; }).join(' ') };
+        });
+      }, function () { return hits || []; });
+    }).then(function (hits) {
       box.innerHTML = '';
-      if (!list || !list.length) {
-        box.innerHTML = '<p class="geo-msg">「' + A.esc(q) + '」は見つかりませんでした。住所（例：京都市下京区…）で探すか、地図をタップしてください。</p>';
+      if (!hits.length) {
+        box.innerHTML = '<p class="geo-msg">「' + A.esc(q) + '」は見つかりませんでした。地名を足す（例：' + A.esc(q) + ' 京都）か、地図をタップしてください。</p>';
         return;
       }
-      list.forEach(function (x) {
+      hits.forEach(function (x) {
         var b = document.createElement('button');
         b.type = 'button'; b.className = 'geo-hit';
-        var parts = String(x.display_name || '').split(',').map(function (t) { return t.trim(); });
-        b.innerHTML = '<b>' + A.esc(x.name || parts[0] || q) + '</b><span>' + A.esc(parts.slice(1).reverse().filter(function (t) { return !/^\d{3}-?\d{4}$/.test(t) && t !== '日本'; }).join(' ')) + '</span>';
+        b.innerHTML = '<b>' + A.esc(x.name || x.sub || q) + '</b>' + (x.name && x.sub ? '<span>' + A.esc(x.sub) + '</span>' : '');
         b.onclick = function () {
-          setLoc(parseFloat(x.lat), parseFloat(x.lon), true);
+          setLoc(x.lat, x.lng, true);
           if (!$('f-name').value.trim() && x.name) $('f-name').value = x.name;
           hideHits(); $('manual').open = false;
+          Apps.toast('場所を入れました');
         };
         box.appendChild(b);
       });
-    }, function () { box.innerHTML = '<p class="geo-msg">探せませんでした（通信を確認）。地図をタップしてください。</p>'; });
+    });
   }
+  $('nameFindBtn').onclick = function () {
+    var q = $('f-name').value.trim();
+    if (!q) { Apps.toast('先に名称を入れてください', true); $('f-name').focus(); return; }
+    searchPlace(q);
+  };
+  $('f-name').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); $('nameFindBtn').click(); } });
   $('detBtn').onclick = openDetail;
   $('dtBack').onclick = function () { $('detail').hidden = true; };
   $('dtAddNoPhoto').onclick = function () { addNote('', 0, 0); };
