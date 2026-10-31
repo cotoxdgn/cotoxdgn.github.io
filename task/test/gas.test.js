@@ -11,13 +11,13 @@ function t(name, fn) { fn(); passed++; console.log('ok -', name); }
 const snap = () => sh.rows.map(row => JSON.stringify(row.map(x => [x.v instanceof Date ? x.v.toISOString() : x.v, x.f, x.fmt, x.dv])));
 const rowSnap = r => snap()[r - 1];
 
-t('setup 前は no_setup', () => assert.strictEqual(call({ key: 'x', action: 'ping' }).error, 'no_setup'));
-ctx.setup();
+t('taskApiSetup 前は no_setup', () => assert.strictEqual(call({ key: 'x', action: 'ping' }).error, 'no_setup'));
+ctx.taskApiSetup();
 const KEY = ctx.PropertiesService.getScriptProperties().getProperty('TASK_API_KEY');
-t('setup：合言葉を作る・2回目で変わらない・シートには書かない', () => {
+t('taskApiSetup：合言葉を作る・2回目で変わらない・シートには書かない', () => {
   assert.ok(KEY && KEY.length >= 32);
   const before = snap();
-  ctx.setup();
+  ctx.taskApiSetup();
   assert.strictEqual(ctx.PropertiesService.getScriptProperties().getProperty('TASK_API_KEY'), KEY);
   assert.deepStrictEqual(snap(), before);
 });
@@ -112,10 +112,10 @@ t('undone：完了を外す（完了列だけ）', () => {
   after.forEach((s, i) => { if (i !== 6) assert.strictEqual(s, before[i]); });
 });
 
-t('addActualColumn：最終列の右の1行目に「実働」を書くだけ。2回目は何もしない', () => {
+t('taskApiAddActualColumn：最終列の右の1行目に「実働」を書くだけ。2回目は何もしない', () => {
   const before = snap();
   const lastCol = sh.getLastColumn();
-  ctx.addActualColumn();
+  ctx.taskApiAddActualColumn();
   const after = snap();
   assert.strictEqual(sh.peek(1, lastCol + 1).v, '実働');
   const b0 = JSON.parse(before[0]), a0 = JSON.parse(after[0]);
@@ -123,7 +123,7 @@ t('addActualColumn：最終列の右の1行目に「実働」を書くだけ。2
   assert.strictEqual(a0.length, lastCol + 1);
   assert.deepStrictEqual(after.slice(1), before.slice(1));
   const again = snap();
-  ctx.addActualColumn();
+  ctx.taskApiAddActualColumn();
   assert.deepStrictEqual(snap(), again);
 });
 t('done＋実働：完了列と実働列のセルだけ（0.25h 単位に丸め）', () => {
@@ -150,13 +150,31 @@ t('add（実働列あり）：実働列は空のまま、ほかの行は不変',
   assert.deepStrictEqual(after.slice(4), before.slice(3));
   assert.deepStrictEqual(after.slice(0, 3), before.slice(0, 3));
 });
-t('showConnectLink：#t= 付きのリンク（apps 共通の #c= と別）', () => {
+t('taskApiShowLink：#t= 付きのリンク（apps 共通の #c= と別）', () => {
   ctx.__logs = [];
-  ctx.showConnectLink();
+  ctx.taskApiShowLink();
   const m = /https:\/\/cotoxdgn\.github\.io\/task\/#t=([A-Za-z0-9_-]+)/.exec(ctx.__logs.join('\n'));
   assert.ok(m);
   const o = JSON.parse(Buffer.from(m[1], 'base64').toString());
   assert.strictEqual(o.u, 'https://script.google.com/macros/s/TEST/exec'); assert.strictEqual(o.k, KEY);
+});
+
+t('スプシに付いたプロジェクトでは taskApiSetup / AddActualColumn / ShowLink を中止（何も書かない）', () => {
+  const g2 = makeGas(); makeGas.fillExample(g2.sh);
+  g2.ctx.SpreadsheetApp.getActiveSpreadsheet = () => g2.ss;
+  const before = JSON.stringify(g2.sh.rows);
+  g2.ctx.__logs = [];
+  g2.ctx.taskApiSetup(); g2.ctx.taskApiAddActualColumn(); g2.ctx.taskApiShowLink();
+  assert.strictEqual(g2.props.TASK_API_KEY, undefined);
+  assert.strictEqual(JSON.stringify(g2.sh.rows), before);
+  assert.strictEqual(g2.ctx.__logs.length, 3);
+  assert.ok(g2.ctx.__logs.every(l => l.includes('このプロジェクトはスプシに付いています。script.google.com で新しいプロジェクトを作ってください')));
+});
+t('グローバルは TASKAPI・taskApi*・doGet/doPost だけ（既存GASと名前が衝突しない）', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'gas', 'TaskApi.gs'), 'utf8');
+  const names = [...src.matchAll(/^(?:function|var|let|const)\s+([A-Za-z_$][\w$]*)/gm)].map(m => m[1]);
+  names.forEach(n => assert.ok(n === 'TASKAPI' || n === 'doGet' || n === 'doPost' || /^taskApi/.test(n), n));
+  ['setup', 'showConnectLink', 'addActualColumn'].forEach(n => assert.ok(!names.includes(n), n));
 });
 
 console.log(`\n${passed} passed`);

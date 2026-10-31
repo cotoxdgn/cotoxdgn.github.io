@@ -94,7 +94,7 @@ module.exports = function makeGas(opts) {
     Date: FakeDate, JSON, Math, String, Number, Array, Object, isNaN, isFinite, parseFloat, RegExp,
     SpreadsheetApp: {
       openById: id => { if (id !== '1all9BRCbemXapdhjBidydCAjPbw26pNmmyi0wbxk66Q') throw new Error('bad id'); return ss; },
-      getActiveSpreadsheet: () => { throw new Error('standalone script: no active spreadsheet'); },
+      getActiveSpreadsheet: () => null, // 独立したプロジェクトでは null
       CopyPasteType: { PASTE_FORMAT: 'PASTE_FORMAT', PASTE_DATA_VALIDATION: 'PASTE_DATA_VALIDATION' }
     },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null, setProperty: (k, v) => { props[k] = v; } }) },

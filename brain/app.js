@@ -31,6 +31,10 @@
     var d = new Date();
     return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
   }
+  function localDay(iso) {
+    var d = new Date(iso);
+    return isNaN(d) ? '' : d.getFullYear() + '.' + (d.getMonth() + 1) + '.' + d.getDate();
+  }
   function uniq(a) { var s = {}, o = []; a.forEach(function (x) { if (x && !s[x]) { s[x] = 1; o.push(x); } }); return o; }
   function parseTags(s) {
     return uniq(String(s || '').split(/[\s,、，]+/).map(function (t) { return t.replace(/^#/, '').trim(); }).filter(Boolean));
@@ -175,7 +179,7 @@
       au.map(function (x) { return relItem(x.r, '#' + x.tags[0], 'auto'); }).join('') +
       (!man.length && !au.length ? '<p class="rel-none">まだつながりはありません。同じタグを付けるか、手動でつなげます。</p>' : '') +
       '<button type="button" class="ax-btn" id="dtLink">＋ 手動でつなぐ</button></div></div>';
-    h += '<p class="dt-foot">作成 ' + esc((r.createdAt || '').slice(0, 10)) + ' ・ 更新 ' + esc((r.updatedAt || '').slice(0, 10)) + (r.pending ? ' ・ 送信待ち' : '') + '</p>';
+    h += '<p class="dt-foot">作成 ' + esc(localDay(r.createdAt)) + ' ・ 更新 ' + esc(localDay(r.updatedAt)) + (r.pending ? ' ・ 送信待ち' : '') + '</p>';
     $('detail').innerHTML = h;
   }
   function openDetail(id) {

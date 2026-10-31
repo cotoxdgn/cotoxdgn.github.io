@@ -7,8 +7,8 @@ makeGas.fillExample(g.sh);
 // 例示データの日付を「今日」に合わせる
 const now = new Date(); const D = n => new Date(now.getFullYear(), now.getMonth(), now.getDate() + n);
 [[5, -2], [6, 0], [7, 0], [8, 3], [9, -10]].forEach(([r, n]) => { g.sh.cell(r, 6).v = D(n); });
-g.ctx.setup();
-if (process.argv[3] === 'actual') g.ctx.addActualColumn();
+g.ctx.taskApiSetup();
+if (process.argv[3] === 'actual') g.ctx.taskApiAddActualColumn();
 const key = g.props.TASK_API_KEY;
 http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/__sheet') {
