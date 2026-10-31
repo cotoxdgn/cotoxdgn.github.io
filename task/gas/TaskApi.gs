@@ -32,6 +32,8 @@
  */
 
 var TASKAPI = {
+  // ↓ 自動で取れないときだけ、［デプロイを管理］のウェブアプリURL（…/exec）を '' の中に貼る
+  EXEC_URL: '',
   SPREADSHEET_ID: '1all9BRCbemXapdhjBidydCAjPbw26pNmmyi0wbxk66Q',
   SHEET_NAME: '_日次ガントチャート',
   APP_URL: 'https://cotoxdgn.github.io/task/',
@@ -83,7 +85,7 @@ function taskApiShowLink() {
   if (taskApi_isBound()) return;
   var link = taskApi_connectLink();
   if (!link) {
-    Logger.log('ウェブアプリのURLが取れませんでした。先に「デプロイ」→「新しいデプロイ」（ウェブアプリ）をしてください。');
+    Logger.log('ウェブアプリのURLが自動で取れませんでした。［デプロイ］→［デプロイを管理］の「ウェブアプリ」URL（…/exec）をコピーし、このファイルの上の方の EXEC_URL: \'\' の \'\' の中に貼って保存してから、もう一度この関数を実行してください（デプロイし直しは不要）。');
     return;
   }
   Logger.log('このリンクをパソコンで開いてください（合言葉入り・人に見せない）：\n%s', link);
@@ -112,6 +114,7 @@ function taskApi_connectLink() {
   var key = PropertiesService.getScriptProperties().getProperty(TASKAPI.PROP_KEY);
   var url = '';
   try { url = ScriptApp.getService().getUrl() || ''; } catch (e) { url = ''; }
+  if (!/\/exec$/.test(url) && TASKAPI.EXEC_URL) url = String(TASKAPI.EXEC_URL).trim();
   if (!key || !/\/exec$/.test(url)) return '';
   var payload = JSON.stringify({ u: url, k: key, n: SpreadsheetApp.openById(TASKAPI.SPREADSHEET_ID).getName() });
   return TASKAPI.APP_URL + '#t=' + Utilities.base64EncodeWebSafe(Utilities.newBlob(payload).getBytes()).replace(/=+$/, '');
