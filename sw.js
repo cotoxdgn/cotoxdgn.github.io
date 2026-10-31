@@ -1,6 +1,6 @@
 /* ホーム（アプリ一覧）をオフラインでも開けるようにする仕組み
  * 各アプリのページは、それぞれのフォルダの sw.js が担当する（こちらは触らない）。 */
-var CACHE = 'home-v1';
+var CACHE = 'home-v2';
 var SHELL = ['./', 'index.html', 'manifest.webmanifest', 'shared/apps.js', 'shared/apps.css',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
@@ -19,7 +19,7 @@ self.addEventListener('activate', function (e) {
 self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
-  e.respondWith(fetch(req).then(function (res) {
+  e.respondWith(fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }).then(function (res) {  // ブラウザの一時保存より新しい版を優先
     if (res && res.ok) {
       var copy = res.clone();
       caches.open(CACHE).then(function (c) { c.put(req, copy); });
