@@ -379,8 +379,8 @@ function geocode_(req) {
   var res = Maps.newGeocoder().setLanguage('ja').setRegion('jp').geocode(q);
   var out = (res && res.results || []).slice(0, 5).map(function (r) {
     var comps = r.address_components || [];
-    var isPlace = (r.types || []).some(function (t) { return t === 'establishment' || t === 'point_of_interest' || t === 'premise'; });
-    var name = isPlace && comps.length ? comps[0].long_name : '';
+    var poi = comps.filter(function (c) { return (c.types || []).some(function (t) { return t === 'establishment' || t === 'point_of_interest'; }); })[0];
+    var name = poi ? poi.long_name : '';
     var addr = String(r.formatted_address || '').replace(/^日本、\s*/, '').replace(/〒\d{3}-\d{4}\s*/, '');
     return { name: name, address: addr, lat: r.geometry.location.lat, lng: r.geometry.location.lng };
   });
