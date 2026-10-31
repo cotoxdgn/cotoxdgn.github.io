@@ -85,7 +85,7 @@
   function md(ymd) { var p = ymd.split('-'); return Number(p[1]) + '/' + Number(p[2]); }
   function dow(ymd) { var p = ymd.split('-'); return '日月火水木金土'.charAt(new Date(+p[0], p[1] - 1, +p[2]).getDay()); }
   function h(n) { return n == null ? '–' : (Math.round(n * 100) / 100) + 'h'; }
-  function q(n) { return Math.round(n * 4) / 4; }
+  function q(n) { return Math.round(n * 10) / 10; }
   function signed(n) { n = Math.round(n * 100) / 100; return n === 0 ? '±0' : (n > 0 ? '+' : '−') + Math.abs(n); }
   function tkey(t) { return t.no + '|' + t.todo; }
   function loadScript(src) {
@@ -225,8 +225,8 @@
     if (t.slot) m.appendChild(el('span', '', SLOT_EMOJI[t.slot] + ' ' + t.slot));
     $('shKo').textContent = h(t.ko);
     var sec = timerSec(tkey(t));
-    act = sec > 0 ? Math.max(0.25, q(sec / 3600)) : (t.ko != null ? t.ko : 0.5);
-    $('shNote').textContent = state.actualColumn ? '実働はシートの「実働」列に記録します（0.25h 単位）。'
+    act = sec > 0 ? Math.max(0.1, q(sec / 3600)) : (t.ko != null ? t.ko : 0.5);
+    $('shNote').textContent = state.actualColumn ? '実働はシートの「実働」列に記録します（0.1h 単位）。'
       : 'シートに「実働」列がまだないため、今は完了チェックだけ記録します。';
     drawSheet();
     $('dim').hidden = false; $('sheet').hidden = false;
@@ -239,7 +239,7 @@
     var k = tkey(cur), sec = timerSec(k), run = timerRunning(k);
     $('shTimer').textContent = hms(sec);
     $('tToggle').textContent = run ? '⏸ タイマー停止' : (sec > 0 ? '▶ 再開' : '▶ タイマー開始');
-    if (!actTouched && sec > 0) { act = Math.max(0.25, q(sec / 3600)); drawAct(); }
+    if (!actTouched && sec > 0) { act = Math.max(0.1, q(sec / 3600)); drawAct(); }
   }
   function drawAct() {
     $('shAct').textContent = h(act);

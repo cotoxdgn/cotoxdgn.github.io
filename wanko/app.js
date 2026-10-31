@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var APP = 'wanko';
-  var VERSION = '4';                        // version.json と sw.js の CACHE（wanko-v3）と一緒に上げる
+  var VERSION = '5';                        // version.json と sw.js の CACHE（wanko-v3）と一緒に上げる
   var OLD_SETTINGS_ID = 'settings';         // 旧版がアプリ内で保存していた名前（今は使わない・書かない）
   var ME_KEY = 'wanko.me.v1';               // この端末で使う人（家族のID）
   var NAMES_KEY = 'wanko.names.v1';         // スプシの名前表の控え（オフラインでも表示するため）
