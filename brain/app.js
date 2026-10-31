@@ -655,7 +655,7 @@
     var ptrs = {}, drag = { node: null, moved: false, sx: 0, sy: 0, pinch: null };
     function pos(e) { var r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
     cv.addEventListener('pointerdown', function (e) {
-      cv.setPointerCapture(e.pointerId);
+      try { cv.setPointerCapture(e.pointerId); } catch (x) { /* 合成イベントなど */ }
       var p = pos(e);
       ptrs[e.pointerId] = p;
       var ids = Object.keys(ptrs);
