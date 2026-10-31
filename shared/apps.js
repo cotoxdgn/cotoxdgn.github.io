@@ -58,9 +58,12 @@
   function errorText(e) {
     var code = e && (e.code || e.message);
     var t = ERRORS[code] || ERRORS.network;
-    if (code === 'server' && e.detail) t += '（' + String(e.detail).slice(0, 120) + '）';
+    if ((code === 'server' || code === 'network') && e.detail) t += '（' + String(e.detail).slice(0, 120) + '）';
     return t;
   }
+
+  // 接続URLの見分け用（末尾6文字。合言葉は出さない）
+  function urlTail(u) { var m = /\/s\/([^\/]+)\/exec/.exec(String(u || '')); return m ? m[1].slice(-6) : '?'; }
 
   // ---------- 小物 ----------
   function nowIso() { return new Date().toISOString(); }
@@ -229,7 +232,8 @@
       redirect: 'follow',
       signal: ctrl ? ctrl.signal : undefined
     }).then(function (res) { return res.text(); }, function () {
-      throw err(timedOut ? 'timeout' : (online() ? 'network' : 'offline'));
+      var code = timedOut ? 'timeout' : (online() ? 'network' : 'offline');
+      throw err(code, code === 'network' ? '接続先 …' + urlTail(c.url) : undefined);
     }).then(function (txt) {
       if (timer) clearTimeout(timer);
       var data;
@@ -735,7 +739,7 @@
       }, function () { toast('QRを表示できませんでした（通信を確認）', true); });
     };
     body.appendChild(h('p', {}, ['つながっています：', h('b', { text: c.name || 'スプレッドシート' }),
-      own ? '（' + app + ' 専用）' : '（全アプリ共通）']));
+      own ? '（' + app + ' 専用）' : '（全アプリ共通）', h('br'), h('small', { text: '接続先 …' + urlTail(c.url) })]));
     body.appendChild(h('div', { class: 'ax-row' }, [
       h('button', { class: 'ax-btn', type: 'button', text: '他の端末を追加（QRを表示）', onclick: showQr }),
       h('button', { class: 'ax-btn', type: 'button', text: '確認', onclick: function () {

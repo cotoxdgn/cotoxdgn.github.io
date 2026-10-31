@@ -361,11 +361,11 @@ function taskApi_actual(sh, req) {
   return { actualSaved: a.saved };
 }
 
-// 実働(h)：0.25h 単位。「実働」列がなければ書かない（saved:false）
+// 実働(h)：0.1h 単位。「実働」列がなければ書かない（saved:false）
 function taskApi_writeActual(sh, c, row, value) {
   var n = taskApi_num(value);
   if (n === null || n < 0 || n > 24) return { error: 'bad_actual' };
-  n = Math.round(n * 4) / 4;
+  n = Math.round(n * 10) / 10;
   if (!c.actual) return { saved: false };
   sh.getRange(row, c.actual).setValue(n);
   return { saved: true };

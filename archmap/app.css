@@ -144,3 +144,9 @@ textarea.ax-input { resize: vertical; }
 .note .ops input { width: 18px; height: 18px; }
 .notes-empty { padding: 16px; color: var(--ax-muted); font-size: 13px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.geo-hits { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.geo-hit { text-align: left; background: var(--ax-surface); border: 1px solid var(--ax-line); border-radius: 10px; padding: 8px 10px; color: inherit; font: inherit; cursor: pointer; }
+.geo-hit b { display: block; font-size: 14px; }
+.geo-hit span { display: block; font-size: 12px; color: var(--ax-muted); margin-top: 2px; }
+.geo-msg { font-size: 13px; color: var(--ax-muted); margin: 0; }

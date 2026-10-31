@@ -413,10 +413,39 @@
   $('f-photo').addEventListener('change', function () { var fs = Array.prototype.slice.call(this.files || []); this.value = ''; addPhotos(fs); });
   $('locBtn').onclick = useHere;
   $('latlngBtn').onclick = function () {
-    var p = A.parseLatLng($('f-latlng').value);
-    if (!p) { Apps.toast('緯度・経度を読み取れませんでした（例：34.6937, 135.5023）', true); return; }
-    setLoc(p.lat, p.lng, true);
+    var text = $('f-latlng').value.trim();
+    var p = A.parseLatLng(text);
+    if (p) { setLoc(p.lat, p.lng, true); hideHits(); return; }
+    if (!text) { Apps.toast('建物名・住所・緯度経度のどれかを入れてください', true); return; }
+    searchPlace(text);
   };
+  $('f-latlng').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('latlngBtn').click(); } });
+  // 建物名・住所から場所を探す（OpenStreetMap の検索。小さなお店は見つからないことがある）
+  function hideHits() { $('geoHits').hidden = true; $('geoHits').innerHTML = ''; }
+  function searchPlace(q) {
+    if (!navigator.onLine) { Apps.toast('オフラインのため名前で探せません。地図をタップしてください', true); return; }
+    var box = $('geoHits'); box.hidden = false; box.innerHTML = '<p class="geo-msg">探しています…</p>';
+    var url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=ja&countrycodes=jp&q=' + encodeURIComponent(q);
+    fetch(url).then(function (r) { return r.json(); }).then(function (list) {
+      box.innerHTML = '';
+      if (!list || !list.length) {
+        box.innerHTML = '<p class="geo-msg">「' + A.esc(q) + '」は見つかりませんでした。住所（例：京都市下京区…）で探すか、地図をタップしてください。</p>';
+        return;
+      }
+      list.forEach(function (x) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'geo-hit';
+        var parts = String(x.display_name || '').split(',').map(function (t) { return t.trim(); });
+        b.innerHTML = '<b>' + A.esc(x.name || parts[0] || q) + '</b><span>' + A.esc(parts.slice(1).reverse().filter(function (t) { return !/^\d{3}-?\d{4}$/.test(t) && t !== '日本'; }).join(' ')) + '</span>';
+        b.onclick = function () {
+          setLoc(parseFloat(x.lat), parseFloat(x.lon), true);
+          if (!$('f-name').value.trim() && x.name) $('f-name').value = x.name;
+          hideHits(); $('manual').open = false;
+        };
+        box.appendChild(b);
+      });
+    }, function () { box.innerHTML = '<p class="geo-msg">探せませんでした（通信を確認）。地図をタップしてください。</p>'; });
+  }
   $('detBtn').onclick = openDetail;
   $('dtBack').onclick = function () { $('detail').hidden = true; };
   $('dtAddNoPhoto').onclick = function () { addNote('', 0, 0); };
