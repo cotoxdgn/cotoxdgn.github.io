@@ -69,10 +69,10 @@
   var PALETTE = {
     light: { bg: '#F3F3F1', land: '#ECECE9', park: '#E7E8E5', bldg: '#E1E1DE', bldgLine: '#D5D5D1',
       casing: '#DADAD6', road: '#FFFFFF', minor: '#FAFAF9', path: '#E2E2DE', rail: '#CDCDC9',
-      water: '#9FD3E6', waterLine: '#7CC4DC', label: '#8C8D90', waterLabel: '#5FA6C0', halo: '#F7F7F5' },
+      water: '#9FD3E6', waterLine: '#7CC4DC', wood: '#C3DDB8', grass: '#D5E8CC', label: '#8C8D90', waterLabel: '#5FA6C0', halo: '#F7F7F5' },
     dark: { bg: '#1E1F22', land: '#232427', park: '#25272A', bldg: '#2C2D31', bldgLine: '#333539',
       casing: '#2A2B2F', road: '#3A3C41', minor: '#34363A', path: '#2E3034', rail: '#3A3C40',
-      water: '#3C7F98', waterLine: '#4A93AD', label: '#8E9196', waterLabel: '#7FB9CE', halo: '#1E1F22' }
+      water: '#3C7F98', waterLine: '#4A93AD', wood: '#2E4632', grass: '#2A3D2D', label: '#8E9196', waterLabel: '#7FB9CE', halo: '#1E1F22' }
   };
   function isDark() {
     var t = document.documentElement.getAttribute('data-theme');
@@ -95,8 +95,10 @@
       layers: [
         { id: 'bg', type: 'background', paint: { 'background-color': c.bg } },
         { id: 'landuse', type: 'fill', source: 'omt', 'source-layer': 'landuse', paint: { 'fill-color': c.land } },
-        { id: 'landcover', type: 'fill', source: 'omt', 'source-layer': 'landcover', paint: { 'fill-color': c.park } },
-        { id: 'park', type: 'fill', source: 'omt', 'source-layer': 'park', paint: { 'fill-color': c.park } },
+        // 緑（山・森・草地・公園）だけ緑にする。それ以外の土地はグレーのまま
+        { id: 'landcover', type: 'fill', source: 'omt', 'source-layer': 'landcover',
+          paint: { 'fill-color': ['match', ['get', 'class'], 'wood', c.wood, 'grass', c.grass, c.park] } },
+        { id: 'park', type: 'fill', source: 'omt', 'source-layer': 'park', paint: { 'fill-color': c.grass } },
         { id: 'water', type: 'fill', source: 'omt', 'source-layer': 'water', paint: { 'fill-color': c.water, 'fill-antialias': true } },
         { id: 'waterway', type: 'line', source: 'omt', 'source-layer': 'waterway',
           layout: { 'line-cap': 'round', 'line-join': 'round' },
