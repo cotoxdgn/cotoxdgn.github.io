@@ -125,6 +125,10 @@
   .qrwrap img { width: min(280px, 100%); height: auto; background: #fff; padding: 8px; border-radius: 12px; image-rendering: pixelated; }
   .qrwrap details { width: 100%; text-align: left; font-size: 13px; }
   .linktext { word-break: break-all; user-select: all; font-size: 12px; color: var(--muted); }
+  .connstate { margin: -6px 0 0; font-size: 13px; text-align: center; color: var(--muted); }
+  .connstate.family { color: var(--mint); }
+  .connstate.own, .connstate.none { color: var(--ax-danger); font-weight: 700; }
+  .updbox { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--mint-soft); border: 2px solid var(--mint); border-radius: 14px; padding: 10px 12px; font-weight: 700; }
   .undo-toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
     width: min(480px, calc(100% - 28px)); background: var(--ink); color: var(--bg); border-radius: 14px; padding: 12px 14px;
     display: flex; justify-content: space-between; align-items: center; gap: 10px; z-index: 50; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
@@ -170,6 +174,10 @@
 </svg>
 
 <main>
+  <div class="updbox" id="updBanner" hidden>
+    <span>新しい版があります</span>
+    <button class="ax-btn ax-btn-primary" type="button" id="updNow">更新する</button>
+  </div>
   <!-- 今日 -->
   <section id="v-today" hidden>
     <div style="display:flex;flex-direction:column;gap:14px">
@@ -180,6 +188,8 @@
           <button class="chip" type="button" id="toSettings">設定</button>
         </div>
       </div>
+      <p class="connstate" id="connState">つながっているスプシ：—</p>
+      <p class="note err" id="namesHint" hidden></p>
       <div class="warnbox" id="connBanner" hidden>
         <p>このアプリは<b>家族用スプシ</b>にだけ保存します。いまは自分用スプシにつながっているので、家族と記録を共有できません。</p>
         <button class="ax-btn ax-btn-primary" type="button" id="connFix">家族用スプシのQRでつなぐ</button>
@@ -236,7 +246,8 @@
       <div class="panel">
         <h2>この端末</h2>
         <p>使う人：<b id="meNow">—</b></p>
-        <p>つなぎ先：<b id="connNow">—</b></p>
+        <p>つながっているスプシ：<b id="connNow">—</b></p>
+        <p class="note">アプリの版：<span id="verNow">—</span></p>
         <div class="warnbox" id="connWarn" hidden>
           <p>このアプリは<b>家族用スプシ</b>にだけ保存します。いまは自分用スプシにつながっているので、記録できません。家族用スプシのQRでつないでください。</p>
           <button class="ax-btn ax-btn-primary" type="button" id="connFix2">家族用スプシのQRでつなぐ</button>

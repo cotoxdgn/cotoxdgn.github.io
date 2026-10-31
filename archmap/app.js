@@ -46,7 +46,7 @@
       b.className = 'chip' + (state.filter === x.k ? ' on' : '');
       b.setAttribute('role', 'tab');
       b.setAttribute('aria-selected', state.filter === x.k ? 'true' : 'false');
-      b.innerHTML = A.esc(x.l) + '<small>' + (counts[x.k] || 0) + '</small>';
+      b.innerHTML = (x.k === 'all' ? '' : '<i class="dot ' + A.listClass(x.k) + '"></i>') + A.esc(x.l) + '<small>' + (counts[x.k] || 0) + '</small>';
       b.onclick = function () { state.filter = x.k; render(state.list); fitMain(); };
       chips.appendChild(b);
     });
@@ -57,7 +57,7 @@
     items.forEach(function (r) {
       var d = r.data;
       var li = document.createElement('li');
-      li.className = 'spot' + (r.id === state.cur ? ' on' : '');
+      li.className = 'spot ' + A.listClass(d.list) + (r.id === state.cur ? ' on' : '');
       li.tabIndex = 0;
       li.dataset.id = r.id;
       var photo = (d.photos || [])[0];
@@ -79,7 +79,7 @@
       mainLayer.clearLayers();
       items.forEach(function (r) {
         if (!A.hasLoc(r.data)) return;
-        L.marker([r.data.lat, r.data.lng], { icon: A.pinIcon(A.pad2(nums[r.id]), r.id === state.cur), title: r.data.name || '', keyboard: true })
+        L.marker([r.data.lat, r.data.lng], { icon: A.pinIcon(A.pad2(nums[r.id]), r.id === state.cur, r.data.list), title: r.data.name || '', keyboard: true })
           .on('click', function () { focusSpot(r.id); })
           .addTo(mainLayer);
       });

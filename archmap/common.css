@@ -1,21 +1,33 @@
 /* おしゃれ建築map：地図のピンなど、記録用と公開版で共通の見た目 */
 :root {
-  --am-pin: #1F3FD1;
+  /* カテゴリ色（明るく軽い色。地図の淡い色に合わせる） */
+  --am-c-public: #4C9BF0;  /* 美術館・公共：空色 */
+  --am-c-house: #2DB38A;   /* 住宅：ミント */
+  --am-c-shop: #FF7B6B;    /* カフェ・店舗：コーラル */
+  --am-c-want: #A584F5;    /* 行きたい：ラベンダー */
+  --am-pin: #FF7B6B;
   --am-pin-ink: #FFFFFF;
-  --am-hi: #FFE14D;
+  --am-hi: #FFD84D;
   --am-hi-ink: #16181D;
-  --am-ring: #FBFBF8;
+  --am-ring: #FFFFFF;
+  --am-mapbg: #FFF6F1;     /* タイルの下に敷く淡い色（タイルを少し透かして色味をのせる） */
   --am-num: "Archivo Narrow", "Arial Narrow", "Helvetica Neue", sans-serif;
   --am-disp: "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", serif;
 }
 .am-pin-wrap { background: none; border: 0; }
+.c-public { --c: var(--am-c-public); }
+.c-house { --c: var(--am-c-house); }
+.c-shop { --c: var(--am-c-shop); }
+.c-want { --c: var(--am-c-want); }
 .am-pin {
   display: grid; place-items: center; width: 28px; height: 28px;
-  border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
-  background: var(--am-pin); border: 2px solid var(--am-ring); box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+  border-radius: 50% 50% 50% 6px; transform: rotate(-45deg);
+  background: var(--c, var(--am-pin)); border: 2.5px solid var(--am-ring); box-shadow: 0 2px 6px rgba(40, 30, 60, .2);
 }
 .am-pin b { transform: rotate(45deg); color: var(--am-pin-ink); font: 700 12px/1 var(--am-num); }
 .am-pin.on { background: var(--am-hi); }
 .am-pin.on b { color: var(--am-hi-ink); }
 .map-off { display: grid; place-items: center; padding: 16px; text-align: center; font-size: 13px; }
-.leaflet-container { font-family: inherit; isolation: isolate; z-index: 0; } /* 地図の操作ボタンが上に重ねた画面より前に出ないように */
+.leaflet-container { font-family: inherit; isolation: isolate; z-index: 0; background: var(--am-mapbg); } /* isolation：地図の操作ボタンが上に重ねた画面より前に出ないように */
+/* OpenStreetMap の標準タイルを淡く明るく見せる（タイル自体は加工せず、表示の色味だけ調整） */
+.leaflet-tile-pane { filter: saturate(.85) brightness(1.06) contrast(.9); opacity: .85; }

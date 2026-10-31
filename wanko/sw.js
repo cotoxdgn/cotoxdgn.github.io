@@ -1,5 +1,5 @@
 /* このアプリをオフラインでも開けるようにする仕組み。CACHE の名前はアプリごとに変え、更新のたびに番号を上げる */
-var CACHE = 'wanko-v2';
+var CACHE = 'wanko-v3';
 var SHELL = ['./', 'index.html', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png',
   '../shared/apps.js', '../shared/apps.css'];
 
@@ -16,10 +16,11 @@ self.addEventListener('activate', function (e) {
 });
 
 // 自分のサイトの GET だけ扱う（スプシ・画像の通信には触れない）。新しい版を優先し、つながらない時だけ保存済みを使う
+// ブラウザの HTTP キャッシュ（GitHub Pages は約10分）を飛ばして、毎回サーバーに新しい版があるか確かめる
 self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
-  e.respondWith(fetch(req).then(function (res) {
+  e.respondWith(fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }).then(function (res) {
     if (res && res.ok) {
       var copy = res.clone();
       caches.open(CACHE).then(function (c) { c.put(req, copy); });

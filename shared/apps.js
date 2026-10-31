@@ -35,6 +35,7 @@
     no_setup: 'スプシの準備が終わっていません（Apps Script で setup を実行）',
     offline: 'オフラインです。つながったら自動で送ります',
     network: '通信できませんでした。電波を確認してください',
+    bad_response: 'スプシ側のプログラムから正しい返事がありません。Apps Script のデプロイで「アクセスできるユーザー：全員」になっているか、コードを貼り替えた後に「デプロイを管理→新バージョン」をしたかを確認してください',
     timeout: '時間がかかりすぎたので中断しました。もう一度試してください',
     busy: 'スプシが混み合っています。少し待ってもう一度試してください',
     too_long: '1件の内容が長すぎます（約45,000文字まで）',
@@ -230,7 +231,7 @@
     }).then(function (txt) {
       if (timer) clearTimeout(timer);
       var data;
-      try { data = JSON.parse(txt); } catch (e) { throw err('network'); }
+      try { data = JSON.parse(txt); } catch (e) { throw err('bad_response', String(txt || '').slice(0, 200)); }
       if (!data.ok) throw err(data.error || 'server', data.detail);
       return data;
     }, function (e) {

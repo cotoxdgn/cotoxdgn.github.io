@@ -2,6 +2,7 @@
 (function () {
   'use strict';
   var APP = 'wanko';
+  var VERSION = '3';                        // version.json と sw.js の CACHE（wanko-v3）と一緒に上げる
   var OLD_SETTINGS_ID = 'settings';         // 旧版がアプリ内で保存していた名前（今は使わない・書かない）
   var ME_KEY = 'wanko.me.v1';               // この端末で使う人（家族のID）
   var NAMES_KEY = 'wanko.names.v1';         // スプシの名前表の控え（オフラインでも表示するため）
@@ -247,12 +248,10 @@
         row.appendChild(el('b', null, p[1]));
         box.appendChild(row);
       });
-    $('namesNote').textContent = namesState === 'old'
-      ? '家族用スプシのプログラムが古いため、名前を読めません。Code.gs を新しいものに貼り替えてください。'
-      : namesState === 'err' ? '名前を読み込めませんでした（通信を確認）。前回の名前を表示しています。' : '';
+    $('namesNote').textContent = namesProblem();
     $('meNow').textContent = memberName(me());
     var c = Apps.getConnection(APP);
-    $('connNow').textContent = !c ? 'つながっていません' : (c.name || 'スプレッドシート') + (familyConn() ? '（家族用）' : '（自分用・全アプリ共通）');
+    $('connNow').textContent = !c ? '未接続' : (familyConn() ? '家族用（wanko）✓' : '自分用 ×') + '　' + (c.name || '');
     $('connWarn').hidden = !c || !!familyConn();
     $('qrStart').disabled = !familyConn();
   }
@@ -284,12 +283,35 @@
     $('qrWarn').hidden = true;
   }
 
+  // つながり先：家族用（wanko）✓／自分用 ×／未接続
+  function renderConn() {
+    var c = Apps.getConnection(APP);
+    var st = !c ? 'none' : familyConn() ? 'family' : 'own';
+    var el2 = $('connState');
+    el2.className = 'connstate ' + st;
+    el2.textContent = 'つながっているスプシ：' + (st === 'family' ? '家族用（wanko）✓' : st === 'own' ? '自分用 ×' : '未接続');
+  }
+  // 名前表が読めない・空のときの案内（'' なら問題なし）
+  function namesProblem() {
+    if (!familyConn()) return '';
+    if (namesState === 'old') return '家族用スプシのプログラムが古いため、名前を読めません。Code.gs を新しいものに貼り替えて、新バージョンでデプロイしてください。';
+    if (namesState === 'err') return '名前を読み込めませんでした（通信を確認）。' + (names ? '前回の名前を表示しています。' : '');
+    var n = names || {};
+    var empty = !(n.dogs || []).concat(n.members || []).some(function (x) { return x; });
+    if (namesState === 'ok' && empty) return 'スプシの設定シート（B9〜B14）で名前を入れてください。いまは「わんこA」「家族A」などを表示しています。';
+    return '';
+  }
+
   function render() {
     if (view === 'today') renderToday();
     else if (view === 'log') renderLog();
     else if (view === 'who') renderWho();
     else if (view === 'settings') renderSettings();
     $('connBanner').hidden = !(Apps.getConnection(APP) && !familyConn()) || view === 'settings';
+    renderConn();
+    var np = namesProblem();
+    $('namesHint').textContent = np;
+    $('namesHint').hidden = !np || view !== 'today';
   }
 
   // ---------- 取り消し（記録直後） ----------
@@ -376,5 +398,30 @@
     var st = $('status'); st.className = 'status'; st.textContent = '';
   }).catch(function () { /* 'error' で表示済み */ });
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+  // ---------- 新しい版が出たら確実に切り替える ----------
+  // version.json を毎回サーバーに聞き、違えば裏の仕組み（sw.js）も更新して1回だけ自動で読み直す。
+  // それでも古いままなら「新しい版があります」を出して、押せば読み直す
+  var swReg = null;
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (r) { swReg = r; }).catch(function () {});
+  }
+  function reloadNow() {
+    var go = function () { location.reload(); };
+    if (swReg) swReg.update().then(go, go); else go();
+  }
+  function checkUpdate() {
+    if (!navigator.onLine) return;
+    fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (!j || !j.v || String(j.v) === VERSION) return;
+      var key = 'wanko.reloaded.' + j.v;
+      var tried = false;
+      try { tried = sessionStorage.getItem(key) === '1'; sessionStorage.setItem(key, '1'); } catch (e) { tried = true; }
+      if (!tried && !undoEl) { reloadNow(); return; }
+      $('updBanner').hidden = false;
+    }).catch(function () { /* オフラインなど：次の機会に */ });
+  }
+  $('updNow').addEventListener('click', reloadNow);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') checkUpdate(); });
+  checkUpdate();
+  $('verNow').textContent = 'v' + VERSION;
 })();

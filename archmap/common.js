@@ -72,16 +72,18 @@
     map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>');
     return map;
   }
-  function pinIcon(label, on) {
+  // カテゴリの色を付けるクラス（c-public など）。知らないカテゴリは空
+  function listClass(k) { return listLabel(k) ? 'c-' + k : ''; }
+  function pinIcon(label, on, list) {
     return L.divIcon({
       className: 'am-pin-wrap',
-      html: '<span class="am-pin' + (on ? ' on' : '') + '"><b>' + esc(label) + '</b></span>',
+      html: '<span class="am-pin ' + listClass(list) + (on ? ' on' : '') + '"><b>' + esc(label) + '</b></span>',
       iconSize: [28, 28], iconAnchor: [14, 28]
     });
   }
 
   global.ArchMap = {
     LISTS: LISTS, CENTER: CENTER, listLabel: listLabel, esc: esc, pad2: pad2, hasLoc: hasLoc,
-    parseLatLng: parseLatLng, buildPublic: buildPublic, makeMap: makeMap, pinIcon: pinIcon
+    parseLatLng: parseLatLng, buildPublic: buildPublic, makeMap: makeMap, pinIcon: pinIcon, listClass: listClass
   };
 })(typeof window !== 'undefined' ? window : globalThis);

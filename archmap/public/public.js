@@ -28,7 +28,7 @@
     }
     items.forEach(function (x, i) {
       var li = document.createElement('li');
-      li.className = 'item' + (x.id === cur ? ' on' : '');
+      li.className = 'item ' + A.listClass(x.list) + (x.id === cur ? ' on' : '');
       li.tabIndex = 0;
       li.dataset.id = x.id;
       var pic = safeUrl(x.photo);
@@ -52,7 +52,7 @@
       layer.clearLayers();
       items.forEach(function (x) {
         if (!x._loc) return;
-        L.marker([x.lat, x.lng], { icon: A.pinIcon(A.pad2(x._n), x.id === cur), title: x.name, keyboard: true })
+        L.marker([x.lat, x.lng], { icon: A.pinIcon(A.pad2(x._n), x.id === cur, x.list), title: x.name, keyboard: true })
           .on('click', function () { select(x.id, false); })
           .addTo(layer);
       });

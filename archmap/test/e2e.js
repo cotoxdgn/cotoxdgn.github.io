@@ -32,7 +32,29 @@ function png(w, h, rgb) {
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const o = y * (w * 3 + 1) + 1 + x * 3; const s = ((x >> 4) + (y >> 4)) % 2 ? 0 : 18; raw[o] = rgb[0] - s; raw[o + 1] = rgb[1] - s; raw[o + 2] = rgb[2] - s; }
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
-const TILE = png(256, 256, [228, 230, 223]);
+// 地図タイルの代わり：OSM 標準の配色に近い色（地・道・水・公園）で塗った画像
+function tilePng() {
+  const w = 256, h = 256, buf = png(w, h, [242, 239, 233]);
+  const raw = Buffer.alloc((w * 3 + 1) * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const o = y * (w * 3 + 1) + 1 + x * 3;
+    let c = [242, 239, 233];
+    if (y > 150 && y < 190) c = [170, 211, 223];
+    else if (x > 170 && y < 120) c = [200, 250, 204];
+    else if (Math.abs(x - 90) < 5 || Math.abs(y - 60) < 4) c = [255, 255, 255];
+    else if (Math.abs(x - 210) < 4) c = [252, 214, 164];
+    raw[o] = c[0]; raw[o + 1] = c[1]; raw[o + 2] = c[2];
+  }
+  const idat = zlib.deflateSync(raw);
+  return rebuild(buf, idat);
+}
+function rebuild(pngBuf, idat) {
+  const crcT = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crcT[n] = c >>> 0; }
+  const crc = b => { let c = 0xffffffff; for (const x of b) c = crcT[(c ^ x) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (t, d) => { const l = Buffer.alloc(4); l.writeUInt32BE(d.length); const td = Buffer.concat([Buffer.from(t), d]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([l, td, c]); };
+  return Buffer.concat([pngBuf.subarray(0, 33), chunk('IDAT', idat), chunk('IEND', Buffer.alloc(0))]);
+}
+const TILE = tilePng();
 const PHOTO = png(800, 600, [190, 200, 210]);
 
 let publicJson = null; // 書き出した public.json を公開版に渡す
