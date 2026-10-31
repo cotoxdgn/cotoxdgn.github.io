@@ -1,5 +1,5 @@
 /* このアプリをオフラインでも開けるようにする仕組み。CACHE の名前はアプリごとに変え、更新のたびに番号を上げる */
-var CACHE = 'filemap-v3';
+var CACHE = 'filemap-v4';
 var SHELL = ['./', 'index.html', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png',
   '../shared/apps.js', '../shared/apps.css'];
 
@@ -19,7 +19,7 @@ self.addEventListener('activate', function (e) {
 self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
-  e.respondWith(fetch(req).then(function (res) {
+  e.respondWith(fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }).then(function (res) {  // ブラウザの一時保存より新しい版を優先
     if (res && res.ok) {
       var copy = res.clone();
       caches.open(CACHE).then(function (c) { c.put(req, copy); });

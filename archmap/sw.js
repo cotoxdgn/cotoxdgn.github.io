@@ -1,5 +1,5 @@
 /* このアプリをオフラインでも開けるようにする仕組み（公開版 public/ は対象外：常に最新の public.json を読む）。CACHE の名前はアプリごとに変え、更新のたびに番号を上げる */
-var CACHE = 'archmap-v6';
+var CACHE = 'archmap-v7';
 var SHELL = ['./', 'index.html', 'app.js', 'app.css', 'common.js', 'common.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png',
   '../shared/apps.js', '../shared/apps.css'];
 
@@ -20,7 +20,7 @@ self.addEventListener('fetch', function (e) {
   var req = e.request;
   var u = new URL(req.url);
   if (req.method !== 'GET' || u.origin !== self.location.origin || u.pathname.indexOf('/archmap/public/') !== -1) return;
-  e.respondWith(fetch(req).then(function (res) {
+  e.respondWith(fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }).then(function (res) {  // ブラウザの一時保存より新しい版を優先
     if (res && res.ok) {
       var copy = res.clone();
       caches.open(CACHE).then(function (c) { c.put(req, copy); });
