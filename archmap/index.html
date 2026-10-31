@@ -48,7 +48,13 @@
     <button class="ax-btn ax-btn-primary small" type="button" id="edSaveTop">保存</button>
   </header>
   <form class="form" id="edForm" novalidate>
-    <div class="fld"><label for="f-name">名称</label><input class="ax-input" id="f-name" autocomplete="off" placeholder="建物の名前"></div>
+    <div class="fld"><label for="f-name">名称</label>
+      <div class="ax-row name-row">
+        <input class="ax-input" id="f-name" autocomplete="off" placeholder="建物の名前（入れて「場所を探す」）" enterkeyhint="search">
+        <button class="ax-btn small" type="button" id="nameFindBtn">場所を探す</button>
+      </div>
+      <div class="geo-hits" id="geoHits" hidden></div>
+    </div>
 
     <div class="fld"><span class="lbl">写真（Googleドライブに保存）</span>
       <div class="photos" id="photos"></div>
@@ -63,12 +69,11 @@
         <span class="loc-txt" id="locTxt">未設定</span>
       </div>
       <details class="manual" id="manual">
-        <summary>建物名・住所・緯度経度で探す</summary>
+        <summary>住所・緯度経度で探す</summary>
         <div class="ax-row">
-          <input class="ax-input" id="f-latlng" placeholder="建物名・住所、または 34.6937, 135.5023" autocomplete="off">
+          <input class="ax-input" id="f-latlng" placeholder="住所、または 34.6937, 135.5023" autocomplete="off">
           <button class="ax-btn small" type="button" id="latlngBtn">探す</button>
         </div>
-        <div class="geo-hits" id="geoHits" hidden></div>
       </details>
     </div>
 

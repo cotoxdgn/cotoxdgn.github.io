@@ -10,7 +10,7 @@
  *  POST（Content-Type: text/plain）で JSON を送る → JSON が返る。
  *  text/plain の POST は「単純リクエスト」なので、ブラウザの事前確認（CORS preflight）が起きない。
  *  { key, action, app, ... }  →  { ok: true, now, ... } / { ok: false, error }
- *  action: ping / list / put / delete / batch / image / imageData / imageDelete / names
+ *  action: ping / list / put / delete / batch / image / imageData / imageDelete / names / geocode
  */
 
 var CONNECT_URL = 'https://cotoxdgn.github.io/connect/';
@@ -199,6 +199,12 @@ function handle_(req) {
   var pass = conf ? String(conf.getRange(CELL_KEY).getValue()).trim() : '';
   if (!pass) return { ok: false, error: 'no_setup' };
   if (String(req.key || '') !== pass) return { ok: false, error: 'bad_key' };
+  if (req.action === 'geocode') {   // 場所の検索はスプシに書かないので、順番待ち（ロック）なしで返す
+    var g = geocode_(req);
+    if (g.error) return { ok: false, error: g.error };
+    g.ok = true; g.now = now_();
+    return g;
+  }
 
   var lock = LockService.getScriptLock();
   try {
@@ -363,6 +369,22 @@ function batch_(ss, req) {
     return r.error ? { ok: false, error: r.error, id: o.id || null } : { ok: true, record: r.record };
   });
   return { results: results };
+}
+
+// ---------- 場所の検索（建物名・住所 → 緯度経度） ----------
+// Google マップの検索（Apps Script の Maps サービス）を使う。APIキー不要・無料（1日の回数に上限あり）
+function geocode_(req) {
+  var q = String(req.q || '').trim().slice(0, 120);
+  if (!q) return { error: 'no_data' };
+  var res = Maps.newGeocoder().setLanguage('ja').setRegion('jp').geocode(q);
+  var out = (res && res.results || []).slice(0, 5).map(function (r) {
+    var comps = r.address_components || [];
+    var poi = comps.filter(function (c) { return (c.types || []).some(function (t) { return t === 'establishment' || t === 'point_of_interest'; }); })[0];
+    var name = poi ? poi.long_name : '';
+    var addr = String(r.formatted_address || '').replace(/^日本、\s*/, '').replace(/〒\d{3}-\d{4}\s*/, '');
+    return { name: name, address: addr, lat: r.geometry.location.lat, lng: r.geometry.location.lng };
+  });
+  return { status: res && res.status, results: out };
 }
 
 // ---------- 画像 ----------
