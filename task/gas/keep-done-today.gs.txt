@@ -1,0 +1,48 @@
+/* ---------- ⑥ 今日以降のタスクは完了にしても隠さない【2026-10-31 追加】 ---------- */
+// 「未完了・日付順」のとき、隠すのは「完了」かつ 📅 が昨日以前（または日付なし）の行だけ。
+// 📅 が今日以降の完了タスクは残し、条件付き書式でグレーにする（案件の色分けより優先して表示）。
+var KEEP_DONE_BG = '#E3E3E3';
+var KEEP_DONE_FONT = '#8A8A8A';
+
+function hideDoneCriteria_(L) {
+  if (!L || !L.workDateCol) return SpreadsheetApp.newFilterCriteria().setHiddenValues(['TRUE']).build();
+  const r = L.dataStartRow;
+  const d = '$' + columnToLetter_(L.doneCol) + r, w = '$' + columnToLetter_(L.workDateCol) + r;
+  return SpreadsheetApp.newFilterCriteria()
+    .whenFormulaSatisfied('=OR(' + d + '<>TRUE,AND(ISNUMBER(' + w + '),' + w + '>=TODAY()))')
+    .build();
+}
+
+/** 今日以降の完了タスクをグレーにする条件付き書式（なければ追加。何度実行しても1つだけ） */
+function ensureKeepDoneFormat_(sheet, L) {
+  L = L || getDailyGanttLayout_(sheet);
+  if (!L.workDateCol) return '「📅」の列が見つからないため、色付けは設定しませんでした。';
+  const r = L.dataStartRow;
+  const d = '$' + columnToLetter_(L.doneCol) + r, w = '$' + columnToLetter_(L.workDateCol) + r;
+  const formula = '=AND(' + d + '=TRUE,ISNUMBER(' + w + '),' + w + '>=TODAY())';
+  const rules = sheet.getConditionalFormatRules();
+  const exists = rules.some(function (x) {
+    const c = x.getBooleanCondition();
+    return c && c.getCriteriaType() === SpreadsheetApp.BooleanCriteria.CUSTOM_FORMULA &&
+      String(c.getCriteriaValues()[0]).replace(/\s/g, '') === formula;
+  });
+  if (exists) return '今日以降の完了タスクの色付けは設定済みです。';
+  const range = sheet.getRange(r, 1, sheet.getMaxRows() - r + 1, L.dateStartCol - 1);
+  const rule = SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(formula)
+    .setBackground(KEEP_DONE_BG).setFontColor(KEEP_DONE_FONT).setRanges([range]).build();
+  rules.unshift(rule);   // 先頭＝いちばん優先
+  sheet.setConditionalFormatRules(rules);
+  return '今日以降の完了タスクをグレーにする色付けを追加しました。';
+}
+
+/** 【GASエディタから1回だけ実行】色付けを追加し、今の表示モードでフィルタをかけ直す */
+function setupKeepDoneToday() {
+  const sheet = getDailyGanttSheet_();
+  if (!sheet) { Logger.log('「_日次ガントチャート」シートが見つかりません。'); return; }
+  const L = getDailyGanttLayout_(sheet);
+  Logger.log(ensureKeepDoneFormat_(sheet, L));
+  if (isOpenOnlyMode_(sheet, L) && sheet.getFilter()) {
+    sheet.getFilter().setColumnFilterCriteria(L.doneCol, hideDoneCriteria_(L));
+    Logger.log('「未完了・日付順」のフィルタをかけ直しました（今日以降の完了は残ります）。');
+  }
+}

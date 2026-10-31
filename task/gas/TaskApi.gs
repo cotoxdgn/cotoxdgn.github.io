@@ -163,6 +163,40 @@ function taskApi_handle(req) {
 }
 
 // ---------- シートの読み取り ----------
+/**
+ * 「実働」列を「工」のすぐ右へ移す（2026-10-31 コトさん承認済み・1回だけ手で実行）。
+ *  1) 「工」の右に1列挿入して見出し「実働」を書く（ガントの数式・週次の参照は自動でずれる）
+ *  2) 古い「実働」列（ガントの右側）の値を新しい列へ写し、古い列の見出しと値を消す（列そのものは消さない）
+ * すでに「工」のすぐ右にあれば何もしない。
+ */
+function taskApiMoveActualColumn() {
+  if (taskApi_isBound()) return;
+  var sh = taskApi_sheet();
+  var heads = taskApi_heads(sh);
+  var ko = taskApi_findCol(heads, TASKAPI.COLS.ko.head, true) || TASKAPI.COLS.ko.def;
+  var old = taskApi_findCol(heads, TASKAPI.ACTUAL_HEADER, true);
+  if (old === ko + 1) { Logger.log('「実働」列はすでに「工」の右にあります。何もしませんでした。'); return; }
+
+  sh.insertColumnAfter(ko);
+  var col = ko + 1;
+  if (old > ko) old += 1;   // 挿入で1つ右にずれる
+  var last = Math.max(sh.getLastRow(), TASKAPI.FIRST_ROW);
+  var n = last - TASKAPI.FIRST_ROW + 1;
+  sh.getRange(TASKAPI.HEADER_ROW, col).setValue(TASKAPI.ACTUAL_HEADER);
+  var body = sh.getRange(TASKAPI.FIRST_ROW, col, n, 1);
+  body.clearDataValidations().setNumberFormat('0.0#');
+  var moved = 0;
+  if (old) {
+    var src = sh.getRange(TASKAPI.FIRST_ROW, old, n, 1);
+    var vals = src.getValues();
+    vals.forEach(function (r) { if (r[0] !== '' && r[0] !== null) moved++; });
+    body.setValues(vals);
+    src.clearContent();
+    sh.getRange(TASKAPI.HEADER_ROW, old).clearContent();
+  }
+  Logger.log('「実働」列を %s 列目（工の右）に作りました。古い列から %s 件の値を移し、古い列（%s 列目）の見出しと値を消しました。', col, moved, old || 'なし');
+}
+
 function taskApi_sheet() {
   var sh = SpreadsheetApp.openById(TASKAPI.SPREADSHEET_ID).getSheetByName(TASKAPI.SHEET_NAME);
   if (!sh) throw new Error('シート「' + TASKAPI.SHEET_NAME + '」が見つかりません');
