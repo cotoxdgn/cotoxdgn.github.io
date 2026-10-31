@@ -215,9 +215,14 @@
   }
 
   // ---------- 完了シート ----------
-  var cur = null, act = 0, actTouched = false, tick = 0;
+  var cur = null, act = 0, actTouched = false, tick = 0, autoStarted = false;
   function openSheet(t) {
     cur = t; actTouched = false;
+    // チェックを押した瞬間にタイマーを始める（まだ計っていないタスクだけ）。
+    // 今回始めた分は、この画面では実働に反映しない（あとでやった分を「工」のまま完了にできるように）
+    var k0 = tkey(t);
+    autoStarted = false;
+    if (timerSec(k0) === 0 && !timerRunning(k0)) { timerToggle(k0); autoStarted = true; toast('タイマーを始めました'); }
     $('shTitle').textContent = t.todo;
     var m = $('shMeta'); m.innerHTML = '';
     if (t.pj) m.appendChild(el('span', 'pj', t.pj));
@@ -225,7 +230,7 @@
     if (t.slot) m.appendChild(el('span', '', SLOT_EMOJI[t.slot] + ' ' + t.slot));
     $('shKo').textContent = h(t.ko);
     var sec = timerSec(tkey(t));
-    act = sec > 0 ? Math.max(0.1, q(sec / 3600)) : (t.ko != null ? t.ko : 0.5);
+    act = sec > 0 && !autoStarted ? Math.max(0.1, q(sec / 3600)) : (t.ko != null ? t.ko : 0.5);
     $('shNote').textContent = state.actualColumn ? '実働はシートの「実働」列に記録します（0.1h 単位）。'
       : 'シートに「実働」列がまだないため、今は完了チェックだけ記録します。';
     drawSheet();
@@ -239,7 +244,7 @@
     var k = tkey(cur), sec = timerSec(k), run = timerRunning(k);
     $('shTimer').textContent = hms(sec);
     $('tToggle').textContent = run ? '⏸ タイマー停止' : (sec > 0 ? '▶ 再開' : '▶ タイマー開始');
-    if (!actTouched && sec > 0) { act = Math.max(0.1, q(sec / 3600)); drawAct(); }
+    if (!actTouched && !autoStarted && sec > 0) { act = Math.max(0.1, q(sec / 3600)); drawAct(); }
   }
   function drawAct() {
     $('shAct').textContent = h(act);
@@ -359,7 +364,7 @@
     var b = e.target.closest('button'); if (!b || !cur) return;
     actTouched = true; act = Math.max(0, Math.min(24, q(act + parseFloat(b.dataset.d)))); drawAct();
   });
-  $('tToggle').addEventListener('click', function () { if (cur) { timerToggle(tkey(cur)); actTouched = false; drawTimer(); } });
+  $('tToggle').addEventListener('click', function () { if (cur) { timerToggle(tkey(cur)); actTouched = false; autoStarted = false; drawTimer(); } });
   $('tReset').addEventListener('click', function () { if (cur) { timerClear(tkey(cur)); act = cur.ko != null ? cur.ko : 0.5; actTouched = false; drawSheet(); } });
   $('shDone').addEventListener('click', doDone);
   $('shLater').addEventListener('click', closeSheet);
