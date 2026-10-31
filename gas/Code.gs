@@ -107,14 +107,17 @@ function onOpen() {
 
 // 公開URL（…/exec）を探す：自動で取れなければ B2 の値を使う
 function execUrl_(conf) {
+  // B2 に入っている URL を最優先する。ScriptApp.getService().getUrl() は、デプロイを作り直すと
+  // 古い（アーカイブ済みの）URL を返すことがあり、それで上書きすると端末がつながらなくなるため。
+  var saved = String(conf.getRange(CELL_URL).getValue()).trim();
+  if (/\/exec$/.test(saved)) return saved;
   var u = '';
   try { u = ScriptApp.getService().getUrl() || ''; } catch (e) { u = ''; }
   if (/\/exec$/.test(u)) {
     conf.getRange(CELL_URL).setValue(u);
     return u;
   }
-  var saved = String(conf.getRange(CELL_URL).getValue()).trim();
-  return /\/exec$/.test(saved) ? saved : '';
+  return '';
 }
 
 // 接続リンク（connect ページ＋#c=…）を作る
