@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="脳みそ">
+<meta name="theme-color" content="#ECEEE9">
+<title>脳みそポートフォリオ</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Old+Mincho:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../shared/apps.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="app" id="app">
+  <header class="top">
+    <h1 class="brand">脳みそ<span>ポートフォリオ</span></h1>
+    <div class="top-r">
+      <span class="pend" id="pend" hidden></span>
+      <button class="ibtn" type="button" id="syncBtn" aria-label="同期する" title="同期する"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14.3 4.9M4 12A8 8 0 0 1 18.3 7.1"/><path d="M18.5 3v4.3h-4.3M5.5 21v-4.3h4.3"/></svg></button>
+      <button class="ibtn" type="button" id="settingsBtn" aria-label="設定" title="設定"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></button>
+    </div>
+  </header>
+
+  <section class="pane pane-list" id="paneList" aria-label="知識の一覧">
+    <div class="filters">
+      <div class="search"><input class="ax-input" id="q" type="search" placeholder="タイトル・本文・タグ・番号で検索" autocomplete="off"></div>
+      <div class="chips kinds" id="kinds" role="group" aria-label="種類で絞り込み"></div>
+      <div class="chips tags" id="tags" role="group" aria-label="タグで絞り込み"></div>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="empty" id="emptyList" hidden>
+      <div class="empty-mark" aria-hidden="true"><i></i><i></i><i></i></div>
+      <h2>まだ知識がありません</h2>
+      <p>技術ひとつを1件に。たとえば「框なし引戸の納まり」「くすみ色×真鍮の組み合わせ」「二重床の遮音等級」など。</p>
+      <p>写真・図・タグを付けて貯めていくと、同じタグ同士が自動でつながり、つながりの図に広がっていきます。</p>
+      <button class="ax-btn ax-btn-primary" type="button" data-new>最初の知識を書く</button>
+    </div>
+    <p class="nohit" id="noHit" hidden>条件に合う知識はありません</p>
+  </section>
+
+  <section class="pane pane-detail" id="paneDetail" aria-label="知識の詳細">
+    <div class="dt-bar">
+      <button class="ax-btn ax-btn-ghost back" type="button" id="dtBack">‹ もどる</button>
+      <button class="ax-btn" type="button" id="dtEdit">編集</button>
+    </div>
+    <div class="dt" id="detail"></div>
+    <div class="dt-none" id="dtNone">
+      <p>一覧かつながりの図から知識を選ぶと、ここに中身と関連が出ます。</p>
+    </div>
+  </section>
+
+  <section class="pane pane-graph" id="paneGraph" aria-label="つながりの図">
+    <canvas id="graph" aria-label="知識のつながりの図。点をタップすると選べます"></canvas>
+    <div class="g-tools">
+      <button class="ibtn" type="button" id="gFit" aria-label="全体を表示" title="全体を表示"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button class="ibtn" type="button" id="gIn" aria-label="拡大"><svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg></button>
+      <button class="ibtn" type="button" id="gOut" aria-label="縮小"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
+    </div>
+    <div class="legend"><div><i></i>手動でつないだ</div><div><i class="d"></i>同じタグ</div><div>大きさ＝使った回数</div></div>
+    <button class="peek" type="button" id="peek" hidden></button>
+    <div class="empty g-empty" id="emptyGraph" hidden>
+      <h2>つながりの図</h2>
+      <p>知識が増えると、ここに点（写真・図）と線（つながり）が広がります。</p>
+    </div>
+  </section>
+
+  <nav class="tabbar" id="tabbar">
+    <button type="button" data-view="list" class="on"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>一覧</button>
+    <button type="button" class="tab-new" data-new aria-label="知識を書く"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button type="button" data-view="graph"><svg viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.3"/><circle cx="18" cy="6" r="2.3"/><circle cx="12" cy="17" r="2.6"/><path d="M8 8l3 7M16.5 7.8l-3.3 7.2M8.2 6.8l7.5-.6"/></svg>つながり</button>
+  </nav>
+  <button class="ax-btn ax-btn-primary fab-new" type="button" data-new>＋ 知識を書く</button>
+</div>
+
+<!-- 編集 -->
+<div class="editor" id="editor" hidden role="dialog" aria-modal="true" aria-labelledby="edTitle">
+  <form class="ed" id="edForm">
+    <div class="ed-bar">
+      <button class="ax-btn ax-btn-ghost" type="button" id="edCancel">やめる</button>
+      <h2 id="edTitle">知識を書く</h2>
+      <button class="ax-btn ax-btn-primary" type="submit" id="edSave">保存</button>
+    </div>
+    <div class="ed-body">
+      <div class="fld">
+        <span class="lab">種類</span>
+        <div class="chips kinds-pick" id="edKinds" role="radiogroup" aria-label="種類"></div>
+        <span class="ax-note" id="edNo"></span>
+      </div>
+      <label class="fld"><span class="lab">タイトル</span>
+        <input class="ax-input" id="f-title" required maxlength="120" placeholder="例：框なし引戸の納まり"></label>
+      <label class="fld"><span class="lab">本文メモ</span>
+        <textarea class="ax-input" id="f-body" rows="6" placeholder="寸法・注意点・うまくいった理由など"></textarea></label>
+      <div class="fld">
+        <span class="lab">写真・図</span>
+        <div class="photos" id="edPhotos"></div>
+        <label class="ax-btn add-photo"><input type="file" id="f-photo" accept="image/*" multiple hidden>＋ 写真・図を追加</label>
+        <span class="ax-note">写真はGoogleドライブに保存されます（オンライン時のみ）</span>
+      </div>
+      <label class="fld"><span class="lab">タグ（空白か読点で区切る）</span>
+        <input class="ax-input" id="f-tags" placeholder="例：建具 引戸 見切り" autocomplete="off"></label>
+      <div class="chips tag-suggest" id="edTagSug"></div>
+      <div class="fld">
+        <span class="lab">つながる知識（手動）</span>
+        <div class="linked" id="edLinks"></div>
+        <button class="ax-btn" type="button" id="edAddLink">＋ つなぐ知識を選ぶ</button>
+      </div>
+      <button class="ax-btn ax-btn-danger" type="button" id="edDelete" hidden>この知識を削除</button>
+    </div>
+  </form>
+</div>
+
+<!-- つなぐ知識を選ぶ -->
+<div class="ax-overlay" id="picker" hidden>
+  <div class="ax-sheet">
+    <div class="ax-sheet-head"><h2>つなぐ知識を選ぶ</h2><button class="ax-btn ax-btn-ghost" type="button" id="pkClose">完了</button></div>
+    <input class="ax-input" id="pkQ" type="search" placeholder="検索" autocomplete="off">
+    <div class="pk-list" id="pkList"></div>
+  </div>
+</div>
+
+<!-- 削除の確認 -->
+<div class="ax-overlay" id="confirm" hidden>
+  <div class="ax-sheet">
+    <div class="ax-sheet-head"><h2 id="cfTitle">削除しますか？</h2></div>
+    <p id="cfText"></p>
+    <div class="ax-row"><button class="ax-btn ax-btn-danger" type="button" id="cfOk">削除する</button><button class="ax-btn" type="button" id="cfNo">やめる</button></div>
+  </div>
+</div>
+
+<!-- 設定 -->
+<div class="ax-overlay" id="settings" hidden>
+  <div class="ax-sheet">
+    <div class="ax-sheet-head"><h2>設定</h2><button class="ax-btn ax-btn-ghost" type="button" id="stClose">閉じる</button></div>
+    <h3 class="st-h">知識の種類</h3>
+    <div class="kind-table" id="stKinds"></div>
+    <form class="ax-row st-add" id="stAdd">
+      <input class="ax-input" id="st-code" maxlength="2" placeholder="記号（例：P）" required pattern="[A-Za-z]{1,2}" aria-label="番号の記号（英字1〜2文字）">
+      <input class="ax-input" id="st-name" maxlength="12" placeholder="名前（例：プレゼン）" required aria-label="種類の名前">
+      <button class="ax-btn" type="submit">種類を追加</button>
+    </form>
+    <p class="ax-note">番号は種類ごとに「記号-001」から振られます。</p>
+    <h3 class="st-h">スプシとの接続</h3>
+    <div class="ax-row"><button class="ax-btn" type="button" id="stConn">接続の確認・他の端末を追加</button></div>
+  </div>
+</div>
+
+<!-- 写真を大きく -->
+<div class="lightbox" id="lightbox" hidden><img id="lbImg" alt=""><button class="ax-btn" type="button" id="lbClose">閉じる</button></div>
+
+<script src="../shared/apps.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
