@@ -125,6 +125,7 @@ async function wire(ctx) {
     if (isbn === ISBN_S) return json(r, [{ summary: { isbn, title: '（試験）住まいの解剖図鑑', volume: '', author: '増田奏／著 山田／イラスト', publisher: '試験社', cover: '' } }]);
     return json(r, [null]);
   });
+  await ctx.route('https://ndlsearch.ndl.go.jp/api/**', r => r.fulfill({ contentType: 'application/xml', headers: CORS, body: '<rss version="2.0"><channel></channel></rss>' }));
   await ctx.route('https://www.googleapis.com/books/**', r => {
     calls.google++;
     const q = new URL(r.request().url()).searchParams.get('q');
