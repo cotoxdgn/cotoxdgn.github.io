@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="本棚">
+<meta name="theme-color" content="#ECEEE9">
+<title>本棚</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Old+Mincho:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../shared/apps.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- 棚 -->
+  <section class="scr on" id="scrShelf" aria-label="本棚">
+    <header class="bar top">
+      <h1 class="brand">本棚<span>ジャンル別</span></h1>
+      <div class="top-r">
+        <span class="pend" id="pend" hidden></span>
+        <button class="ibtn" type="button" id="syncBtn" aria-label="同期する" title="同期する"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14.3 4.9M4 12A8 8 0 0 1 18.3 7.1"/><path d="M18.5 3v4.3h-4.3M5.5 21v-4.3h4.3"/></svg></button>
+        <button class="ibtn" type="button" data-go="genres" aria-label="ジャンルの管理" title="ジャンルの管理"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="1.8"/><circle cx="15" cy="12" r="1.8"/><circle cx="8" cy="18" r="1.8"/></svg></button>
+        <button class="ibtn" type="button" id="connBtn" aria-label="スプシとの接続" title="スプシとの接続"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></button>
+      </div>
+    </header>
+    <div class="body" id="shelfBody">
+      <div class="filters" id="filters">
+        <div class="seg" id="stSeg" role="group" aria-label="状態で絞り込み"></div>
+        <div class="chips scroll" id="gChips" role="group" aria-label="ジャンルで絞り込み"></div>
+      </div>
+      <div class="shelves" id="shelves"></div>
+      <div class="empty" id="emptyShelf" hidden>
+        <div class="empty-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <h2>まだ本がありません</h2>
+        <p>裏表紙のバーコード（978で始まる方）を読むと、書名・著者・表紙が入ります。読めないときは書名で探すか、手で入れられます。</p>
+        <p>ジャンルは自分で作れます。棚はジャンルごとの段に分かれます。</p>
+        <div class="ax-row"><button class="ax-btn ax-btn-primary" type="button" data-go="scan">バーコードで追加</button><button class="ax-btn" type="button" data-go="search">書名で探す</button></div>
+      </div>
+    </div>
+    <nav class="tabbar">
+      <button type="button" class="on" aria-current="page"><svg viewBox="0 0 24 24"><path d="M5 4v16M10 4v16M15 5l4 15M3 20h18"/></svg>棚</button>
+      <button type="button" class="new" data-go="scan" aria-label="本を追加"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button type="button" data-go="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/></svg>さがす</button>
+    </nav>
+  </section>
+
+  <!-- 本の詳細 -->
+  <section class="scr" id="scrDetail" aria-label="本の詳細">
+    <div class="bar"><button class="lnk l" type="button" data-go="shelf">‹ 棚</button><h2>本</h2><span></span></div>
+    <div class="body"><div class="pad" id="detail"></div></div>
+  </section>
+
+  <!-- バーコードで追加 -->
+  <section class="scr" id="scrScan" aria-label="本を追加">
+    <div class="bar"><button class="lnk l" type="button" data-go="shelf">やめる</button><h2>本を追加</h2><span></span></div>
+    <div class="scan" id="scanView">
+      <video id="video" playsinline muted autoplay aria-hidden="true"></video>
+      <p class="hint" id="scanHint">裏表紙のバーコード（978で始まる方）を枠に合わせてください</p>
+      <div class="frame" aria-hidden="true"></div>
+      <div class="acts">
+        <p class="scan-msg" id="scanMsg" aria-live="polite"></p>
+        <form class="isbn-form" id="isbnForm"><input class="inp" id="isbnIn" inputmode="numeric" autocomplete="off" placeholder="ISBNを入力（13桁か10桁）" aria-label="ISBN"><button class="btn" type="submit">調べる</button></form>
+        <div class="acts-row">
+          <label class="btn"><input type="file" id="scanFile" accept="image/*" hidden>写真から読み取る</label>
+          <button class="btn" type="button" data-go="search">書名で探す</button>
+        </div>
+      </div>
+    </div>
+    <div class="body" id="scanResult" hidden><div class="pad">
+      <div class="found" id="foundBox"></div>
+      <div id="dupBox"></div>
+      <div><span class="lab">状態</span><div class="seg" id="nSt"></div></div>
+      <div><span class="lab">ジャンル（棚）</span><div class="chips" id="nG"></div></div>
+      <button class="btn pri wide" type="button" id="nSave">棚に入れる</button>
+      <button class="btn ghost wide" type="button" id="nAgain">もう1冊読む</button>
+      <p class="note">違っていたら、棚に入れたあと本の詳細「書誌を直す」で直せます。</p>
+    </div></div>
+  </section>
+
+  <!-- 書名で探す -->
+  <section class="scr" id="scrSearch" aria-label="書名で探す">
+    <div class="bar"><button class="lnk l" type="button" data-go="shelf">‹ 棚</button><h2>書名で探す</h2><span></span></div>
+    <div class="body"><div class="pad">
+      <form class="gadd" id="sForm" role="search"><input class="inp" id="sq" type="search" placeholder="書名・著者" aria-label="書名・著者" autocomplete="off"><button class="btn" type="submit">探す</button></form>
+      <div id="mine"></div>
+      <div id="hitsWrap"><div class="hits" id="hits"></div></div>
+      <p class="note" id="sNote">ネット上の本のデータベース（Google Books）を検索します。見つからない本は「手で入れる」で書名・著者だけ登録できます。</p>
+      <button class="btn wide" type="button" id="manualBtn">見つからないので手で入れる</button>
+      <form class="manual" id="manualForm" hidden>
+        <label><span class="lab">書名</span><input class="inp" id="mTitle" required maxlength="160"></label>
+        <label><span class="lab">著者</span><input class="inp" id="mAuthor" maxlength="120"></label>
+        <button class="btn pri wide" type="submit">次へ（状態・ジャンルを選ぶ）</button>
+      </form>
+    </div></div>
+  </section>
+
+  <!-- ジャンルの管理 -->
+  <section class="scr" id="scrGenres" aria-label="ジャンルの管理">
+    <div class="bar"><button class="lnk l" type="button" data-go="shelf">‹ 棚</button><h2>ジャンル</h2><span></span></div>
+    <div class="body"><div class="pad">
+      <p class="note">棚の並び順＝この順番です。名前を変えると、その棚の本もそのまま新しい名前の棚になります。</p>
+      <div class="glist" id="glist"></div>
+      <div id="delAsk"></div>
+      <form class="gadd" id="gadd"><input class="inp" id="gname" maxlength="14" placeholder="新しいジャンル（例：インテリア）" aria-label="新しいジャンル名" required><button class="btn" type="submit">追加</button></form>
+      <p class="note">「未分類」はジャンルを決めていない本の置き場で、消せません。</p>
+    </div></div>
+  </section>
+</div>
+
+<!-- 確認 -->
+<div class="ax-overlay" id="confirm" hidden>
+  <div class="ax-sheet">
+    <div class="ax-sheet-head"><h2 id="cfTitle">削除しますか？</h2></div>
+    <p id="cfText"></p>
+    <div class="ax-row"><button class="ax-btn ax-btn-danger" type="button" id="cfOk">削除する</button><button class="ax-btn" type="button" id="cfNo">やめる</button></div>
+  </div>
+</div>
+
+<script src="../shared/apps.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

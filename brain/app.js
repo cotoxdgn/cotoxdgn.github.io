@@ -3,22 +3,32 @@
  *   - links は双方向として扱う（どちらか一方に書いてあれば「つながっている」）。編集で外したときは相手側からも外す
  *   - 番号は種類ごとの通し番号（D-001 …）
  * 追加した種類：id 'kinds' のレコード data = { t:'kinds', list:[{ c:'P', name:'プレゼン' }] }
+ *   - 最初から入っている種類（BASE_KINDS）と同じ記号が追加分にあっても、表示は最初からの方を使う（レコードは書き換えない）
+ * 本のメモ（B）・ほかのアプリから作ったカードは出典を持てる：data.source = { bookId, title, author, cover, page }
+ *   - bookId は本棚（app=hondana）の本の id。本棚の本の詳細には、source.bookId が一致するカードが並ぶ
+ * 入口：?new=<種類>&title=<下書き>&src=<出典のJSON>&back=<戻り先（相対URL）>&from=<元のアプリ名> で「知識を書く」を開く。番号は保存時にここで振る
+ *       ?open=<知識id> でその知識の詳細を開く
  */
 (function () {
   'use strict';
   var APP = 'brain';
   var BASE_KINDS = [
     { c: 'D', name: 'ディテール' }, { c: 'T', name: 'テイスト' }, { c: 'M', name: '素材' },
-    { c: 'L', name: '法規・申請' }, { c: 'S', name: '寸法' }, { c: 'O', name: 'ほか' }
+    { c: 'L', name: '法規・申請' }, { c: 'S', name: '寸法' }, { c: 'B', name: '本のメモ' }, { c: 'H', name: 'ひらめき' },
+    { c: 'O', name: 'ほか' }
   ];
+  var KIND_HINT = {
+    B: '例：暗がりがあるから金が映える', H: '思いついたことを1行で（例：玄関に一時置きの棚を必ず提案する）'
+  };
+  var HONDANA = '../hondana/';
   var KINDS_ID = 'kinds';
 
   var db = Apps.collection(APP);
   var $ = function (id) { return document.getElementById(id); };
   var wide = window.matchMedia('(min-width: 960px)');
 
-  var S = { view: 'list', sel: null, kind: '', tag: '', q: '', detailOpen: false, useOpen: false };
-  var ED = null; // 編集中：{ id, kind, photos:[{id}|{busy,key}], links:[], orig:{photos} , uploaded:[] }
+  var S = { view: 'list', sel: null, kind: '', tag: '', q: '', detailOpen: false, useOpen: false, back: '', from: '' };
+  var ED = null; // 編集中：{ id, kind, photos:[{id}|{busy,key}], links:[], orig:{photos} , uploaded:[], source, entry }
 
   // ---------- 小物 ----------
   function esc(s) {
@@ -44,10 +54,27 @@
   // ---------- データ ----------
   function items() { return db.all().filter(function (r) { return r.data && r.data.t === 'k'; }); }
   function byId(id) { var r = db.get(id); return r && r.data && r.data.t === 'k' ? r : null; }
-  function extraKinds() { var r = db.get(KINDS_ID); return r && r.data && Array.isArray(r.data.list) ? r.data.list : []; }
+  function isBase(c) { return BASE_KINDS.some(function (k) { return k.c === c; }); }
+  // 保存されている追加分そのまま（保存し直すときはこちらを使い、記号が重なる分も消さない）
+  function rawExtraKinds() { var r = db.get(KINDS_ID); return r && r.data && Array.isArray(r.data.list) ? r.data.list : []; }
+  // 表示用：最初からの種類と同じ記号・重複は出さない
+  function extraKinds() {
+    var seen = {};
+    return rawExtraKinds().filter(function (k) {
+      if (!k || !k.c || isBase(k.c) || seen[k.c]) return false;
+      seen[k.c] = 1; return true;
+    });
+  }
   function kinds() { return BASE_KINDS.concat(extraKinds()); }
   function kindOf(c) { return kinds().filter(function (k) { return k.c === c; })[0] || { c: c || 'O', name: c || 'ほか' }; }
-  function kindColor(c) { return BASE_KINDS.some(function (k) { return k.c === c; }) ? 'var(--k-' + c + ')' : 'var(--k-x)'; }
+  function kindColor(c) { return isBase(c) ? 'var(--k-' + c + ')' : 'var(--k-x)'; }
+  // 出典（本など）
+  function srcOf(d) { return d && d.source && typeof d.source === 'object' && (d.source.bookId || d.source.title) ? d.source : null; }
+  function safeUrl(u) { u = String(u || ''); return /^https:\/\//.test(u) ? u : ''; }
+  function coverOf(d) { var s = srcOf(d); return s ? safeUrl(s.cover) : ''; }
+  function srcLine(s) { return [s.title, s.page].filter(Boolean).join(' '); }
+  function sameBook(a, b) { var x = srcOf(a.data), y = srcOf(b.data); return !!(x && y && x.bookId && x.bookId === y.bookId); }
+  function bookHref(s) { return HONDANA + '?book=' + encodeURIComponent(s.bookId); }
   function noStr(d) { return (d.kind || 'O') + '-' + pad3(d.no); }
   function nextNo(kind) {
     var m = 0;
@@ -67,14 +94,16 @@
     var r = byId(id);
     if (!r) return [];
     var man = manualOf(id);
-    return items().filter(function (o) { return o.id !== id && man.indexOf(o.id) < 0 && sharedTags(r, o).length; })
-      .map(function (o) { return { r: o, tags: sharedTags(r, o) }; })
-      .sort(function (a, b) { return b.tags.length - a.tags.length; });
+    return items().filter(function (o) { return o.id !== id && man.indexOf(o.id) < 0 && (sharedTags(r, o).length || sameBook(r, o)); })
+      .map(function (o) { return { r: o, tags: sharedTags(r, o), book: sameBook(r, o) }; })
+      .sort(function (a, b) { return (b.tags.length + (b.book ? 1 : 0)) - (a.tags.length + (a.book ? 1 : 0)); });
   }
   function thumbHtml(r, size) {
     var d = r.data, p = (d.photos || [])[0];
     var st = ' style="--kc:' + kindColor(d.kind) + '"';
     if (p) return '<span class="thumb"' + st + '><img src="' + esc(Apps.imageUrl(p, size || 200)) + '" alt="" loading="lazy"></span>';
+    var cv = coverOf(d);
+    if (cv) return '<span class="thumb"' + st + '><img src="' + esc(cv) + '" alt="" loading="lazy" referrerpolicy="no-referrer"></span>';
     return '<span class="thumb"' + st + '>' + esc(d.kind) + '<br>' + esc(pad3(d.no)) + '</span>';
   }
   function put(r, data) { return db.put(data, r ? r.id : undefined); }
@@ -88,7 +117,8 @@
       if (S.kind && d.kind !== S.kind) return false;
       if (S.tag && (d.tags || []).indexOf(S.tag) < 0) return false;
       if (q) {
-        var hay = [d.title, d.body, noStr(d), (d.tags || []).join(' '), kindOf(d.kind).name,
+        var sc = srcOf(d) || {};
+        var hay = [d.title, d.body, noStr(d), (d.tags || []).join(' '), kindOf(d.kind).name, sc.title, sc.author,
           usesOf(d).map(function (u) { return u.name; }).join(' ')].join('\n').toLowerCase();
         if (q.split(/\s+/).some(function (w) { return hay.indexOf(w) < 0; })) return false;
       }
@@ -128,7 +158,7 @@
       var d = r.data;
       return '<button type="button" class="item' + (S.sel === r.id ? ' sel' : '') + '" data-id="' + esc(r.id) + '">' + thumbHtml(r) +
         '<span style="min-width:0"><span class="t">' + esc(d.title) + (r.pending ? '<span class="wait">送信待ち</span>' : '') + '</span>' +
-        '<span class="m" style="--kc:' + kindColor(d.kind) + '"><span class="no">' + esc(noStr(d)) + '</span>' + esc(kindOf(d.kind).name) +
+        '<span class="m" style="--kc:' + kindColor(d.kind) + '"><span class="no">' + esc(noStr(d)) + '</span>' + esc(srcOf(d) ? srcLine(srcOf(d)) : kindOf(d.kind).name) +
         ((d.tags || []).length ? ' ・ ' + esc(d.tags.map(function (t) { return '#' + t; }).join(' ')) : '') + '</span></span>' +
         '<span class="uses"><b>' + usesOf(d).length + '</b>回</span></button>';
     }).join('');
@@ -152,6 +182,8 @@
       '<h2>' + esc(d.title) + '</h2>' +
       ((d.tags || []).length ? '<div class="tagrow">' + d.tags.map(function (t) { return '<button type="button" class="tag" data-tagjump="' + esc(t) + '">#' + esc(t) + '</button>'; }).join('') + '</div>' : '') +
       '</div>';
+    var sc = srcOf(d);
+    if (sc) h += '<div><span class="lab">出典</span>' + srcCard(sc, true) + '</div>';
     if ((d.photos || []).length) {
       h += '<div class="gallery">' + d.photos.map(function (p) {
         return '<button type="button" data-photo="' + esc(p) + '" aria-label="写真を大きく見る"><img src="' + esc(Apps.imageUrl(p, 900)) + '" alt="" loading="lazy"></button>';
@@ -176,11 +208,20 @@
     h += '</div>';
     h += '<div><span class="lab">つながる知識</span><div class="rel">' +
       man.map(function (o) { return relItem(o, '手動', 'man'); }).join('') +
-      au.map(function (x) { return relItem(x.r, '#' + x.tags[0], 'auto'); }).join('') +
+      au.map(function (x) { return relItem(x.r, x.tags.length ? '#' + x.tags[0] : '同じ本', 'auto'); }).join('') +
       (!man.length && !au.length ? '<p class="rel-none">まだつながりはありません。同じタグを付けるか、手動でつなげます。</p>' : '') +
       '<button type="button" class="ax-btn" id="dtLink">＋ 手動でつなぐ</button></div></div>';
     h += '<p class="dt-foot">作成 ' + esc(localDay(r.createdAt)) + ' ・ 更新 ' + esc(localDay(r.updatedAt)) + (r.pending ? ' ・ 送信待ち' : '') + '</p>';
+    if (S.back) h = '<a class="ax-btn ax-btn-primary back-app" href="' + esc(S.back) + '">‹ ' + esc(S.from) + 'に戻る</a>' + h;
     $('detail').innerHTML = h;
+  }
+  // 出典の札（本の表紙・書名・著者・ページ）。本棚の本なら「本棚で開く」
+  function srcCard(s, link) {
+    var cv = safeUrl(s.cover);
+    var cover = '<span class="cover" aria-hidden="true">' + (cv ? '<img src="' + esc(cv) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '<span class="vt">' + esc(s.title || '') + '</span>') + '</span>';
+    var inner = cover + '<span class="si"><b>' + esc(s.title || '（書名なし）') + '</b><small>' + esc([s.author, s.page].filter(Boolean).join('　')) + '</small></span>';
+    if (link && s.bookId) return '<a class="src" href="' + esc(bookHref(s)) + '">' + inner + '<span class="go">本棚で開く ›</span></a>';
+    return '<div class="src">' + inner + (s.bookId ? '<span class="go">本棚の本</span>' : '') + '</div>';
   }
   function openDetail(id) {
     S.sel = id; S.useOpen = false;
@@ -273,11 +314,19 @@
   $('pkClose').addEventListener('click', function () { $('picker').hidden = true; PK = null; });
 
   // ---------- 編集 ----------
-  function openEditor(id) {
+  // entry：ほかのアプリから開いたときの下書き { kind, title, source }
+  function openEditor(id, entry) {
     var r = id && byId(id);
-    var d = r ? r.data : { kind: S.kind || 'D', title: '', body: '', tags: S.tag ? [S.tag] : [], photos: [], links: [] };
+    var d = r ? r.data : { kind: (entry && entry.kind) || S.kind || 'D', title: (entry && entry.title) || '', body: '', tags: S.tag && !entry ? [S.tag] : [], photos: [], links: [],
+      source: entry && entry.source };
+    var sc = srcOf(d);
     ED = { id: r ? r.id : null, kind: d.kind, photos: (d.photos || []).map(function (p) { return { id: p }; }),
-      links: r ? manualOf(r.id) : [], orig: (d.photos || []).slice(), uploaded: [], busy: 0 };
+      links: r ? manualOf(r.id) : [], orig: (d.photos || []).slice(), uploaded: [], busy: 0,
+      source: sc ? copyData(sc) : null, entry: !!entry };
+    $('edFrom').hidden = !entry;
+    if (entry) $('edFromText').textContent = (S.from || '元のアプリ') + 'から開きました。' + (sc ? '種類と出典は入れてあります' : '種類は選んであります');
+    $('f-page').value = sc && sc.page || '';
+    $('f-srcTitle').value = sc && !sc.bookId ? sc.title || '' : '';
     $('edTitle').textContent = r ? '知識を編集' : '知識を書く';
     $('f-title').value = d.title || '';
     $('f-body').value = d.body || '';
@@ -288,11 +337,25 @@
     $('editor').querySelector('.ed-body').scrollTop = 0;
     if (!r) setTimeout(function () { $('f-title').focus(); }, 50);
   }
+  // 出典欄：本のメモか、出典つきで開いたときだけ出す
+  function renderEdSrc() {
+    var show = ED.kind === 'B' || !!ED.source;
+    $('edSrcFld').hidden = !show;
+    if (!show) return;
+    var linked = ED.source && ED.source.bookId;
+    $('edSrc').innerHTML = linked ? srcCard(ED.source, false) +
+      '<button type="button" class="ax-btn ax-btn-ghost src-x" id="edSrcX">出典を外す</button>' : '';
+    $('srcManual').hidden = !!linked;
+  }
   function renderEdKinds() {
     $('edKinds').innerHTML = kinds().map(function (k) {
       return '<button type="button" role="radio" aria-checked="' + (ED.kind === k.c) + '" class="chip' + (ED.kind === k.c ? ' on' : '') +
         '" style="--kc:' + kindColor(k.c) + '" data-edkind="' + esc(k.c) + '">' + esc(k.name) + '</button>';
     }).join('');
+    $('f-title').placeholder = KIND_HINT[ED.kind] || '例：框なし引戸の納まり';
+    $('f-title').setAttribute('aria-label', ED.kind === 'H' ? 'ひらめき（1行でよい）' : 'タイトル');
+    $('edTitleLab').textContent = ED.kind === 'H' ? 'ひらめき（1行でよい）' : 'タイトル';
+    renderEdSrc();
     var r = ED.id && byId(ED.id);
     var no = r && r.data.kind === ED.kind ? r.data.no : nextNo(ED.kind);
     $('edNo').textContent = '番号：' + ED.kind + '-' + pad3(no) + (r && r.data.kind !== ED.kind ? '（種類を変えると番号も振り直します）' : '');
@@ -326,6 +389,9 @@
   $('edKinds').addEventListener('click', function (e) {
     var t = e.target.closest('[data-edkind]');
     if (t) { ED.kind = t.dataset.edkind; renderEdKinds(); }
+  });
+  $('edSrc').addEventListener('click', function (e) {
+    if (e.target.closest('#edSrcX')) { ED.source = null; renderEdSrc(); }
   });
   $('edPhotos').addEventListener('click', function (e) {
     var t = e.target.closest('[data-rmph]');
@@ -385,6 +451,15 @@
     d.photos = ED.photos.filter(function (p) { return p.id; }).map(function (p) { return p.id; });
     d.links = ED.links.filter(function (x) { return byId(x); });
     d.uses = usesOf(d);
+    // 出典：本棚の本はそのまま＋ページ、手入れなら書名＋ページ
+    if (!$('edSrcFld').hidden) {
+      var page = $('f-page').value.trim().slice(0, 30);
+      var src = ED.source && ED.source.bookId ? copyData(ED.source) : { title: $('f-srcTitle').value.trim().slice(0, 120) };
+      src.page = page;
+      if (!src.page) delete src.page;
+      if (src.bookId || src.title) d.source = src; else delete d.source;
+    } else if (!ED.source) delete d.source;
+    var fromEntry = ED.entry;
     var removed = ED.orig.filter(function (p) { return d.photos.indexOf(p) < 0; });
     closeEditor(true);
     put(old, d).then(function (rec) {
@@ -400,7 +475,7 @@
       }
       removed.forEach(function (p) { Apps.deleteImage(APP, p).catch(function () {}); });
       return Promise.all(ops).then(function () {
-        Apps.toast(old ? '保存しました' : noStr(d) + ' を貯めました');
+        Apps.toast(old ? '保存しました' : noStr(d) + ' を貯めました' + (fromEntry && S.back ? '（' + S.from + 'に戻れます）' : ''));
         openDetail(rec.id);
         graph.focus(rec.id);
       });
@@ -435,7 +510,7 @@
     var cnt = {};
     items().forEach(function (r) { cnt[r.data.kind] = (cnt[r.data.kind] || 0) + 1; });
     $('stKinds').innerHTML = kinds().map(function (k) {
-      var extra = !BASE_KINDS.some(function (b) { return b.c === k.c; });
+      var extra = !isBase(k.c);
       return '<div><i style="background:' + kindColor(k.c) + '"></i><span class="no" style="--kc:' + kindColor(k.c) + '">' + esc(k.c) + '-</span><span style="flex:1">' + esc(k.name) +
         '</span><span class="ax-note">' + (cnt[k.c] || 0) + '件</span>' +
         (extra && !cnt[k.c] ? '<button type="button" class="ax-btn ax-btn-ghost" data-rmkind="' + esc(k.c) + '">外す</button>' : '') + '</div>';
@@ -450,14 +525,14 @@
     var c = $('st-code').value.trim().toUpperCase(), name = $('st-name').value.trim();
     if (!/^[A-Z]{1,2}$/.test(c) || !name) { Apps.toast('記号は英字1〜2文字で入れてください', true); return; }
     if (kinds().some(function (k) { return k.c === c; })) { Apps.toast('記号「' + c + '」はもう使っています', true); return; }
-    saveExtraKinds(extraKinds().concat([{ c: c, name: name }])).then(function () {
+    saveExtraKinds(rawExtraKinds().concat([{ c: c, name: name }])).then(function () {
       $('st-code').value = ''; $('st-name').value = '';
       renderSettings(); Apps.toast('種類「' + name + '」を追加しました');
     });
   });
   $('stKinds').addEventListener('click', function (e) {
     var t = e.target.closest('[data-rmkind]');
-    if (t) saveExtraKinds(extraKinds().filter(function (k) { return k.c !== t.dataset.rmkind; })).then(renderSettings);
+    if (t) saveExtraKinds(rawExtraKinds().filter(function (k) { return k.c !== t.dataset.rmkind; })).then(renderSettings);
   });
 
   // ---------- つながりの図 ----------
@@ -475,18 +550,21 @@
       var cs = getComputedStyle(document.documentElement);
       ['--ink', '--mute', '--red', '--paper', '--line', '--bg', '--on-red'].forEach(function (k) { colors[k] = cs.getPropertyValue(k).trim(); });
       kinds().forEach(function (k) {
-        var v = BASE_KINDS.some(function (b) { return b.c === k.c; }) ? '--k-' + k.c : '--k-x';
+        var v = isBase(k.c) ? '--k-' + k.c : '--k-x';
         colors['k' + k.c] = cs.getPropertyValue(v).trim();
       });
     }
-    function img(id) {
-      if (imgs[id]) return imgs[id];
+    // 点の絵：写真の1枚目。なければ出典の本の表紙
+    function img(src) {
+      if (imgs[src]) return imgs[src];
       var im = new Image();
+      im.referrerPolicy = 'no-referrer';
       im.onload = function () { request(); };
-      im.src = Apps.imageUrl(id, 200);
-      imgs[id] = im;
+      im.src = src;
+      imgs[src] = im;
       return im;
     }
+    function picOf(d) { var p = (d.photos || [])[0]; return p ? Apps.imageUrl(p, 200) : coverOf(d); }
     function radius(n) { return 16 + Math.min(usesOf(n.r.data).length, 12) * 2.2; }
 
     function setData(recs) {
@@ -515,7 +593,7 @@
       }
       list.forEach(function (n) { (n.r.data.links || []).forEach(function (x) { if (nodes[x] && x !== n.id) add(n.id, x, true, 1); }); });
       for (var i = 0; i < list.length; i++) for (var j = i + 1; j < list.length; j++) {
-        var s = sharedTags(list[i].r, list[j].r).length;
+        var s = sharedTags(list[i].r, list[j].r).length + (sameBook(list[i].r, list[j].r) ? 1 : 0);
         if (s) add(list[i].id, list[j].id, false, s);
       }
       cv.dataset.nodes = list.length;
@@ -621,7 +699,7 @@
         ctx.save();
         ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
         ctx.fillStyle = colors['--paper']; ctx.fill(); ctx.clip();
-        var ph = (n.r.data.photos || [])[0], im = ph && img(ph);
+        var ph = picOf(n.r.data), im = ph && img(ph);
         if (im && im.complete && im.naturalWidth) {
           var iw = im.naturalWidth, ih = im.naturalHeight, sc = Math.max(2 * r / iw, 2 * r / ih);
           ctx.drawImage(im, p[0] - iw * sc / 2, p[1] - ih * sc / 2, iw * sc, ih * sc);
@@ -831,6 +909,39 @@
     if (ED) { renderEdLinks(); }
     if (PK) renderPicker();
   });
+
+  // ---------- ほかのアプリからの入口 ----------
+  function safeBack(u) {
+    u = String(u || '');
+    // 同じサイトの中の相対パスだけ（外のサイトへは戻さない）
+    return /^(\.\.\/|\/(?!\/))[^:\\]*$/.test(u) && u.length < 600 ? u : '';
+  }
+  function readEntry() {
+    var P;
+    try { P = new URLSearchParams(location.search); } catch (e) { return; }
+    var kind = P.get('new'), open = P.get('open');
+    if (!kind && !open) return;
+    S.back = safeBack(P.get('back'));
+    S.from = (P.get('from') || '').slice(0, 12) || (/hondana/.test(S.back) ? '本棚' : '元のアプリ');
+    var src = null;
+    try { src = JSON.parse(P.get('src') || 'null'); } catch (e) { src = null; }
+    if (src && typeof src === 'object') {
+      var s2 = {};
+      ['bookId', 'title', 'author', 'cover', 'page'].forEach(function (k) { if (src[k] != null && src[k] !== '') s2[k] = String(src[k]).slice(0, k === 'cover' ? 500 : 160); });
+      if (s2.cover && !safeUrl(s2.cover)) delete s2.cover;
+      src = s2.bookId || s2.title ? s2 : null;
+    } else src = null;
+    var title = (P.get('title') || '').slice(0, 120);
+    // 再読み込みでもう一度開かないよう、URL からは消す（戻り先は覚えておく）
+    try { history.replaceState(null, '', location.pathname); } catch (e) { /* 無視 */ }
+    if (S.back) { $('fromBar').hidden = false; $('fromText').textContent = S.from + 'から開きました'; $('fromBack').href = S.back; $('fromBack').textContent = S.from + 'に戻る ›'; }
+    db.ready.then(function () {
+      if (open) { if (byId(open)) { openDetail(open); graph.focus(open); } else Apps.toast('その知識はまだこの端末にありません（同期してみてください）', true); return; }
+      if (!kinds().some(function (k) { return k.c === kind; })) kind = 'O';
+      openEditor(null, { kind: kind, title: title, source: src });
+    });
+  }
+  readEntry();
 
   setView('list');
   Apps.ensureConnected(APP).then(function () { return db.sync(); }).catch(function () { /* 'error' で表示 */ });
