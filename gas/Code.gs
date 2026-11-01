@@ -394,11 +394,12 @@ function mapLink_(req) {
   if (!ok(url)) return { error: 'bad_link' };
   for (var i = 0; i < 6; i++) {
     if (parseMapUrl_(url)) break;
-    var res = UrlFetchApp.fetch(url, { followRedirects: false, muteHttpExceptions: true });
+    var res;
+    try { res = UrlFetchApp.fetch(url, { followRedirects: false, muteHttpExceptions: true }); } catch (e) { break; }
     var loc = res.getHeaders()['Location'] || res.getHeaders()['location'];
     if (!loc) {
       // リダイレクトでなくページが返った場合は、中の地図URLを探す
-      var m = /https:\/\/www\.google\.[a-z.]+\/maps\/[^"'\s<>]+/.exec(res.getContentText());
+      var m = /https:\/\/www\.google\.[a-z.]+\/maps\/[^"'\s<>\\]+/.exec(res.getContentText());
       if (!m) break;
       loc = m[0].replace(/\\u003d/g, '=').replace(/\\u0026/g, '&').replace(/&amp;/g, '&');
     }
