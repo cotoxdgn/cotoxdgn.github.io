@@ -99,16 +99,25 @@
   // ---------- 1件の記録 ----------
   var draft = null, draftId = null, original = '', uploaded = [], removed = [];
 
-  function openEditor(id) {
-    var r = id ? db.get(id) : null;
+  // 書きかけの控え：Googleマップなど別アプリへ行って戻ったとき、iPhoneがアプリを読み込み直しても消えないようにする
+  var DRAFT_KEY = 'archmap.draft';
+  function stashDraft() {
+    if (!draft || $('editor').hidden) return;
+    readForm();
+    lsSet(DRAFT_KEY, JSON.stringify({ id: draftId, data: draft, original: original, uploaded: uploaded, removed: removed, at: Date.now() }));
+  }
+  function dropDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* 無視 */ } }
+  function openEditor(id, restore) {
+    var r = restore ? null : id ? db.get(id) : null;
+    if (restore) r = restore.id ? (db.get(restore.id) || { id: restore.id }) : null;
     draftId = r ? r.id : null;
-    draft = r ? clone(r.data) : {
+    draft = restore ? clone(restore.data) : r ? clone(r.data) : {
       name: '', architect: '', visited: today(), list: lsGet(LAST_LIST_KEY) || 'public',
       photos: [], one: '', details: [], tags: [], isPublic: false
     };
     draft.photos = draft.photos || []; draft.details = draft.details || []; draft.tags = draft.tags || [];
-    original = JSON.stringify(draft);
-    uploaded = []; removed = [];
+    original = restore && restore.original ? restore.original : JSON.stringify(draft);
+    uploaded = restore && restore.uploaded || []; removed = restore && restore.removed || [];
     $('edTitle').textContent = r ? '記録を編集' : '新しい記録';
     $('f-name').value = draft.name || '';
     $('f-arch').value = draft.architect || '';
@@ -136,7 +145,8 @@
         renderLoc();
       }, 30);
     }
-    if (!r) setTimeout(function () { $('f-name').focus(); }, 60);
+    if (!r && !restore) setTimeout(function () { $('f-name').focus(); }, 60);
+    stashDraft();
   }
   function readForm() {
     draft.name = $('f-name').value.trim();
@@ -152,6 +162,7 @@
     draft.lng = Math.round(lng * 1e6) / 1e6;
     renderLoc();
     if (pan && pickMap) pickMap.setView([draft.lat, draft.lng], 16);
+    stashDraft();
   }
   function renderLoc() {
     $('locTxt').textContent = A.hasLoc(draft) ? draft.lat.toFixed(5) + ', ' + draft.lng.toFixed(5) : '未設定';
@@ -258,6 +269,7 @@
       uploaded.forEach(function (pid) { Apps.deleteImage(APP, pid).catch(function () {}); });
     }
     draft = null; draftId = null;
+    dropDraft();
     $('editor').hidden = true;
     $('detail').hidden = true;
   }
@@ -272,6 +284,7 @@
     });
     state.cur = null;
     draft = null; draftId = null;
+    dropDraft();
     $('editor').hidden = true;
   }
 
@@ -439,7 +452,12 @@
       '<div class="ax-row name-row"><input class="ax-input" id="gmLink" placeholder="https://maps.app.goo.gl/…" autocomplete="off"><button class="ax-btn small" type="button" id="gmLinkBtn">貼って反映</button></div>';
     wrap.querySelector('#gmLinkBtn').onclick = function () {
       var v = wrap.querySelector('#gmLink').value;
-      if (!useMapLink(v)) Apps.toast('Googleマップのリンクを貼ってください', true);
+      if (v.trim()) { if (!useMapLink(v)) Apps.toast('Googleマップのリンクを貼ってください', true); return; }
+      // 欄が空なら、コピーしたリンクを直接読む（iPhoneでは「ペースト」の確認が出ます）
+      if (!navigator.clipboard || !navigator.clipboard.readText) { Apps.toast('欄にリンクを貼ってください', true); return; }
+      navigator.clipboard.readText().then(function (t) {
+        if (!useMapLink(t)) Apps.toast('コピーされているのがGoogleマップのリンクではありません', true);
+      }, function () { Apps.toast('欄にリンクを貼ってください', true); });
     };
     return wrap;
   }
@@ -508,6 +526,22 @@
   $('exCopy').onclick = copyJson;
   $('settings').onclick = function () { Apps.openConnectSheet(APP); };
   Apps.on('error', function (d) { $('status').textContent = Apps.errorText(d.error); });
+
+  $('editor').addEventListener('input', stashDraft);
+  $('editor').addEventListener('change', stashDraft);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) stashDraft(); });
+  window.addEventListener('pagehide', stashDraft);
+  // 名称欄にGoogleマップのリンクを貼ったら、そのまま場所を入れる
+  $('f-name').addEventListener('paste', function () {
+    setTimeout(function () { var v = $('f-name').value; if (MAP_LINK_RE.test(v)) { $('f-name').value = v.replace(MAP_LINK_RE, '').trim(); useMapLink(v); } }, 0);
+  });
+  (function restoreDraft() {
+    var raw = lsGet(DRAFT_KEY), s0 = null;
+    try { s0 = raw ? JSON.parse(raw) : null; } catch (e) { s0 = null; }
+    if (!s0 || !s0.data || Date.now() - (s0.at || 0) > 2 * 86400000) { dropDraft(); return; }
+    openEditor(s0.id || null, s0);
+    Apps.toast('書きかけの記録を戻しました');
+  })();
 
   Apps.ensureConnected(APP).then(function () { return db.sync(); }).then(function () {
     $('status').textContent = '';
