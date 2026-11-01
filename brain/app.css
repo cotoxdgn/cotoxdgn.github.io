@@ -2,7 +2,7 @@
 :root {
   --bg: #ECEEE9; --paper: #F8F9F6; --ink: #24282A; --mute: #6B726F; --line: #C9CEC8; --hair: #DDE1DB;
   --red: #C2412B; --red-soft: #F4E1DC; --on-red: #FFFFFF;
-  --k-D: #4D5A5C; --k-T: #9A6C78; --k-M: #A3812F; --k-L: #3F6F86; --k-S: #5E7C55; --k-O: #7A7570; --k-x: #6F6A8A;
+  --k-D: #4D5A5C; --k-T: #9A6C78; --k-M: #A3812F; --k-L: #3F6F86; --k-S: #5E7C55; --k-B: #3E6B5A; --k-H: #B0602A; --k-O: #7A7570; --k-x: #6F6A8A;
   --disp: "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   --ax-bg: var(--bg); --ax-surface: var(--paper); --ax-text: var(--ink); --ax-muted: var(--mute); --ax-line: var(--line);
@@ -12,13 +12,13 @@
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #171A1B; --paper: #202425; --ink: #E3E6E2; --mute: #99A19D; --line: #3A4042; --hair: #2C3133;
   --red: #EC7A62; --red-soft: #3D2620; --on-red: #1A0E0B;
-  --k-D: #A9B6B5; --k-T: #D3A2AE; --k-M: #D8B867; --k-L: #86B7CF; --k-S: #A2C296; --k-O: #B7B1AA; --k-x: #B0AAD0;
+  --k-D: #A9B6B5; --k-T: #D3A2AE; --k-M: #D8B867; --k-L: #86B7CF; --k-S: #A2C296; --k-B: #8FC4AE; --k-H: #E6A070; --k-O: #B7B1AA; --k-x: #B0AAD0;
   --ax-surface: var(--paper); --ax-accent-text: var(--on-red);
 } }
 :root[data-theme="dark"] {
   --bg: #171A1B; --paper: #202425; --ink: #E3E6E2; --mute: #99A19D; --line: #3A4042; --hair: #2C3133;
   --red: #EC7A62; --red-soft: #3D2620; --on-red: #1A0E0B;
-  --k-D: #A9B6B5; --k-T: #D3A2AE; --k-M: #D8B867; --k-L: #86B7CF; --k-S: #A2C296; --k-O: #B7B1AA; --k-x: #B0AAD0;
+  --k-D: #A9B6B5; --k-T: #D3A2AE; --k-M: #D8B867; --k-L: #86B7CF; --k-S: #A2C296; --k-B: #8FC4AE; --k-H: #E6A070; --k-O: #B7B1AA; --k-x: #B0AAD0;
   --ax-surface: var(--paper); --ax-accent-text: var(--on-red);
 }
 
@@ -197,6 +197,27 @@ svg { stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round
 .lightbox { position: fixed; inset: 0; z-index: 200; background: rgba(10, 12, 12, .92); display: grid; place-items: center; padding: 16px; }
 .lightbox img { max-width: 100%; max-height: 82vh; object-fit: contain; }
 .lightbox .ax-btn { position: absolute; right: max(12px, env(safe-area-inset-right)); top: calc(12px + env(safe-area-inset-top)); }
+
+/* ---------- 出典（本）・ほかのアプリからの入口 ---------- */
+.top { flex-wrap: wrap; }
+.from-bar { flex-basis: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--red-soft); border-radius: 8px; padding: 4px 4px 4px 10px; font-size: 13px; }
+.from-bar .ax-btn { min-height: 36px; padding: 4px 12px; font-size: 14px; }
+.back-app { justify-self: start; text-decoration: none; }
+.from { display: flex; align-items: center; gap: 8px; background: var(--red-soft); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.from svg { width: 18px; height: 18px; flex: none; color: var(--red); }
+.src { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; align-items: center; border: 1px solid var(--k-B); border-radius: 10px; padding: 8px 10px;
+  background: transparent; text-align: left; width: 100%; color: inherit; text-decoration: none; }
+.src .cover { width: 40px; aspect-ratio: 2 / 3; border-radius: 2px 4px 4px 2px; overflow: hidden; background: var(--k-B); color: var(--paper); display: flex; justify-content: center; padding: 8% 0; }
+.src .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.src .cover:has(img) { padding: 0; background: var(--hair); }
+.src .vt { writing-mode: vertical-rl; font-family: var(--disp); font-size: 8px; line-height: 1.1; max-height: 100%; overflow: hidden; }
+.src .si { min-width: 0; }
+.src b { font-weight: 500; display: block; line-height: 1.35; overflow-wrap: anywhere; }
+.src small { font-size: 12px; color: var(--mute); }
+.src .go { font-size: 12px; color: var(--k-B); white-space: nowrap; }
+.ed-src { display: grid; gap: 4px; justify-items: start; }
+.ed-src:empty { display: none; }
+.src-x { min-height: 32px; font-size: 13px; padding: 2px 8px; color: var(--mute); }
 
 /* ---------- PC幅：一覧＋詳細＋図を並べる ---------- */
 @media (min-width: 960px) {

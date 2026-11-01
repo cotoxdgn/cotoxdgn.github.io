@@ -17,7 +17,7 @@
 ## アプリ名（APP）
 
 英小文字・数字・`-` `_`、30文字まで。スプシのシート名が `app=<APP>` になります（初回保存時に自動作成）。
-決定済み：`routine` `diary` `archmap` `filemap` `brain` `wanko`
+決定済み：`routine` `diary` `archmap` `filemap` `brain` `wanko` `hondana`
 
 ## 基本の形
 
