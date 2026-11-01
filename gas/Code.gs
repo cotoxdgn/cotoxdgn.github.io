@@ -475,3 +475,9 @@ function imageDelete_(conf, req) {
 function out_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
+
+// エディタから1回実行して「外部URLへの接続」を許可するための関数
+function authorizeMapLink() {
+  var r = UrlFetchApp.fetch('https://maps.google.com/', { muteHttpExceptions: true, followRedirects: false });
+  Logger.log('ok ' + r.getResponseCode());
+}
