@@ -149,6 +149,8 @@ textarea.ax-input { resize: vertical; }
 .geo-hit { text-align: left; background: var(--ax-surface); border: 1px solid var(--ax-line); border-radius: 10px; padding: 8px 10px; color: inherit; font: inherit; cursor: pointer; }
 .geo-hit b { display: block; font-size: 14px; }
 .geo-hit span { display: block; font-size: 12px; color: var(--ax-muted); margin-top: 2px; }
+.geo-hit em { display: block; font-style: normal; font-size: 12px; font-weight: 700; color: var(--ax-ink, inherit); margin-top: 4px; text-align: right; }
+.geo-ok { font-size: 13px; margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .geo-msg { font-size: 13px; color: var(--ax-muted); margin: 0; }
 .name-row { flex-wrap: nowrap; }
 .name-row .ax-input { flex: 1; min-width: 0; }
