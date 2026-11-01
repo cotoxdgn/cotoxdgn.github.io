@@ -4,7 +4,11 @@
  *   - 表紙は URL を持つだけ（画像は保存しない）
  * ジャンル：id 'genres' のレコード data = { t:'genres', list:[{ id:'g-xxxx', name, c:1〜4 }] }（並び順＝棚の順）
  *   - genre が '' または見つからない本は「未分類」（消せない・いつも最後の段）
- * 脳みそ（app=brain）のカードのうち data.source.bookId がこの本の id のものを、本の詳細に並べる（読むだけ・書き換えない）
+ * 脳みそ（app=brain）のカードのうち data.source.bookId がこの本の id のものを、本の詳細に並べる
+ *   - 「脳みそにメモを作る」と並んだメモの中身・編集は、脳みそへ飛ばずにこのアプリの中のシート（shared/brainnote.js）で行い、
+ *     Apps.collection('brain') に直接 put する（iPhone のホーム画面アプリは接続と控えがアプリごとに別のため）
+ *   - 作ったカードは no:null・createdIn:'hondana'。番号は脳みそを開いたときに脳みそが振る
+ *   - 脳みそのカードは消さない（消すのは脳みそで）
  * 書誌：ISBN → openBD → なければ Google Books。書名検索は Google Books。バーコードは ZXing（版固定）で読む
  */
 (function () {
@@ -93,7 +97,13 @@
     return brain.all().filter(function (r) {
       var d = r.data;
       return d && d.t === 'k' && d.source && d.source.bookId === bookId;
-    }).sort(function (a, b) { return (a.data.no || 0) - (b.data.no || 0); });
+    }).sort(function (a, b) {
+      // 番号の順。番号がまだのものは後ろに作成順で
+      var x = BrainNote.hasNo(a.data), y = BrainNote.hasNo(b.data);
+      if (x && y) return a.data.no - b.data.no;
+      if (x !== y) return x ? -1 : 1;
+      return String(a.createdAt).localeCompare(String(b.createdAt));
+    });
   }
 
   // ---------- 表紙 ----------
@@ -186,11 +196,16 @@
     return BRAIN + '?' + q;
   }
   function backUrl(id) { return '../hondana/?book=' + encodeURIComponent(id); }
-  function makeNoteUrl(r) {
+  function bookSrc(r) {
     var d = r.data, src = { bookId: r.id, title: d.title, author: d.author || '' };
     if (httpsUrl(d.cover)) src.cover = httpsUrl(d.cover);
-    return brainUrl({ 'new': 'B', src: JSON.stringify(src), back: backUrl(r.id), from: '本棚' });
+    return src;
   }
+  // PCのブラウザなど、脳みそと同じ保存場所のときの入口（主ではない）
+  function makeNoteUrl(r) {
+    return brainUrl({ 'new': 'B', src: JSON.stringify(bookSrc(r)), back: backUrl(r.id), from: '本棚' });
+  }
+  function makeNote(r) { BrainNote.write({ from: APP, kind: 'B', source: bookSrc(r), page: true }); }
   function genreChips(sel, attr) {
     var h = genres().concat([null]).map(function (g) {
       var key = g ? g.id : '';
@@ -217,13 +232,16 @@
     h += '<div><span class="lab">ジャンル（棚）</span><div class="chips" id="dGenres">' + genreChips(gKey(d), 'data-dg') + '</div></div>';
     if (st === 'done') h += '<div><span class="lab">読み終えた日</span><div class="done-row"><input class="inp" type="date" id="ddone" value="' + esc(d.doneOn || '') + '" aria-label="読み終えた日"></div></div>';
     h += '<label><span class="lab">ひとことメモ（本棚の中だけ）</span><textarea class="inp" id="dmemo" rows="2" maxlength="400" placeholder="どこで知ったか・誰に勧められたか など">' + esc(d.memo || '') + '</textarea></label>';
+    var unNo = notes.some(function (n) { return !BrainNote.hasNo(n.data); });
     h += '<div><span class="lab">脳みそのメモ ' + notes.length + '件</span><div class="notes">' + (notes.length ? notes.map(function (n) {
       var k = n.data.kind || 'O', kc = BRAIN_KINDS.indexOf(k) >= 0 ? 'var(--k-' + k + ')' : 'var(--k-x)';
-      return '<a class="nref" href="' + esc(brainUrl({ open: n.id, back: backUrl(r.id), from: '本棚' })) + '"><span class="circ" style="--kc:' + kc + '">' + esc(k) + '<br>' + esc(pad3(n.data.no)) + '</span>' +
-        '<span class="rt">' + esc(n.data.title) + (n.data.source.page ? ' <small>' + esc(n.data.source.page) + '</small>' : '') + '</span><span class="go">›</span></a>';
-    }).join('') : '<p class="notes-none">この本から作ったメモはまだありません。</p>') + '</div></div>';
-    h += '<a class="make" href="' + esc(makeNoteUrl(r)) + '">＋ 脳みそにメモを作る</a>';
-    h += '<p class="note">メモは何件でも作れます。1件＝気づき1つ（例：「暗がりがあるから金が映える」）。</p>';
+      return '<button type="button" class="nref" data-note="' + esc(n.id) + '"><span class="circ" style="--kc:' + kc + '">' + esc(k) + '<br>' + esc(BrainNote.noShort(n.data)) + '</span>' +
+        '<span class="rt">' + esc(n.data.title) + (n.data.source.page ? ' <small>' + esc(n.data.source.page) + '</small>' : '') +
+        (n.pending ? ' <small class="wait">送信待ち</small>' : '') + '</span><span class="go">›</span></button>';
+    }).join('') : '<p class="notes-none">この本から作ったメモはまだありません。</p>') + '</div>' +
+      (unNo ? '<p class="note nonum">「—」のメモの番号は、脳みそを開くと付きます。</p>' : '') + '</div>';
+    h += '<button type="button" class="make" id="makeNote">＋ 脳みそにメモを作る</button>';
+    h += '<p class="note">メモは何件でも作れます。1件＝気づき1つ（例：「暗がりがあるから金が映える」）。この画面のまま書けます。<a class="pc-link" href="' + esc(makeNoteUrl(r)) + '">ブラウザで脳みそを開いて書く</a></p>';
     h += '<details class="biblio"><summary>書誌を直す・この本を消す</summary><form class="biblio-f" id="bibForm">' +
       '<label><span class="lab">書名</span><input class="inp" id="bTitle" required maxlength="160" value="' + esc(d.title) + '"></label>' +
       '<label><span class="lab">著者</span><input class="inp" id="bAuthor" maxlength="120" value="' + esc(d.author || '') + '"></label>' +
@@ -249,6 +267,8 @@
     var t = e.target.closest('button');
     if (!t) return;
     var ds = t.dataset;
+    if (t.id === 'makeNote') { var rb = byId(S.sel); if (rb) makeNote(rb); return; }
+    if (ds.note) { BrainNote.show(ds.note, { from: APP, page: true }); return; }
     if (ds.dst) {
       updateSel(function (d) {
         d.status = ds.dst;
@@ -743,7 +763,9 @@
 
   // ---------- 同期 ----------
   function updatePending() {
-    db.pendingCount().then(function (n) {
+    // 本棚の変更＋ここで書いた脳みそのメモ
+    Promise.all([db.pendingCount(), brain.pendingCount()]).then(function (v) {
+      var n = v[0] + v[1];
       $('pend').hidden = !n;
       $('pend').textContent = '送信待ち ' + n + '件';
     });
@@ -770,7 +792,7 @@
     if (S.scr === 'search') { renderMine(); if (HITS.length) renderHits(); }
     updatePending();
   });
-  brain.onChange(function () { if (S.scr === 'detail') renderDetail(); });
+  brain.onChange(function () { if (S.scr === 'detail') renderDetail(); updatePending(); });
 
   // ?book=<id> で開いたら、その本の詳細へ（脳みその「本棚で開く」から）
   db.ready.then(function () {

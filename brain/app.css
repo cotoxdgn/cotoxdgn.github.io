@@ -215,7 +215,7 @@ svg { stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round
 .src b { font-weight: 500; display: block; line-height: 1.35; overflow-wrap: anywhere; }
 .src small { font-size: 12px; color: var(--mute); }
 .src .go { font-size: 12px; color: var(--k-B); white-space: nowrap; }
-/* 建築mapの建物：写真は正方形、色はテイスト寄り */
+/* アーキマップの建物：写真は正方形、色はテイスト寄り */
 .src.spot { border-color: var(--k-T); }
 .src.spot .cover { aspect-ratio: 1; border-radius: 6px; background: var(--k-T); padding: 0; align-items: center; }
 .src.spot .pin { width: 12px; height: 12px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid var(--paper); }
@@ -242,3 +242,22 @@ svg { stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round
   .ed { width: min(680px, 100%); height: auto; max-height: calc(100vh - 48px); background: var(--paper); border-radius: 14px; overflow: hidden; }
 }
 @media (prefers-reduced-motion: reduce) { .pane-detail { transition: none; } .ibtn.spin svg { animation: none; } }
+
+/* 出典のボタン・出典のシート */
+button.src { width: 100%; text-align: left; font-family: inherit; font-size: inherit; color: inherit; background: transparent; cursor: pointer; }
+.src-sheet h3 { font-size: 18px; margin: 8px 0 4px; line-height: 1.4; overflow-wrap: anywhere; }
+.ss-book { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 14px; align-items: start; margin-top: 8px; }
+.ss-book .cover { width: 72px; aspect-ratio: 2 / 3; border-radius: 2px 5px 5px 2px; overflow: hidden; background: var(--k-B); color: var(--paper); display: flex; justify-content: center; padding: 8% 0; }
+.ss-book .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ss-book .cover:has(img) { padding: 0; }
+.ss-book .vt { writing-mode: vertical-rl; font-family: var(--disp); font-size: 11px; line-height: 1.1; overflow: hidden; }
+.ss-sub { color: var(--mute); font-size: 13px; margin: 2px 0; }
+.ss-st { display: flex; gap: 10px; align-items: center; margin: 8px 0 0; font-size: 13px; }
+.ss-st .st { border: 1px solid var(--k-B); color: var(--k-B); border-radius: 999px; padding: 1px 10px; }
+.ss-stars { color: var(--k-M); letter-spacing: 1px; }
+.ss-stars .off { color: var(--line); }
+.ss-memo { white-space: pre-wrap; line-height: 1.7; margin: 12px 0 4px; }
+.ss-memo .lab { display: block; }
+.ss-photo { display: block; width: 100%; max-height: 46vh; object-fit: cover; border-radius: 10px; background: var(--line); }
+.ss-map { margin-top: 10px; }
+.ss-open { display: inline-block; font-size: 12px; color: var(--mute); margin-top: 4px; }

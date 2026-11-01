@@ -1,14 +1,18 @@
 /* 脳みそポートフォリオ — 技術・テイスト・素材などの知識を1件ずつ貯め、タグと手動リンクでつないでいく自分用の知識ベース。
  * 知識のレコード：data = { t:'k', kind:'D', no:1, title, body, tags:[], photos:[画像id], links:[知識id], uses:[{ name, date }] }
  *   - links は双方向として扱う（どちらか一方に書いてあれば「つながっている」）。編集で外したときは相手側からも外す
- *   - 番号は種類ごとの通し番号（D-001 …）
+ *   - 番号は種類ごとの通し番号（D-001 …）。番号を振るのは脳みそだけ
+ *   - ほかのアプリ（本棚・アーキマップ）は、そのアプリの中で no:null・createdIn:'hondana'|'archmap' のカードを直接 put する（shared/brainnote.js）。
+ *     脳みそは読み込み・同期のたびに no が無いカードを見つけ、種類ごとに次の番号を作成日時順に振って put する（番号のあるカードは書き換えない）
  * 追加した種類：id 'kinds' のレコード data = { t:'kinds', list:[{ c:'P', name:'プレゼン' }] }
  *   - 最初から入っている種類（BASE_KINDS）と同じ記号が追加分にあっても、表示は最初からの方を使う（レコードは書き換えない）
  * 本のメモ（B）・ほかのアプリから作ったカードは出典を持てる：data.source = { bookId, title, author, cover, page }
  *   - bookId は本棚（app=hondana）の本の id。本棚の本の詳細には、source.bookId が一致するカードが並ぶ
- * 建築map（app=archmap）の建物も出典にできる：data.source = { spotId, title(建物名), place(住所・地名。あれば), cover(写真のhttps URL。あれば) }
- *   - spotId は建築mapの記録の id。建築mapの記録の編集画面には、source.spotId が一致するカードが並ぶ。ページ欄はない
- * 入口：?new=<種類>&title=<下書き>&src=<出典のJSON>&back=<戻り先（相対URL）>&from=<元のアプリ名> で「知識を書く」を開く。番号は保存時にここで振る
+ * アーキマップ（app=archmap）の建物も出典にできる：data.source = { spotId, title(建物名), place(住所・地名。あれば), cover(写真のhttps URL。あれば) }
+ *   - spotId はアーキマップの記録の id。アーキマップの記録の編集画面には、source.spotId が一致するカードが並ぶ。ページ欄はない
+ * 出典の「本棚で開く」「アーキマップで開く」は、ほかのアプリへ飛ばずに脳みその中のシートで出典の情報を見せる。
+ *   そのために Apps.collection('hondana') と Apps.collection('archmap') を読むだけ使う（同期して控えを持つ。書き込みはしない）
+ * 入口（PCのブラウザ用。主の導線は上のとおり各アプリの中で書く）：?new=<種類>&title=<下書き>&src=<出典のJSON>&back=<戻り先（相対URL）>&from=<元のアプリ名> で「知識を書く」を開く。番号は保存時にここで振る
  *       ?open=<知識id> でその知識の詳細を開く
  */
 (function () {
@@ -25,8 +29,11 @@
   var HONDANA = '../hondana/';
   var ARCHMAP = '../archmap/';
   var KINDS_ID = 'kinds';
+  var APP_NAMES = { hondana: '本棚', archmap: 'アーキマップ' };
 
   var db = Apps.collection(APP);
+  var hondanaDb = Apps.collection('hondana'); // 本棚の控え（読むだけ）
+  var archDb = Apps.collection('archmap');    // アーキマップの控え（読むだけ）
   var $ = function (id) { return document.getElementById(id); };
   var wide = window.matchMedia('(min-width: 960px)');
 
@@ -73,7 +80,7 @@
   function kindColor(c) { return isBase(c) ? 'var(--k-' + c + ')' : 'var(--k-x)'; }
   // 出典（本など）
   function srcOf(d) { return d && d.source && typeof d.source === 'object' && (d.source.bookId || d.source.spotId || d.source.title) ? d.source : null; }
-  // つながった出典（本棚の本・建築mapの建物）か
+  // つながった出典（本棚の本・アーキマップの建物）か
   function linkedSrc(s) { return !!(s && (s.bookId || s.spotId)); }
   function safeUrl(u) { u = String(u || ''); return /^https:\/\//.test(u) ? u : ''; }
   function coverOf(d) { var s = srcOf(d); return s ? safeUrl(s.cover) : ''; }
@@ -89,7 +96,9 @@
   function sameBook(a, b) { return !!sameSrc(a, b); }
   function bookHref(s) { return HONDANA + '?book=' + encodeURIComponent(s.bookId); }
   function spotHref(s) { return ARCHMAP + '?spot=' + encodeURIComponent(s.spotId); }
-  function noStr(d) { return (d.kind || 'O') + '-' + pad3(d.no); }
+  function hasNo(d) { return !!(d && typeof d.no === 'number' && d.no > 0); }
+  function noStr(d) { return (d.kind || 'O') + '-' + (hasNo(d) ? pad3(d.no) : '（未採番）'); }
+  function noShort(d) { return hasNo(d) ? pad3(d.no) : '—'; }
   function nextNo(kind) {
     var m = 0;
     items().forEach(function (r) { if (r.data.kind === kind && r.data.no > m) m = r.data.no; });
@@ -118,7 +127,7 @@
     if (p) return '<span class="thumb"' + st + '><img src="' + esc(Apps.imageUrl(p, size || 200)) + '" alt="" loading="lazy"></span>';
     var cv = coverOf(d);
     if (cv) return '<span class="thumb"' + st + '><img src="' + esc(cv) + '" alt="" loading="lazy" referrerpolicy="no-referrer"></span>';
-    return '<span class="thumb"' + st + '>' + esc(d.kind) + '<br>' + esc(pad3(d.no)) + '</span>';
+    return '<span class="thumb"' + st + '>' + esc(d.kind) + '<br>' + esc(noShort(d)) + '</span>';
   }
   function put(r, data) { return db.put(data, r ? r.id : undefined); }
   function copyData(d) { return JSON.parse(JSON.stringify(d)); }
@@ -225,24 +234,72 @@
       au.map(function (x) { return relItem(x.r, x.tags.length ? '#' + x.tags[0] : x.book, 'auto'); }).join('') +
       (!man.length && !au.length ? '<p class="rel-none">まだつながりはありません。同じタグを付けるか、手動でつなげます。</p>' : '') +
       '<button type="button" class="ax-btn" id="dtLink">＋ 手動でつなぐ</button></div></div>';
-    h += '<p class="dt-foot">作成 ' + esc(localDay(r.createdAt)) + ' ・ 更新 ' + esc(localDay(r.updatedAt)) + (r.pending ? ' ・ 送信待ち' : '') + '</p>';
+    h += '<p class="dt-foot">作成 ' + esc(localDay(r.createdAt)) + (APP_NAMES[d.createdIn] ? '（' + APP_NAMES[d.createdIn] + 'で）' : '') + ' ・ 更新 ' + esc(localDay(r.updatedAt)) + (r.pending ? ' ・ 送信待ち' : '') + '</p>';
     if (S.back) h = '<a class="ax-btn ax-btn-primary back-app" href="' + esc(S.back) + '">‹ ' + esc(S.from) + 'に戻る</a>' + h;
     $('detail').innerHTML = h;
   }
-  // 出典の札（本の表紙・書名・著者・ページ）。本棚の本なら「本棚で開く」、建築mapの建物なら「建築mapで開く」
+  // 出典の札（本の表紙・書名・著者・ページ）。本棚の本なら「本棚で開く」、アーキマップの建物なら「アーキマップで開く」
+  // （どちらも押すと脳みその中のシートで出典を見せる。ほかのアプリへは飛ばない）
   function srcCard(s, link) {
     var cv = safeUrl(s.cover);
     if (s.spotId) {
       var ph = '<span class="cover" aria-hidden="true">' + (cv ? '<img src="' + esc(cv) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '<span class="pin"></span>') + '</span>';
-      var si = ph + '<span class="si"><b>' + esc(s.title || '（名称なし）') + '</b><small>' + esc(s.place || (link ? '建築mapの建物' : '')) + '</small></span>';
-      if (link) return '<a class="src spot" href="' + esc(spotHref(s)) + '">' + si + '<span class="go">建築mapで開く ›</span></a>';
-      return '<div class="src spot">' + si + '<span class="go">建築mapの建物</span></div>';
+      var si = ph + '<span class="si"><b>' + esc(s.title || '（名称なし）') + '</b><small>' + esc(s.place || (link ? 'アーキマップの建物' : '')) + '</small></span>';
+      if (link) return '<button type="button" class="src spot" data-srcopen="1">' + si + '<span class="go">アーキマップで開く ›</span></button>';
+      return '<div class="src spot">' + si + '<span class="go">アーキマップの建物</span></div>';
     }
     var cover = '<span class="cover" aria-hidden="true">' + (cv ? '<img src="' + esc(cv) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '<span class="vt">' + esc(s.title || '') + '</span>') + '</span>';
     var inner = cover + '<span class="si"><b>' + esc(s.title || '（書名なし）') + '</b><small>' + esc([s.author, s.page].filter(Boolean).join('　')) + '</small></span>';
-    if (link && s.bookId) return '<a class="src" href="' + esc(bookHref(s)) + '">' + inner + '<span class="go">本棚で開く ›</span></a>';
+    if (link && s.bookId) return '<button type="button" class="src" data-srcopen="1">' + inner + '<span class="go">本棚で開く ›</span></button>';
     return '<div class="src">' + inner + (s.bookId ? '<span class="go">本棚の本</span>' : '') + '</div>';
   }
+
+  // ---------- 出典のシート（本棚の本・アーキマップの建物を、脳みその中で見せる） ----------
+  function stars(n) { n = Math.max(0, Math.min(5, +n || 0)); return n ? '★★★★★'.slice(0, n) + '<span class="off">' + '★★★★★'.slice(n) + '</span>' : ''; }
+  function openSrcSheet(s) {
+    if (!s) return;
+    var h = '', href = '', name = '';
+    if (s.spotId) {
+      name = 'アーキマップ'; href = spotHref(s);
+      var sp = archDb.get(s.spotId), sd = sp && sp.data;
+      var photo = sd && (sd.photos || []).filter(function (p) { return p && p.pub; })[0] || sd && (sd.photos || [])[0];
+      var pic = photo && photo.id ? Apps.imageUrl(photo.id, 900) : safeUrl(s.cover);
+      h += '<div class="ss-spot">' + (pic ? '<img class="ss-photo" src="' + esc(pic) + '" alt="" referrerpolicy="no-referrer">' : '') +
+        '<h3>' + esc((sd && sd.name) || s.title || '（名称なし）') + '</h3>';
+      if (sd) {
+        var sub = [sd.architect, sd.visited ? String(sd.visited).replace(/-/g, '.') + ' 訪問' : ''].filter(Boolean).join(' ・ ');
+        if (sub) h += '<p class="ss-sub">' + esc(sub) + '</p>';
+        if (sd.one) h += '<p class="ss-memo">' + esc(sd.one) + '</p>';
+        if (typeof sd.lat === 'number' && typeof sd.lng === 'number') {
+          h += '<a class="ax-btn ss-map" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + (+sd.lat) + ',' + (+sd.lng) + '">Googleマップで場所を見る</a>';
+        }
+      }
+    } else if (s.bookId) {
+      name = '本棚'; href = bookHref(s);
+      var bk = hondanaDb.get(s.bookId), bd = bk && bk.data;
+      var cv = safeUrl((bd && bd.cover) || s.cover);
+      h += '<div class="ss-book">' + '<span class="cover" aria-hidden="true">' + (cv ? '<img src="' + esc(cv) + '" alt="" referrerpolicy="no-referrer">' : '<span class="vt">' + esc(s.title || '') + '</span>') + '</span>' +
+        '<div><h3>' + esc((bd && bd.title) || s.title || '（書名なし）') + '</h3><p class="ss-sub">' + esc([(bd && bd.author) || s.author, bd && bd.publisher].filter(Boolean).join('　')) + '</p>';
+      if (bd) {
+        h += '<p class="ss-st"><span class="st">' + (bd.status === 'done' ? '読んだ' + (bd.doneOn ? '（' + esc(String(bd.doneOn).replace(/-/g, '.')) + '）' : '') : '読みたい') + '</span>' +
+          (bd.rating ? '<span class="ss-stars" aria-label="★' + (+bd.rating) + '">' + stars(bd.rating) + '</span>' : '') + '</p>';
+      }
+      h += '</div></div>';
+      if (bd && bd.memo) h += '<p class="ss-memo"><span class="lab">ひとことメモ</span>' + esc(bd.memo) + '</p>';
+      if (s.page) h += '<p class="ss-sub">このメモのページ：' + esc(s.page) + '</p>';
+    } else return;
+    var known = s.spotId ? archDb.get(s.spotId) : hondanaDb.get(s.bookId);
+    if (!known) h += '<p class="ax-note">' + esc(name) + 'の控えがまだこの端末にありません。カードに残っている情報だけ出しています（同期すると詳しく出ます）。</p>';
+    if (s.spotId) h += '</div>';
+    h += '<div class="ax-row"><button class="ax-btn ax-btn-primary" type="button" data-ssclose="1">閉じる</button></div>' +
+      '<a class="ss-open" href="' + esc(href) + '">' + esc(name) + 'をブラウザで開く ›</a>';
+    $('ssTitle').textContent = s.spotId ? '出典の建物' : '出典の本';
+    $('ssBody').innerHTML = h;
+    $('srcSheet').hidden = false;
+  }
+  $('srcSheet').addEventListener('click', function (e) {
+    if (e.target === $('srcSheet') || e.target.closest('[data-ssclose]')) $('srcSheet').hidden = true;
+  });
   function openDetail(id) {
     S.sel = id; S.useOpen = false;
     if (!wide.matches) { S.detailOpen = true; $('app').classList.add('detail-open'); }
@@ -257,6 +314,7 @@
     var r = byId(S.sel);
     if (!r) return;
     if (t.dataset.go) { openDetail(t.dataset.go); graph.focus(t.dataset.go); return; }
+    if (t.dataset.srcopen) { openSrcSheet(srcOf(r.data)); return; }
     if (t.dataset.tagjump) { S.tag = t.dataset.tagjump; S.kind = ''; closeDetail(); setView('list'); render(); return; }
     if (t.dataset.photo) { $('lbImg').src = Apps.imageUrl(t.dataset.photo, 1600); $('lightbox').hidden = false; return; }
     if (t.id === 'useBtn') { S.useOpen = true; renderDetail(); var u = $('u-name'); if (u) u.focus(); return; }
@@ -379,8 +437,9 @@
     $('edTitleLab').textContent = ED.kind === 'H' ? 'ひらめき（1行でよい）' : 'タイトル';
     renderEdSrc();
     var r = ED.id && byId(ED.id);
-    var no = r && r.data.kind === ED.kind ? r.data.no : nextNo(ED.kind);
-    $('edNo').textContent = '番号：' + ED.kind + '-' + pad3(no) + (r && r.data.kind !== ED.kind ? '（種類を変えると番号も振り直します）' : '');
+    var keep = r && r.data.kind === ED.kind && hasNo(r.data);
+    var no = keep ? r.data.no : nextNo(ED.kind);
+    $('edNo').textContent = '番号：' + ED.kind + '-' + pad3(no) + (r && hasNo(r.data) && r.data.kind !== ED.kind ? '（種類を変えると番号も振り直します）' : '');
   }
   function renderEdPhotos() {
     $('edPhotos').innerHTML = ED.photos.map(function (p, i) {
@@ -465,7 +524,7 @@
     var old = ED.id && byId(ED.id);
     var d = old ? copyData(old.data) : { t: 'k', uses: [] };
     d.t = 'k';
-    if (!old || old.data.kind !== ED.kind) d.no = nextNo(ED.kind);
+    if (!old || old.data.kind !== ED.kind || !hasNo(old.data)) d.no = nextNo(ED.kind);
     d.kind = ED.kind;
     d.title = title;
     d.body = $('f-body').value.replace(/\s+$/, '');
@@ -473,7 +532,7 @@
     d.photos = ED.photos.filter(function (p) { return p.id; }).map(function (p) { return p.id; });
     d.links = ED.links.filter(function (x) { return byId(x); });
     d.uses = usesOf(d);
-    // 出典：本棚の本はそのまま＋ページ、建築mapの建物はそのまま、手入れなら書名＋ページ
+    // 出典：本棚の本はそのまま＋ページ、アーキマップの建物はそのまま、手入れなら書名＋ページ
     if (!$('edSrcFld').hidden) {
       var page = $('f-page').value.trim().slice(0, 30);
       var src = linkedSrc(ED.source) ? copyData(ED.source) : { title: $('f-srcTitle').value.trim().slice(0, 120) };
@@ -731,7 +790,7 @@
           if (r > 12) {
             ctx.fillStyle = kc; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.font = '500 ' + Math.round(Math.min(13, r * 0.5)) + 'px ' + getComputedStyle(document.body).fontFamily;
-            ctx.fillText(n.r.data.kind + '-' + pad3(n.r.data.no), p[0], p[1]);
+            ctx.fillText(n.r.data.kind + '-' + noShort(n.r.data), p[0], p[1]);
           }
         }
         ctx.restore();
@@ -894,6 +953,7 @@
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
     if (!$('lightbox').hidden) $('lbClose').click();
+    else if (!$('srcSheet').hidden) $('srcSheet').hidden = true;
     else if (!$('picker').hidden) $('pkClose').click();
     else if (!$('confirm').hidden) $('cfNo').click();
     else if (!$('settings').hidden) $('stClose').click();
@@ -911,7 +971,8 @@
   function syncNow(manual) {
     if (!Apps.isConnected(APP)) { Apps.ensureConnected(APP).then(function () { return syncNow(true); }); return Promise.resolve(); }
     $('syncBtn').classList.add('spin');
-    return db.sync().then(function (r) {
+    hondanaDb.sync().catch(function () {}); archDb.sync().catch(function () {});
+    return syncBrain().then(function (r) {
       if (manual) Apps.toast(r.left ? '送信待ちが ' + r.left + '件 残っています' : '同期しました');
     }, function (e) {
       if (manual) Apps.toast(Apps.errorText(e), true);
@@ -923,7 +984,35 @@
     if (d.during === 'flush' && d.id) Apps.toast(Apps.errorText(d.error), true);
   });
 
+  // ---------- 番号を振る（ほかのアプリで作った no の無いカード） ----------
+  // 種類ごとに、今ある最大の番号の次から、作成日時の古い順に振る。番号のあるカードは触らない。
+  // つながっている端末では、最初の同期が終わってから振る（別の端末で振った番号と重ならないように）
+  var firstSyncDone = false, numbering = false, numTimer = 0;
+  function syncBrain() {
+    return db.sync().then(function (r) { firstSyncDone = true; assignNumbers(); return r; },
+      function (e) { firstSyncDone = true; assignNumbers(); throw e; });
+  }
+  function assignNumbers() {
+    if (numbering) return Promise.resolve(0);
+    if (!firstSyncDone && Apps.isConnected(APP) && online()) return Promise.resolve(0);
+    var todo = items().filter(function (r) { return !hasNo(r.data); })
+      .sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)) || (a.id < b.id ? -1 : 1); });
+    if (!todo.length) return Promise.resolve(0);
+    numbering = true;
+    var next = {};
+    var ops = todo.map(function (r) {
+      var k = r.data.kind || 'O';
+      if (!next[k]) next[k] = nextNo(k);
+      var d = copyData(r.data); d.no = next[k]++; if (!d.kind) d.kind = k;
+      return db.put(d, r.id);
+    });
+    return Promise.all(ops).then(function () { numbering = false; return ops.length; }, function () { numbering = false; return 0; });
+  }
+  function scheduleNumbers() { clearTimeout(numTimer); numTimer = setTimeout(assignNumbers, 50); }
+  window.__brain.assignNumbers = assignNumbers;
+
   db.onChange(function () {
+    scheduleNumbers();
     graph.setData(items());
     if (S.sel && !byId(S.sel)) S.sel = null;
     render();
@@ -944,7 +1033,8 @@
     var kind = P.get('new'), open = P.get('open');
     if (!kind && !open) return;
     S.back = safeBack(P.get('back'));
-    S.from = (P.get('from') || '').slice(0, 12) || (/hondana/.test(S.back) ? '本棚' : /archmap/.test(S.back) ? '建築map' : '元のアプリ');
+    S.from = (P.get('from') || '').slice(0, 12) || (/hondana/.test(S.back) ? '本棚' : /archmap/.test(S.back) ? 'アーキマップ' : '元のアプリ');
+    if (S.from === '建築map') S.from = 'アーキマップ'; // 前の版のリンク
     var src = null;
     try { src = JSON.parse(P.get('src') || 'null'); } catch (e) { src = null; }
     if (src && typeof src === 'object') {
@@ -967,6 +1057,9 @@
   readEntry();
 
   setView('list');
-  Apps.ensureConnected(APP).then(function () { return db.sync(); }).catch(function () { /* 'error' で表示 */ });
+  Apps.ensureConnected(APP).then(function () {
+    hondanaDb.sync().catch(function () {}); archDb.sync().catch(function () {});
+    return syncBrain();
+  }).catch(function () { /* 'error' で表示 */ });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
 })();

@@ -1,16 +1,17 @@
-/* おしゃれ建築map（記録用）
+/* アーキマップ（記録用）
  * 1件 = { name, lat?, lng?, architect, visited, list, photos:[{id,pub}], one, details:[{id,photo,x,y,part,spec,note,pub}], tags:[], isPublic }
  * 写真はドライブに置き、レコードには id だけを持つ。公開版には「公開データを書き出す」で作る public.json だけを渡す。
- * 脳みそ（app=brain）へ：記録・ディテールの画面の「脳みそに残す」で ../brain/?new=T|D&title=&src={spotId,title,cover}&back=../archmap/?spot=<id>&from=建築map を開く。
- *   記録の編集画面には、脳みそのカードのうち data.source.spotId がこの記録の id のものを並べる（脳みそは読むだけ・書き換えない）
- *   ?spot=<id> で開くと、その記録を開く（脳みその「建築mapで開く」から） */
+ * 脳みそ（app=brain）へ：記録・ディテールの画面の「脳みそに残す」で、このアプリの中のシート（shared/brainnote.js）を開き、
+ *   Apps.collection('brain') に直接 put する（iPhone のホーム画面アプリは接続と控えがアプリごとに別のため、脳みそへは飛ばない）。
+ *   作ったカードは { t:'k', kind:'T'|'D', no:null, source:{ spotId, title, cover }, createdIn:'archmap', … }。番号は脳みそを開いたときに脳みそが振る
+ *   記録の編集画面には、脳みそのカードのうち data.source.spotId がこの記録の id のものを並べ、押すとその場で中身を見せる（編集もシートで）
+ *   ?spot=<id> で開くと、その記録を開く（PCのブラウザで脳みその「ブラウザで開く」から） */
 (function () {
   'use strict';
   var APP = 'archmap';
   var A = window.ArchMap;
   var db = Apps.collection(APP);
   var brain = Apps.collection('brain');   // 脳みその控え（読むだけ）
-  var BRAIN = '../brain/';
   var $ = function (id) { return document.getElementById(id); };
   var LAST_LIST_KEY = 'archmap.lastList';
 
@@ -295,17 +296,16 @@
   }
 
   // ---------- 脳みそへ ----------
-  function brainUrl(params) {
-    return BRAIN + '?' + Object.keys(params).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); }).join('&');
-  }
-  function spotBack(id) { return '../archmap/?spot=' + encodeURIComponent(id); }
   function brainNotesOf(id) {
     return brain.all().filter(function (r) {
       var d = r.data;
       return d && d.t === 'k' && d.source && d.source.spotId === id;
-    }).sort(function (a, b) { return String(a.data.kind).localeCompare(String(b.data.kind)) || (a.data.no || 0) - (b.data.no || 0); });
+    }).sort(function (a, b) {
+      // 種類 → 番号の順。番号がまだのものはその種類の後ろに作成順で
+      var x = BrainNote.hasNo(a.data), y = BrainNote.hasNo(b.data);
+      return String(a.data.kind).localeCompare(String(b.data.kind)) || (x && y ? a.data.no - b.data.no : x !== y ? (x ? -1 : 1) : String(a.createdAt).localeCompare(String(b.createdAt)));
+    });
   }
-  function pad3(n) { n = String(n || 0); while (n.length < 3) n = '0' + n; return n; }
   // 種類 T（テイスト）・D（ディテール）でカードを書きに行く。保存済みの記録だけ
   function toBrain(kind) {
     if (!draft) return;
@@ -317,19 +317,24 @@
     var cv = ph ? Apps.imageUrl(ph.id, 400) : '';
     if (/^https:\/\//.test(cv)) src.cover = cv;
     var title = kind === 'D' ? (name ? name + 'のディテール' : 'ディテール') : name;
-    stashDraft(); // 脳みそから戻ったとき、書きかけのまま続けられるように
-    location.href = brainUrl({ 'new': kind, title: title, src: JSON.stringify(src), back: spotBack(draftId), from: '建築map' });
+    stashDraft();
+    BrainNote.write({ from: APP, kind: kind, title: title, source: src });
   }
   function renderBrainNotes() {
     if (!draft) return;
     var notes = draftId ? brainNotesOf(draftId) : [];
     $('bnLab').textContent = '脳みそのメモ ' + notes.length + '件';
+    var unNo = notes.some(function (n) { return !BrainNote.hasNo(n.data); });
     $('bnotes').innerHTML = !draftId ? '<p class="bn-none">保存すると、この建物から脳みそにメモを残せます。</p>' :
       notes.length ? notes.map(function (n) {
-        return '<a class="bref" href="' + A.esc(brainUrl({ open: n.id, back: spotBack(draftId), from: '建築map' })) + '"><span class="circ">' + A.esc(n.data.kind || 'O') + '<br>' + A.esc(pad3(n.data.no)) + '</span>' +
-          '<span class="rt">' + A.esc(n.data.title) + '</span><span class="go">›</span></a>';
-      }).join('') : '<p class="bn-none">この建物から残したメモはまだありません。</p>';
+        return '<button type="button" class="bref" data-note="' + A.esc(n.id) + '"><span class="circ">' + A.esc(n.data.kind || 'O') + '<br>' + A.esc(BrainNote.noShort(n.data)) + '</span>' +
+          '<span class="rt">' + A.esc(n.data.title) + (n.pending ? ' <small class="wait">送信待ち</small>' : '') + '</span><span class="go">›</span></button>';
+      }).join('') + (unNo ? '<p class="bn-none nonum">「—」のメモの番号は、脳みそを開くと付きます。</p>' : '') : '<p class="bn-none">この建物から残したメモはまだありません。</p>';
   }
+  $('bnotes').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-note]');
+    if (b) BrainNote.show(b.dataset.note, { from: APP });
+  });
   brain.onChange(function () { if (draft && !$('editor').hidden) renderBrainNotes(); });
 
   // ---------- ディテールのメモ ----------
@@ -607,7 +612,7 @@
     Apps.toast('書きかけの記録を戻しました');
   })();
 
-  // ?spot=<id> で開いたら、その記録を開く（脳みその「建築mapで開く」・「建築mapに戻る」から）
+  // ?spot=<id> で開いたら、その記録を開く（PCのブラウザで脳みその「ブラウザで開く」から）
   (function openSpotFromUrl() {
     var id = null;
     try { id = new URLSearchParams(location.search).get('spot'); } catch (e) { id = null; }

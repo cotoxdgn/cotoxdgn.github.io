@@ -146,6 +146,10 @@ label { display: block; }
 .nref .rt { flex: 1; min-width: 0; overflow-wrap: anywhere; line-height: 1.35; }
 .nref .rt small { color: var(--mute); }
 .nref .go { color: var(--mute); }
+.nref, .make { font-family: inherit; cursor: pointer; }
+.nref .rt .wait { color: var(--red); font-size: 11px; }
+.pc-link { display: inline-block; margin-left: 4px; color: var(--mute); font-size: 11px; }
+.nonum { margin-top: 6px; }
 .notes-none { color: var(--mute); font-size: 13px; margin: 0; }
 .make { display: flex; align-items: center; justify-content: center; border: 1.5px dashed var(--k-B); background: transparent; color: var(--k-B); border-radius: 10px; padding: 10px; min-height: 48px; font-weight: 700; width: 100%; text-decoration: none; }
 .biblio summary { cursor: pointer; color: var(--mute); font-size: 14px; min-height: 36px; display: flex; align-items: center; }

@@ -1,7 +1,7 @@
 /* このアプリをオフラインでも開けるようにする仕組み。CACHE の名前はアプリごとに変え、更新のたびに番号を上げる */
-var CACHE = 'hondana-v3';
+var CACHE = 'hondana-v4';
 var SHELL = ['./', 'index.html', 'app.js', 'app.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png',
-  '../shared/apps.js', '../shared/apps.css'];
+  '../shared/apps.js', '../shared/apps.css', '../shared/brainnote.js'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));

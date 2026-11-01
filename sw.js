@@ -1,6 +1,6 @@
 /* ホーム（アプリ一覧）をオフラインでも開けるようにする仕組み
  * 各アプリのページは、それぞれのフォルダの sw.js が担当する（こちらは触らない）。 */
-var CACHE = 'home-v3';
+var CACHE = 'home-v4';
 var SHELL = ['./', 'index.html', 'manifest.webmanifest', 'shared/apps.js', 'shared/apps.css',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
