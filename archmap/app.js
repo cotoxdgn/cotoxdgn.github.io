@@ -441,9 +441,18 @@
     if (direct && !/maps\.app\.goo\.gl|goo\.gl\/maps/.test(m[0])) { apply({ lat: direct.lat, lng: direct.lng, name: '' }); return true; }
     var box = $('geoHits'); box.hidden = false; box.innerHTML = '<p class="geo-msg">Googleマップのリンクを読んでいます…</p>';
     Apps.call(APP, 'mapLink', { url: m[0] }, { timeout: 20000 }).then(function (d) { apply(d.place); }, function (e) {
+      if (e && (e.code === 'not_connected' || e.message === 'not_connected')) { box.innerHTML = ''; box.appendChild(connectHint()); return; }
       box.innerHTML = '<p class="geo-msg">リンクから場所を読めませんでした（' + A.esc(Apps.errorText(e)) + '）。Googleマップで場所を開き直して［共有］→［リンクをコピー］をもう一度試してください。</p>';
     });
     return true;
+  }
+  // この端末が自分用スプシにつながっていないとき：名前検索とリンク読み取りが使えないので、つなぐ案内を出す
+  function connectHint() {
+    var d = document.createElement('div'); d.className = 'gmaps';
+    d.innerHTML = '<p class="geo-msg">この端末（このブラウザ）はまだ自分用スプシにつながっていないため、名前での検索とGoogleマップのリンク読み取りが使えません。</p>' +
+      '<div class="ax-row name-row"><button class="ax-btn small" type="button">この端末をつなぐ</button></div>';
+    d.querySelector('button').onclick = function () { stashDraft(); Apps.openConnectSheet(APP); };
+    return d;
   }
   function gmapsBlock(q) {
     var wrap = document.createElement('div'); wrap.className = 'gmaps';
@@ -474,11 +483,11 @@
   function hideHits() { $('geoHits').hidden = true; $('geoHits').innerHTML = ''; }
   function searchPlace(q) {
     if (!navigator.onLine) { Apps.toast('オフラインのため名前で探せません。地図をタップしてください', true); return; }
-    var box = $('geoHits'); box.hidden = false; box.innerHTML = '<p class="geo-msg">探しています…</p>';
+    var box = $('geoHits'), notConn = false; box.hidden = false; box.innerHTML = '<p class="geo-msg">探しています…</p>';
     // まずGoogleマップの検索（自分用スプシのプログラム経由）。使えなければ OpenStreetMap で探す
     Apps.call(APP, 'geocode', { q: q }, { timeout: 20000 }).then(function (d) {
       return (d.results || []).map(function (x) { return { name: x.name, sub: x.address, lat: x.lat, lng: x.lng }; });
-    }, function () { return null; }).then(function (hits) {
+    }, function (e) { if (e && (e.code === 'not_connected' || e.message === 'not_connected')) notConn = true; return null; }).then(function (hits) {
       if (hits && hits.length) return hits;
       var url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=ja&countrycodes=jp&q=' + encodeURIComponent(q);
       return fetch(url).then(function (r) { return r.json(); }).then(function (list) {
@@ -492,7 +501,7 @@
       box.innerHTML = '';
       if (!hits.length) {
         box.innerHTML = '<p class="geo-msg">「' + A.esc(q) + '」は見つかりませんでした。</p>';
-        box.appendChild(gmapsBlock(q));
+        box.appendChild(notConn ? connectHint() : gmapsBlock(q));
         return;
       }
       hits.forEach(function (x) {
@@ -507,7 +516,7 @@
         };
         box.appendChild(b);
       });
-      box.appendChild(gmapsBlock(q));
+      box.appendChild(notConn ? connectHint() : gmapsBlock(q));
     });
   }
   $('nameFindBtn').onclick = function () {
