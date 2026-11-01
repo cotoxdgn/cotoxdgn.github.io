@@ -436,7 +436,7 @@
       if (p.name && !$('f-name').value.trim()) $('f-name').value = p.name;
       else if (p.name && MAP_LINK_RE.test($('f-name').value)) $('f-name').value = p.name;
       hideHits(); $('manual').open = false;
-      Apps.toast('Googleマップの場所を入れました');
+      locDone(p.name || 'Googleマップの場所');
     };
     if (direct && !/maps\.app\.goo\.gl|goo\.gl\/maps/.test(m[0])) { apply({ lat: direct.lat, lng: direct.lng, name: '' }); return true; }
     var box = $('geoHits'); box.hidden = false; box.innerHTML = '<p class="geo-msg">Googleマップのリンクを読んでいます…</p>';
@@ -445,6 +445,13 @@
       box.innerHTML = '<p class="geo-msg">リンクから場所を読めませんでした（' + A.esc(Apps.errorText(e)) + '）。Googleマップで場所を開き直して［共有］→［リンクをコピー］をもう一度試してください。</p>';
     });
     return true;
+  }
+  // 場所を入れたら、名称の下に「入りました」を出して地図へ目を向けさせる（地図は写真の下にあり見えないことがあるため）
+  function locDone(label) {
+    var box = $('geoHits'); box.hidden = false;
+    box.innerHTML = '<p class="geo-ok">📍「' + A.esc(label) + '」の場所を入れました <button type="button" class="ax-btn small">地図で確かめる</button></p>';
+    box.querySelector('button').onclick = function () { $('pickMap').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+    Apps.toast('場所を入れました');
   }
   // この端末が自分用スプシにつながっていないとき：名前検索とリンク読み取りが使えないので、つなぐ案内を出す
   function connectHint() {
@@ -507,15 +514,17 @@
       hits.forEach(function (x) {
         var b = document.createElement('button');
         b.type = 'button'; b.className = 'geo-hit';
-        b.innerHTML = '<b>' + A.esc(x.name || x.sub || q) + '</b>' + (x.name && x.sub ? '<span>' + A.esc(x.sub) + '</span>' : '');
+        b.innerHTML = '<b>' + A.esc(x.name || x.sub || q) + '</b>' + (x.name && x.sub ? '<span>' + A.esc(x.sub) + '</span>' : '') + '<em>この場所にする ›</em>';
         b.onclick = function () {
           setLoc(x.lat, x.lng, true);
           if (!$('f-name').value.trim() && x.name) $('f-name').value = x.name;
           hideHits(); $('manual').open = false;
-          Apps.toast('場所を入れました');
+          locDone(x.name || x.sub || q);
         };
         box.appendChild(b);
       });
+      // 候補が1件だけなら、そのまま入れる（違えば地図をタップして直せる）
+      if (hits.length === 1) { box.firstChild.click(); box.appendChild(gmapsBlock(q)); return; }
       box.appendChild(notConn ? connectHint() : gmapsBlock(q));
     });
   }
