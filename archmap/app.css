@@ -156,3 +156,14 @@ textarea.ax-input { resize: vertical; }
 .name-row .ax-input { flex: 1; min-width: 0; }
 .gmaps { display:flex; flex-direction:column; gap:6px; margin-top:4px; padding-top:8px; border-top:1px dashed var(--ax-line); }
 .gmaps a.ax-btn { text-decoration:none; }
+
+/* 脳みそのメモ（脳みそのカードへのリンク） */
+.bnotes { display: grid; gap: 6px; }
+.bref { display: flex; align-items: center; gap: 10px; border: 1px solid var(--ax-line); border-radius: 8px; padding: 6px 10px; min-height: 48px; font-size: 14px; color: inherit; text-decoration: none; }
+.bref .circ { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--ax-text); display: grid; place-items: center; font: 700 9.5px/1.05 var(--am-num); text-align: center; flex: none; }
+.bref .rt { flex: 1; min-width: 0; overflow-wrap: anywhere; line-height: 1.35; }
+.bref .go { color: var(--ax-muted); }
+.bn-none { color: var(--ax-muted); font-size: 13px; margin: 0; }
+.brain-btn { border-style: dashed; }
+.dt-brain { padding: 0 16px 24px; }
+.dt-brain .brain-btn { width: 100%; }
