@@ -123,6 +123,26 @@ Apps.call(app, action, params) // → Promise<レスポンス>（ok:false は Er
 - `offline` `network` `timeout` `busy` `bad_key`：送信待ちは残り、次の機会に再送
 - `too_long` `bad_id` など内容の問題：その1件は送信待ちから外れ、error で通知
 
+## 脳みそのメモをほかのアプリの中で書く（shared/brainnote.js）
+
+iPhone のホーム画面アプリはアプリごとに保存場所（接続・控え）が別なので、ほかのアプリへリンクで飛ぶと、飛んだ先は未接続のことが多い。
+脳みそ（app=brain）のカードは、飛ばずに元のアプリの中で書く：
+
+```html
+<script src="../shared/apps.js"></script>
+<script src="../shared/brainnote.js"></script>
+```
+
+```js
+BrainNote.write({ from: 'hondana', kind: 'B', source: { bookId, title, author, cover }, page: true }); // 書く
+BrainNote.show(cardId, { from: 'hondana', page: true });   // 中身を見る（「編集」で直せる）
+BrainNote.noLabel(card.data);                               // 'B-001'／番号がまだなら 'B-（未採番）'
+```
+
+- `Apps.collection('brain')` に直接 put する（オフラインなら送信待ち）。新しいカードは `no: null`・`createdIn: <アプリ名>`
+- 番号は脳みそが振る（脳みそを開いて読み込み・同期したとき、種類ごと・作成日時順。番号のあるカードは書き換えない）
+- sw.js の SHELL に `'../shared/brainnote.js'` を足す
+
 ## その他
 
 `Apps.toast(msg, isError)` / `Apps.uuid()` / `Apps.isIOS()` / `Apps.isStandalone()` / `Apps.loadScript(src)`

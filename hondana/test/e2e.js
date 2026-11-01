@@ -1,4 +1,4 @@
-// 本棚 の画面試験（Playwright の Chromium）＋ 脳みそとの行き来
+// 本棚 の画面試験（Playwright の Chromium）＋ 脳みそとの連携（本棚の中で書く → 脳みそが番号を振る → 出典のシート）
 // 実行：node hondana/test/e2e.js [スクショの保存先]
 // スプシ（Apps Script）は test/gas-mock.js の Code.gs に、openBD・Google Books・表紙画像は試験用の返事につなぐ。
 // バーコード読み取りの部品（@zxing/browser@0.1.5）は CDN の代わりに npm から取ったものを使う（ZXING_UMD で場所を指定可）。
@@ -144,7 +144,7 @@ let passed = 0;
 async function t(name, fn) { await fn(); passed++; console.log('ok -', name); }
 async function settled(page) {
   for (let i = 0; i < 100; i++) {
-    if (await page.evaluate(() => Apps.pendingCount()) === 0) return;
+    if (await page.evaluate(() => Apps.pendingCount().then(n => n === 0 && ['brain', 'hondana'].every(a => Apps.collection(a).all().every(r => !r.pending))))) return;
     await page.waitForTimeout(100);
   }
   throw new Error('送信待ちが残ったまま');
@@ -312,86 +312,164 @@ const today = () => { const d = new Date(); return d.getFullYear() + '-' + Strin
     await page.click('#scrDetail [data-go=shelf]');
   });
 
-  await t('「脳みそにメモを作る」→ 脳みそで B-001（出典・ページ）→ 本棚に戻ると一覧に出る', async () => {
+  // ---------- 脳みそとの連携：本棚の中で書く（脳みそへは飛ばない）→ 番号は脳みそが振る ----------
+  const noteBy = s => cards().find(r => r.data.title.includes(s));
+  await t('「脳みそにメモを作る」→ 本棚の中のシートで書く → 番号なし（no:null）で脳みそへ送られる', async () => {
     await page.locator('#shelves .book[aria-label*="陰翳礼讃"]').click();
     assert.ok(await page.isVisible('#detail >> text=この本から作ったメモはまだありません'));
     await page.screenshot({ path: path.join(SHOT, 'phone-5-detail.png') });
-    await page.click('#detail .make');
-    await page.waitForSelector('#editor:not([hidden])');
-    assert.ok(!(await page.url()).includes('?'), 'URL の下書きは消す');
-    assert.ok(await page.isVisible('#edFrom >> text=本棚から開きました'));
-    assert.strictEqual(await page.getAttribute('#edKinds .chip.on', 'data-edkind'), 'B');
-    assert.strictEqual(await page.textContent('#edNo'), '番号：B-001');
-    assert.ok(await page.isVisible('#edSrc >> text=陰翳礼讃'));
-    // 追加の種類の「B（ブログ）」は重ねて出さない
-    assert.strictEqual(await page.locator('#edKinds [data-edkind=B]').count(), 1);
-    await page.fill('#f-page', 'p.32');
-    await page.fill('#f-title', '（試験）暗がりがあるから金が映える');
-    await page.fill('#f-tags', '照明 陰影');
-    await page.screenshot({ path: path.join(SHOT, 'phone-6-brain-edit.png') });
-    await page.click('#edSave');
-    await page.waitForSelector('.app.detail-open');
-    await settled(page);
-    const c = cards().find(r => r.data.kind === 'B');
-    const book = bookBy('陰翳礼讃');
-    assert.strictEqual(c.data.no, 1);
-    assert.deepStrictEqual(c.data.source, { bookId: book.id, title: '（試験）陰翳礼讃', author: '谷崎潤一郎', cover: book.data.cover, page: 'p.32' });
-    assert.ok(await page.isVisible('#detail .src >> text=本棚で開く'));
-    assert.ok(await page.isVisible('#detail .rel-item >> text=框なし引戸'), '同じタグ（照明）で既存カードとつながる');
-    await page.screenshot({ path: path.join(SHOT, 'phone-7-brain-card.png') });
-    await page.click('#detail .back-app');
-    await page.waitForSelector('#scrDetail.on');
+    await page.click('#makeNote');
+    await page.waitForSelector('.bn-overlay');
+    assert.ok(/\/hondana\/$/.test(page.url()), '本棚から出ない');
+    assert.strictEqual(await page.getAttribute('.bn-kinds .bn-chip.on', 'data-bnkind'), 'B');
+    // 追加の種類の「B（ブログ）」は重ねて出さない・「プレゼン」は出る
+    assert.strictEqual(await page.locator('.bn-kinds [data-bnkind=B]').count(), 1);
+    assert.ok(await page.isVisible('.bn-kinds >> text=プレゼン'));
+    assert.ok(await page.isVisible('.bn-src >> text=陰翳礼讃'));
+    assert.ok(await page.isVisible('.bn-numline >> text=番号は脳みそを開くと付きます'));
+    await page.fill('.bn-form [name=page]', 'p.32');
+    await page.fill('.bn-form [name=title]', '（試験）暗がりがあるから金が映える');
+    await page.fill('.bn-form [name=body]', '（試験）蒔絵は暗い所で見るもの');
+    await page.fill('.bn-form [name=tags]', '照明 陰影');
+    await page.screenshot({ path: path.join(SHOT, 'phone-6-note-sheet.png') });
+    await page.click('.bn-form [data-bn=save]');
+    await page.waitForSelector('.bn-overlay', { state: 'detached' });
     await page.waitForSelector('#detail .nref >> text=暗がりがあるから金が映える');
+    await settled(page);
+    const c = noteBy('暗がり');
+    const book = bookBy('陰翳礼讃');
+    assert.strictEqual(c.data.no, null);
+    assert.strictEqual(c.data.kind, 'B');
+    assert.strictEqual(c.data.createdIn, 'hondana');
+    assert.deepStrictEqual(c.data.links, []);
+    assert.deepStrictEqual(c.data.uses, []);
+    assert.deepStrictEqual(c.data.tags, ['照明', '陰影']);
+    assert.deepStrictEqual(c.data.source, { bookId: book.id, title: '（試験）陰翳礼讃', author: '谷崎潤一郎', cover: book.data.cover, page: 'p.32' });
+    assert.ok(/—/.test(await page.textContent('#detail .nref .circ')), '番号がまだのときは —');
+    assert.ok(await page.isVisible('#detail .nonum'));
     assert.ok(await page.isVisible('#detail .nref >> text=p.32'));
-    await page.screenshot({ path: path.join(SHOT, 'phone-8-detail-notes.png') });
+    await page.screenshot({ path: path.join(SHOT, 'phone-7-detail-notes.png') });
   });
 
-  await t('本棚 → カード → 「本棚で開く」で本に戻る／2件目は B-002', async () => {
-    await page.click('#detail .nref');
-    await page.waitForSelector('.app.detail-open');
-    await page.click('#detail a.src');
-    await page.waitForSelector('#scrDetail.on');
-    await page.waitForSelector('#detail h3 >> text=陰翳礼讃');
-    await page.click('#detail .make');
-    await page.waitForSelector('#editor:not([hidden])');
-    assert.strictEqual(await page.textContent('#edNo'), '番号：B-002');
-    await page.fill('#f-title', '（試験）障子越しの光は面で効く');
-    await page.click('#edSave');
-    await page.waitForSelector('.app.detail-open');
+  await t('オフラインで書く → 送信待ち → つながったら送る', async () => {
+    await phone.setOffline(true);
+    await page.click('#makeNote');
+    await page.waitForSelector('.bn-overlay');
+    await page.fill('.bn-form [name=title]', '（試験）障子越しの光は面で効く');
+    await page.click('.bn-form [data-bn=save]');
+    await page.waitForSelector('#detail .nref >> text=障子越しの光は面で効く');
+    assert.ok(await page.isVisible('#detail .nref:has-text("障子越し") .wait'), '送信待ちと出る');
+    await page.waitForTimeout(400);
+    assert.strictEqual(await page.evaluate(() => Apps.collection('brain').pendingCount()), 1);
+    assert.ok(/送信待ち 1件/.test(await page.textContent('#pend')));
+    assert.ok(!noteBy('障子越し'), 'オフライン中はスプシに行かない');
+    await phone.setOffline(false);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
     await settled(page);
-    await page.click('#dtBack');
+    const c = noteBy('障子越し');
+    assert.ok(c && c.data.no === null && c.data.createdIn === 'hondana');
+    assert.strictEqual(await page.locator('#detail .nref').count(), 2);
+  });
+
+  // 脳みそは別のホーム画面アプリ（＝保存場所が別）として開く
+  const bctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+  await wire(bctx);
+  const bpage = await bctx.newPage();
+  bpage.on('pageerror', e => errors.push('brain: ' + e.message));
+  bpage.on('console', m => { if (m.type() === 'error' && !/favicon/.test(m.text())) errors.push('brain console: ' + m.text()); });
+  await t('脳みそを開くと番号が振られ（作成順・既存は書き換えない）一覧に出る', async () => {
+    await bpage.goto(BASE + '/brain/' + hash);
+    await bpage.waitForFunction(() => document.querySelectorAll('#list .item').length === 3);
+    await bpage.waitForFunction(() => /B-002/.test(document.getElementById('list').textContent), null, { timeout: 10000 });
+    await settled(bpage);
+    assert.strictEqual(noteBy('暗がり').data.no, 1);
+    assert.strictEqual(noteBy('障子越し').data.no, 2);
+    const nos = await bpage.$$eval('#list .item .no', a => a.map(e => e.textContent));
+    assert.ok(nos.includes('B-001') && nos.includes('B-002') && nos.includes('D-001'), nos.join(','));
+    // もう一度読み込んでも振り直さない
+    await bpage.reload();
+    await bpage.waitForFunction(() => document.querySelectorAll('#list .item').length === 3);
+    await bpage.waitForTimeout(300);
+    await settled(bpage);
+    assert.strictEqual(noteBy('暗がり').data.no, 1);
+    assert.strictEqual(cards().filter(r => r.data.kind === 'B').map(r => r.data.no).sort().join(','), '1,2');
+    await bpage.screenshot({ path: path.join(SHOT, 'phone-8-brain-numbered.png') });
+  });
+
+  await t('脳みそ：「本棚で開く」は飛ばずに出典の本をシートで見せる', async () => {
+    await bpage.locator('#list .item', { hasText: '暗がりがあるから' }).click();
+    await bpage.waitForSelector('.app.detail-open');
+    assert.ok(await bpage.isVisible('#detail .rel-item >> text=框なし引戸'), '同じタグ（照明）で既存カードとつながる');
+    assert.ok(/（本棚で）/.test(await bpage.textContent('#detail .dt-foot')), '作成元が出る');
+    await bpage.click('#detail .src[data-srcopen]');
+    await bpage.waitForSelector('#srcSheet:not([hidden])');
+    assert.ok(/\/brain\/$/.test(bpage.url()), '脳みそから出ない');
+    const tx = await bpage.textContent('#ssBody');
+    assert.ok(tx.includes('陰翳礼讃') && tx.includes('谷崎潤一郎') && tx.includes('読んだ'), tx);
+    const book = bookBy('陰翳礼讃');
+    assert.strictEqual(await bpage.getAttribute('#ssBody .ss-open', 'href'), '../hondana/?book=' + book.id);
+    assert.ok(await bpage.isVisible('#ssBody .cover img'));
+    await bpage.screenshot({ path: path.join(SHOT, 'phone-9-brain-src-sheet.png') });
+    await bpage.click('#srcSheet [data-ssclose]');
+    await bpage.waitForSelector('#srcSheet', { state: 'hidden' });
+    await bpage.click('#dtBack');
+  });
+
+  await t('本棚に戻ると番号付きで出る・中身を見て、その場で直せる', async () => {
+    // アプリに戻った（前面に来た）ときの自動同期
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await page.waitForFunction(() => [...document.querySelectorAll('#detail .nref .circ')].map(e => e.textContent).join('|') === 'B001|B002');
+    assert.ok(await page.isHidden('#detail .nonum'));
+    await page.locator('#detail .nref', { hasText: '暗がり' }).click();
+    await page.waitForSelector('.bn-overlay .bn-view');
+    const v = await page.textContent('.bn-view');
+    assert.ok(v.includes('B-001') && v.includes('蒔絵は暗い所で見るもの') && v.includes('#照明'), v);
+    await page.screenshot({ path: path.join(SHOT, 'phone-10-note-view.png') });
+    await page.click('.bn-view [data-bn=edit]');
+    await page.waitForSelector('.bn-form');
+    assert.ok(await page.isVisible('.bn-numline >> text=B-001'));
+    assert.strictEqual(await page.inputValue('.bn-form [name=page]'), 'p.32');
+    await page.fill('.bn-form [name=body]', '（試験）蒔絵は暗い所で見るもの。金は闇で光る');
+    await page.click('.bn-form [data-bn=save]');
+    await page.waitForSelector('.bn-overlay', { state: 'detached' });
+    await settled(page);
+    const c = noteBy('暗がり');
+    assert.strictEqual(c.data.body, '（試験）蒔絵は暗い所で見るもの。金は闇で光る');
+    assert.strictEqual(c.data.no, 1, '番号はそのまま');
+    assert.strictEqual(c.data.source.page, 'p.32');
   });
 
   await t('脳みそ：ひらめきは1行だけで書ける・一覧と図に新しい種類', async () => {
-    await page.click('.tab-new');
-    await page.locator('#edKinds .chip', { hasText: 'ひらめき' }).click();
-    assert.ok(await page.isHidden('#edSrcFld'));
-    assert.ok(/1行/.test(await page.getAttribute('#f-title', 'placeholder')));
-    await page.fill('#f-title', '（試験）玄関に一時置きの棚を必ず提案する');
-    await page.click('#edSave');
-    await page.waitForSelector('.app.detail-open');
-    await settled(page);
+    await bpage.click('.tab-new');
+    await bpage.locator('#edKinds .chip', { hasText: 'ひらめき' }).click();
+    assert.ok(await bpage.isHidden('#edSrcFld'));
+    assert.ok(/1行/.test(await bpage.getAttribute('#f-title', 'placeholder')));
+    await bpage.fill('#f-title', '（試験）玄関に一時置きの棚を必ず提案する');
+    await bpage.click('#edSave');
+    await bpage.waitForSelector('.app.detail-open');
+    await settled(bpage);
     const h = cards().find(r => r.data.kind === 'H');
     assert.strictEqual(h.data.no, 1);
     assert.ok(!h.data.source);
-    await page.click('#dtBack');
-    const chips = await page.$$eval('#kinds .chip', a => a.map(e => e.textContent.replace(/\d+$/, '')));
+    await bpage.click('#dtBack');
+    const chips = await bpage.$$eval('#kinds .chip', a => a.map(e => e.textContent.replace(/\d+$/, '')));
     assert.ok(chips.includes('本のメモ') && chips.includes('ひらめき') && chips.includes('プレゼン'), chips.join(','));
     assert.ok(!chips.includes('ブログ'));
-    assert.strictEqual(await page.locator('#list .item').count(), 4);
-    await page.screenshot({ path: path.join(SHOT, 'phone-9-brain-list.png') });
-    await page.locator('#tabbar [data-view=graph]').click();
-    await page.waitForFunction(() => document.getElementById('graph').dataset.nodes === '4');
-    const ds = await page.evaluate(() => ({ ...document.getElementById('graph').dataset }));
+    assert.strictEqual(await bpage.locator('#list .item').count(), 4);
+    await bpage.screenshot({ path: path.join(SHOT, 'phone-9-brain-list.png') });
+    await bpage.locator('#tabbar [data-view=graph]').click();
+    await bpage.waitForFunction(() => document.getElementById('graph').dataset.nodes === '4');
+    const ds = await bpage.evaluate(() => ({ ...document.getElementById('graph').dataset }));
     assert.ok(+ds.edges >= 2, '同じ本・同じタグの線 ' + ds.edges);
-    await page.waitForTimeout(800);
-    await page.screenshot({ path: path.join(SHOT, 'phone-10-brain-graph.png') });
+    await bpage.waitForTimeout(800);
+    await bpage.screenshot({ path: path.join(SHOT, 'phone-10-brain-graph.png') });
     // 設定：本のメモ・ひらめきは外せない
-    await page.click('#settingsBtn');
-    for (const n of ['本のメモ', 'ひらめき']) assert.strictEqual(await page.locator('#stKinds div', { hasText: n }).locator('[data-rmkind]').count(), 0);
-    await page.click('#stClose');
+    await bpage.click('#settingsBtn');
+    for (const n of ['本のメモ', 'ひらめき']) assert.strictEqual(await bpage.locator('#stKinds div', { hasText: n }).locator('[data-rmkind]').count(), 0);
+    await bpage.click('#stClose');
   });
 
+  await bctx.close();
   await t('今までの脳みそのデータは書き換わらない', async () => {
     const now = Object.fromEntries(serverList('brain').map(r => [r.id, JSON.stringify(r)]));
     for (const id of Object.keys(before)) assert.strictEqual(now[id], before[id], id);

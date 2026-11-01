@@ -312,6 +312,39 @@ const inked = async page => {
     assert.strictEqual(await page.locator('#list .item').count(), 3);
   });
 
+  // ---------- ほかのアプリ（本棚・アーキマップ）で作った番号なしのカード ----------
+  await t('番号なし（no:null）のカードは、同期で種類ごと・作成順に番号が振られる（既存は書き換えない）', async () => {
+    const H = req => gas.ctx.handle_(Object.assign({ key: KEY, action: 'put', app: 'brain' }, req));
+    const nn = (title, kind, at, src) => ({ t: 'k', kind, no: null, title, body: '', tags: [], photos: [], links: [], uses: [], source: src, createdIn: src.spotId ? 'archmap' : 'hondana' });
+    // 作成日時の新しい方から先に届く（順番は作成日時で決まる）
+    H({ id: 'nn-t2', createdAt: '2026-10-31T10:00:00Z', data: nn('（試験）あとのテイスト', 'T', 0, { spotId: 'spot-x', title: '（試験）建物X' }) });
+    H({ id: 'nn-t1', createdAt: '2026-10-31T09:00:00Z', data: nn('（試験）さきのテイスト', 'T', 0, { spotId: 'spot-x', title: '（試験）建物X' }) });
+    H({ id: 'nn-o1', createdAt: '2026-10-31T09:30:00Z', data: nn('（試験）ほかのメモ', 'O', 0, { bookId: 'book-x', title: '（試験）本X' }) });
+    const before = Object.fromEntries(serverList().filter(r => r.data && r.data.t === 'k' && typeof r.data.no === 'number').map(r => [r.id, JSON.stringify(r.data)]));
+    const maxT = Math.max(0, ...serverList().filter(r => r.data && r.data.kind === 'T' && typeof r.data.no === 'number').map(r => r.data.no));
+    await pg.click('#syncBtn');
+    await pg.waitForFunction(() => /T-00\d/.test(document.getElementById('list').textContent) && !/未採番/.test(document.getElementById('list').textContent));
+    await settled(pg);
+    assert.strictEqual(byTitle('さきのテイスト').data.no, maxT + 1);
+    assert.strictEqual(byTitle('あとのテイスト').data.no, maxT + 2);
+    assert.strictEqual(byTitle('ほかのメモ').data.no, 1);
+    for (const [id, d] of Object.entries(before)) assert.strictEqual(JSON.stringify(serverList().find(r => r.id === id).data), d, id);
+    // 出典のシート：控えが無い本・建物はカードの情報だけで出す
+    await pg.locator('#list .item', { hasText: 'さきのテイスト' }).click();
+    assert.ok(/アーキマップで（|（アーキマップで）/.test(await pg.textContent('#detail .dt-foot')));
+    await pg.click('#detail .src[data-srcopen]');
+    await pg.waitForSelector('#srcSheet:not([hidden])');
+    assert.ok(/建物X/.test(await pg.textContent('#ssBody')) && /控えがまだこの端末にありません/.test(await pg.textContent('#ssBody')));
+    await pg.click('#srcSheet [data-ssclose]');
+    // もう1台（iPhone）で同期しても振り直さない
+    await page.click('#syncBtn');
+    await page.waitForFunction(() => /さきのテイスト/.test(document.getElementById('list').textContent));
+    await page.waitForTimeout(400);
+    await settled(page);
+    assert.strictEqual(byTitle('さきのテイスト').data.no, maxT + 1);
+    assert.strictEqual(serverList().filter(r => r.data && r.data.kind === 'T').map(r => r.data.no).sort().join(','), Array.from({ length: maxT + 2 }, (_, i) => i + 1).join(','));
+  });
+
   await browser.close();
   server.close();
   if (errors.length) { console.error(errors.join('\n')); process.exit(1); }

@@ -1,6 +1,6 @@
 {
-  "name": "おしゃれ建築map",
-  "short_name": "建築map",
+  "name": "アーキマップ",
+  "short_name": "アーキマップ",
   "lang": "ja",
   "id": "/archmap/",
   "start_url": "./",

@@ -1,4 +1,4 @@
-/* おしゃれ建築map（記録用）。白い紙＋墨＋青インクのピン、誌面のような番号付きリスト */
+/* アーキマップ（記録用）。白い紙＋墨＋青インクのピン、誌面のような番号付きリスト */
 :root {
   --ax-bg: #FBFBF8;
   --ax-surface: #FFFFFF;
@@ -163,6 +163,9 @@ textarea.ax-input { resize: vertical; }
 .bref .circ { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--ax-text); display: grid; place-items: center; font: 700 9.5px/1.05 var(--am-num); text-align: center; flex: none; }
 .bref .rt { flex: 1; min-width: 0; overflow-wrap: anywhere; line-height: 1.35; }
 .bref .go { color: var(--ax-muted); }
+button.bref { width: 100%; background: transparent; text-align: left; font-family: inherit; cursor: pointer; }
+.bref .rt .wait { color: var(--ax-danger); font-size: 11px; }
+.nonum { margin-top: 4px; }
 .bn-none { color: var(--ax-muted); font-size: 13px; margin: 0; }
 .brain-btn { border-style: dashed; }
 .dt-brain { padding: 0 16px 24px; }
