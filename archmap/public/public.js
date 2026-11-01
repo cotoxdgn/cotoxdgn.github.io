@@ -4,7 +4,7 @@
 
   // ▼ HP の導線。URL が決まったらここを書き換える（空のままならボタンは出ない）
   var LINKS = {
-    works: '',    // cotoの作品ページ
+    works: '../../brain/public/',    // cotoの作品ページ（脳みその実績の公開ページの一覧）
     consult: ''   // 相談ページ
   };
   var DATA_URL = 'public.json';

@@ -1,0 +1,73 @@
+/* 実績の公開ページ。脳みそと同じ「トレーシングペーパー×鉛筆×朱書き」 */
+:root {
+  --bg: #F8F9F6; --ink: #24282A; --mute: #6B726F; --line: #C9CEC8; --hair: #DDE1DB; --red: #C2412B; --on-red: #FFFFFF; --ph: #E4E7E1;
+  --disp: "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --body: "Zen Kaku Gothic New", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #1B1F20; --ink: #E3E6E2; --mute: #99A19D; --line: #3A4042; --hair: #2C3133; --red: #EC7A62; --on-red: #1A0E0B; --ph: #2A2F30;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #1B1F20; --ink: #E3E6E2; --mute: #99A19D; --line: #3A4042; --hair: #2C3133; --red: #EC7A62; --on-red: #1A0E0B; --ph: #2A2F30;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.6; overflow-x: hidden; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+
+.pp { max-width: 1080px; margin: 0 auto; display: grid; gap: 26px;
+  padding: 20px max(16px, env(safe-area-inset-right)) 48px max(16px, env(safe-area-inset-left)); }
+.pp-loading, .pp-empty { color: var(--mute); margin: 24px 0; }
+.pp-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--ink); padding-bottom: 8px; }
+.pp-top a { font-family: var(--disp); font-size: 22px; font-weight: 700; text-decoration: none; }
+.pp-top span { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--mute); }
+.kicker { font-family: var(--mono); font-size: 11px; letter-spacing: .16em; color: var(--red); }
+.pp h1 { margin: 2px 0 0; font-family: var(--disp); font-size: 26px; line-height: 1.4; text-wrap: balance; word-break: auto-phrase; overflow-wrap: anywhere; }
+.pp h2 { margin: 0 0 10px; font-family: var(--disp); font-size: 18px; display: flex; align-items: center; gap: 10px; }
+.pp h2::before { content: ""; width: 18px; border-top: 1.5px solid var(--red); flex: none; }
+.pp p { margin: 0; line-height: 1.95; overflow-wrap: anywhere; white-space: pre-wrap; }
+.pp-intro { display: grid; gap: 8px; }
+.pp-intro p { color: var(--mute); white-space: normal; }
+
+.ph { position: relative; display: block; border-radius: 4px; overflow: hidden; background: var(--ph); aspect-ratio: 4 / 3; }
+.ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ph .ba { position: absolute; left: 8px; top: 8px; font-size: 11px; padding: 0 7px; border-radius: 3px; background: var(--ink); color: var(--bg); font-weight: 700; letter-spacing: .04em; line-height: 1.7; }
+.ph .ba.after { background: var(--red); color: var(--on-red); }
+
+.pp-work { display: grid; gap: 30px; }
+.pp-hero { display: grid; gap: 16px; }
+.pp-hero .ph { aspect-ratio: 16 / 10; }
+.pp-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 12px 0 0; border-top: 1px solid var(--hair); }
+.pp-meta div { padding: 8px 0; border-bottom: 1px solid var(--hair); min-width: 0; }
+.pp-meta dt { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; color: var(--mute); }
+.pp-meta dd { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.pp-two { display: grid; gap: 26px; }
+.pairs { display: grid; gap: 14px; }
+.pair { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+.pp-gal { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.pp-know { display: flex; flex-wrap: wrap; gap: 6px; }
+.pp-know span { border: 1px solid var(--kc); border-radius: 999px; padding: 2px 11px; font-size: 13px; display: inline-flex; gap: 6px; align-items: center; max-width: 100%; overflow-wrap: anywhere; }
+.pp-know i { font-style: normal; font-size: 10.5px; color: var(--kc); white-space: nowrap; }
+.pp-cta { border-top: 1px solid var(--ink); padding-top: 18px; display: grid; gap: 12px; }
+.pp-cta .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.pp-cta .btns:empty { display: none; }
+.pp-cta a { text-decoration: none; border: 1px solid var(--ink); padding: 9px 18px; border-radius: 999px; font-size: 14px; min-height: 44px; display: inline-flex; align-items: center; }
+.pp-cta a.p { background: var(--ink); color: var(--bg); }
+.pp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 10px; }
+.pp-card { display: grid; gap: 4px; text-decoration: none; align-content: start; min-width: 0; }
+.pp-card b { font-weight: 500; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.pp-card small { color: var(--mute); font-size: 12px; }
+.pp-card:hover b { text-decoration: underline; }
+
+@media (min-width: 760px) {
+  .pp { padding-top: 30px; gap: 36px; }
+  .pp-hero { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: end; gap: 28px; }
+  .pp h1 { font-size: 32px; }
+  .pp-two { grid-template-columns: 1fr 1fr; gap: 40px; }
+  .pp-gal { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pairs { grid-template-columns: 1fr 1fr; gap: 20px; }
+  .pp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px 16px; }
+}

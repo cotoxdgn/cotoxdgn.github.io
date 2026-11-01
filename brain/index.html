@@ -19,6 +19,9 @@
 <div class="app" id="app">
   <header class="top">
     <h1 class="brand">脳みそ<span>ポートフォリオ</span></h1>
+    <div class="modesw" id="modeSw" role="group" aria-label="知識と実績の切り替え">
+      <button type="button" data-view="list" class="on" aria-pressed="true">知識</button><button type="button" data-view="works" aria-pressed="false">実績</button>
+    </div>
     <div class="top-r">
       <span class="pend" id="pend" hidden></span>
       <button class="ibtn" type="button" id="syncBtn" aria-label="同期する" title="同期する"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14.3 4.9M4 12A8 8 0 0 1 18.3 7.1"/><path d="M18.5 3v4.3h-4.3M5.5 21v-4.3h4.3"/></svg></button>
@@ -70,10 +73,37 @@
     </div>
   </section>
 
+  <!-- 実績（ポートフォリオ） -->
+  <section class="pane pane-works" id="paneWorks" aria-label="実績の一覧">
+    <div class="filters">
+      <div class="search"><input class="ax-input" id="wq" type="search" placeholder="案件名・場所で検索" autocomplete="off" aria-label="実績を検索"></div>
+      <div class="chips" id="wChips" role="group" aria-label="状態で絞り込み"></div>
+    </div>
+    <div class="works" id="works"></div>
+    <div class="empty" id="wEmpty" hidden>
+      <h2>まだ実績がありません</h2>
+      <p>案件名だけで1件作れます。写真をまとめて放り込み、気づいたことをメモしておくだけで大丈夫です。人に見せたくなったら、あとから仕上げて公開ページにできます。</p>
+      <button class="ax-btn ax-btn-primary" type="button" data-wquick>ささっと作る</button>
+    </div>
+    <p class="nohit" id="wNoHit" hidden>条件に合う実績はありません</p>
+    <div class="orph" id="wOrph"></div>
+    <button class="ax-btn ax-btn-primary fab-works" type="button" data-wquick>＋ ささっと作る</button>
+  </section>
+  <section class="pane pane-work" id="paneWork" aria-label="実績の詳細">
+    <div class="dt-bar">
+      <button class="ax-btn ax-btn-ghost back" type="button" id="wBack">‹ 一覧</button>
+      <button class="ax-btn" type="button" id="wFinBtn">仕上げ</button>
+    </div>
+    <div class="dt" id="wDetail"></div>
+    <div class="dt-none" id="wNone"><p>左の一覧から実績を選ぶと、写真・メモ・使った知識が出ます。</p></div>
+    <input type="file" id="w-photo" accept="image/*" multiple hidden>
+  </section>
+
   <nav class="tabbar" id="tabbar">
     <button type="button" data-view="list" class="on"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>一覧</button>
-    <button type="button" class="tab-new" data-new aria-label="知識を書く"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
     <button type="button" data-view="graph"><svg viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.3"/><circle cx="18" cy="6" r="2.3"/><circle cx="12" cy="17" r="2.6"/><path d="M8 8l3 7M16.5 7.8l-3.3 7.2M8.2 6.8l7.5-.6"/></svg>つながり</button>
+    <button type="button" class="tab-new" data-new aria-label="知識を書く"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button type="button" data-view="works"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.8"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4"/></svg>実績</button>
   </nav>
   <button class="ax-btn ax-btn-primary fab-new" type="button" data-new>＋ 知識を書く</button>
 </div>
@@ -133,7 +163,7 @@
 </div>
 <div class="ax-overlay" id="picker" hidden>
   <div class="ax-sheet">
-    <div class="ax-sheet-head"><h2>つなぐ知識を選ぶ</h2><button class="ax-btn ax-btn-ghost" type="button" id="pkClose">完了</button></div>
+    <div class="ax-sheet-head"><h2 id="pkTitle">つなぐ知識を選ぶ</h2><button class="ax-btn ax-btn-ghost" type="button" id="pkClose">完了</button></div>
     <input class="ax-input" id="pkQ" type="search" placeholder="検索" autocomplete="off">
     <div class="pk-list" id="pkList"></div>
   </div>
@@ -160,8 +190,94 @@
       <button class="ax-btn" type="submit">種類を追加</button>
     </form>
     <p class="ax-note">番号は種類ごとに「記号-001」から振られます。</p>
+    <h3 class="st-h">noteネタ・日記から取り込む</h3>
+    <p class="ax-note">noteネタ・日記の「脳みそへまとめて書き出す」でコピーしたものを、知識カードとして取り込みます。取り込み済みの分は飛ばします。</p>
+    <div class="ax-row"><button class="ax-btn" type="button" id="stImport">貼って取り込む</button></div>
+    <h3 class="st-h">実績の公開ページ</h3>
+    <p class="ax-note">「公開」をオンにした実績だけを works.json にまとめます。</p>
+    <div class="ax-row"><button class="ax-btn" type="button" id="stExport">公開データを書き出す</button></div>
     <h3 class="st-h">スプシとの接続</h3>
     <div class="ax-row"><button class="ax-btn" type="button" id="stConn">接続の確認・他の端末を追加</button></div>
+  </div>
+</div>
+
+<!-- 貼って取り込む -->
+<div class="ax-overlay" id="importSheet" hidden role="dialog" aria-modal="true" aria-labelledby="imTitle">
+  <div class="ax-sheet im-sheet">
+    <div class="ax-sheet-head"><h2 id="imTitle">貼って取り込む</h2><button class="ax-btn ax-btn-ghost" type="button" id="imClose">閉じる</button></div>
+    <p class="ax-note">noteネタ・日記で「脳みそへまとめて書き出す」を押してから、ここで読み取ります。</p>
+    <div class="ax-row"><button class="ax-btn ax-btn-primary" type="button" id="imRead">クリップボードから読む</button></div>
+    <label class="fld"><span class="lab">読めないときは、ここに貼り付け</span>
+      <textarea class="ax-input" id="imText" rows="3" placeholder="#brain-import v1" autocomplete="off" spellcheck="false"></textarea></label>
+    <p class="ax-note" id="imMsg" aria-live="polite"></p>
+    <div class="im-list" id="imList"></div>
+    <div class="ax-row"><button class="ax-btn ax-btn-primary" type="button" id="imGo" disabled>取り込む</button></div>
+  </div>
+</div>
+
+<!-- 実績：ささっと作る -->
+<div class="editor" id="quick" hidden role="dialog" aria-modal="true" aria-labelledby="qTitle">
+  <form class="ed" id="qForm">
+    <div class="ed-bar">
+      <button class="ax-btn ax-btn-ghost" type="button" id="qCancel">やめる</button>
+      <h2 id="qTitle">ささっと作る</h2>
+      <button class="ax-btn ax-btn-primary" type="submit" id="qSave">保管</button>
+    </div>
+    <div class="ed-body">
+      <label class="fld"><span class="lab">案件名</span>
+        <input class="ax-input q-name" id="q-name" required maxlength="60" placeholder="例：K邸" autocomplete="off" list="qNames"></label>
+      <datalist id="qNames"></datalist>
+      <p class="ax-note">案件名だけで保管できます。脳みそで「この知識を使う」に同じ案件名を書いたカードは、自動で並びます。</p>
+      <div class="fld">
+        <span class="lab">写真</span>
+        <div class="photos" id="qPhotos"></div>
+        <label class="ax-btn add-photo"><input type="file" id="q-photo" accept="image/*" multiple hidden>＋ 写真をまとめて追加</label>
+        <span class="ax-note" id="qPhNote">何枚でも一度に選べます（1件60枚まで）。縮小してドライブに保存します（オンライン時のみ）</span>
+      </div>
+      <label class="fld"><span class="lab">メモ</span>
+        <textarea class="ax-input" id="q-memo" rows="5" placeholder="気づいたこと・お客様の言葉・現場で決めたことなど、思いつくまま"></textarea></label>
+    </div>
+  </form>
+</div>
+
+<!-- 実績：仕上げ -->
+<div class="editor" id="finish" hidden role="dialog" aria-modal="true" aria-labelledby="fTitle">
+  <form class="ed" id="fForm">
+    <div class="ed-bar">
+      <button class="ax-btn ax-btn-ghost" type="button" id="fCancel">やめる</button>
+      <h2 id="fTitle">仕上げ</h2>
+      <button class="ax-btn ax-btn-primary" type="submit" id="fSave">保存</button>
+    </div>
+    <div class="ed-body" id="fBody"></div>
+    <div class="ed-foot"><button class="ax-btn" type="button" id="fPreview">公開ページの見え方を確認</button></div>
+  </form>
+</div>
+
+<!-- 実績：公開ページの見え方 -->
+<div class="editor preview" id="preview" hidden role="dialog" aria-modal="true" aria-label="公開ページの見え方">
+  <div class="ed">
+    <div class="ed-bar"><span></span><h2>公開ページの見え方</h2><button class="ax-btn" type="button" id="pvClose">閉じる</button></div>
+    <iframe id="pvFrame" title="公開ページの見え方"></iframe>
+  </div>
+</div>
+
+<!-- 実績：公開データを書き出す -->
+<div class="ax-overlay" id="exportSheet" hidden role="dialog" aria-modal="true" aria-labelledby="exTitle">
+  <div class="ax-sheet ex-sheet">
+    <div class="ax-sheet-head"><h2 id="exTitle">公開データを書き出す</h2><button class="ax-btn ax-btn-ghost" type="button" id="exClose">閉じる</button></div>
+    <p class="ax-note" id="exSum"></p>
+    <div class="ex-stop" id="exStop" hidden></div>
+    <div><span class="lab">外に出るもの・出ないもの</span>
+      <div class="outlist">
+        <div><span class="y">出る</span><span>公開用の名前・時期・場所（市区）・広さ・エンドユーザー・ご要望・こだわり・工夫</span></div>
+        <div><span class="y">出る</span><span>「公開」をオンにした写真（ビフォー・アフターの印）／選んだ知識の名前と種類</span></div>
+        <div><span class="n">出ない</span><span>案件名・施主名・番地・費用帯・メモ・公開オフの写真・知識の本文と番号・スプシの記録番号</span></div>
+      </div>
+    </div>
+    <div><span class="lab">前回の書き出しから</span><div class="outlist" id="exDiff"></div></div>
+    <p class="ax-note">書き出した works.json を、パソコンから brain/public/ に置く（GitHubに上げる）と公開ページに反映されます。</p>
+    <div class="ax-row ex-acts"><button class="ax-btn ax-btn-primary" type="button" id="exDownload">書き出す（works.json）</button><button class="ax-btn" type="button" id="exCopy">中身をコピー</button></div>
+    <details class="ex-raw"><summary>中身を見る</summary><textarea class="ax-input" id="exText" rows="8" readonly spellcheck="false"></textarea></details>
   </div>
 </div>
 
@@ -170,5 +286,6 @@
 
 <script src="../shared/apps.js"></script>
 <script src="app.js"></script>
+<script src="works.js"></script>
 </body>
 </html>
