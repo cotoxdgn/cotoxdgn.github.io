@@ -14,6 +14,15 @@
  *   そのために Apps.collection('hondana') と Apps.collection('archmap') を読むだけ使う（同期して控えを持つ。書き込みはしない）
  * 入口（PCのブラウザ用。主の導線は上のとおり各アプリの中で書く）：?new=<種類>&title=<下書き>&src=<出典のJSON>&back=<戻り先（相対URL）>&from=<元のアプリ名> で「知識を書く」を開く。番号は保存時にここで振る
  *       ?open=<知識id> でその知識の詳細を開く
+ * 実績（ポートフォリオ）は別の種類のレコード（t:'w'）。知識の一覧・つながりの図・番号付けには混ざらない。中身は works.js の冒頭を参照
+ *
+ * 貼って取り込む（noteネタ・日記 → 脳みそ）：設定の「貼って取り込む」。クリップボード（読めなければ貼り付け欄）のテキストを読む
+ *   1行目：#brain-import v1
+ *   2行目以降：JSON 配列 [{ src:'note'|'diary', id:'<元の一意ID>', kind:'H'|'O'など, title, body, tags:[], date:'YYYY-MM-DD' }]
+ *   - 1件ずつ知識カードとして put：{ t:'k', kind, no:null, title, body, tags, photos:[], links:[], uses:[], createdIn:'note'|'diary',
+ *       source:{ title:'noteネタ'|'日記 YYYY-MM-DD', importId:'note:<id>'|'diary:<id>' } }。番号は上の番号付けに任せる
+ *   - 同じ importId のカードが既にあれば飛ばす（2回目以降は新しい分だけ入る）
+ *   - kind が無い・知らない記号なら H（ひらめき）。title が空なら body の1行目を使う。src・id が無いものは取り込まない
  */
 (function () {
   'use strict';
@@ -29,7 +38,7 @@
   var HONDANA = '../hondana/';
   var ARCHMAP = '../archmap/';
   var KINDS_ID = 'kinds';
-  var APP_NAMES = { hondana: '本棚', archmap: 'アーキマップ' };
+  var APP_NAMES = { hondana: '本棚', archmap: 'アーキマップ', note: 'noteネタから取り込み', diary: '日記から取り込み' };
 
   var db = Apps.collection(APP);
   var hondanaDb = Apps.collection('hondana'); // 本棚の控え（読むだけ）
@@ -81,7 +90,9 @@
   // 出典（本など）
   function srcOf(d) { return d && d.source && typeof d.source === 'object' && (d.source.bookId || d.source.spotId || d.source.title) ? d.source : null; }
   // つながった出典（本棚の本・アーキマップの建物）か
-  function linkedSrc(s) { return !!(s && (s.bookId || s.spotId)); }
+  function linkedSrc(s) { return !!(s && (s.bookId || s.spotId || s.importId)); }
+  // noteネタ・日記から取り込んだカードの出典
+  function importSrc(s) { return !!(s && s.importId); }
   function safeUrl(u) { u = String(u || ''); return /^https:\/\//.test(u) ? u : ''; }
   function coverOf(d) { var s = srcOf(d); return s ? safeUrl(s.cover) : ''; }
   function srcLine(s) { return [s.title, s.spotId ? '' : s.page].filter(Boolean).join(' '); }
@@ -200,7 +211,8 @@
     var d = r.data, k = kindOf(d.kind);
     var man = manualOf(r.id).map(byId).filter(Boolean), au = autoOf(r.id).slice(0, 8);
     var uses = usesOf(d);
-    var projects = uniq([].concat.apply([], items().map(function (o) { return usesOf(o.data).map(function (u) { return u.name; }); })));
+    var projects = uniq([].concat.apply([], items().map(function (o) { return usesOf(o.data).map(function (u) { return u.name; }); }))
+      .concat(window.BrainWorks ? BrainWorks.names() : []));
     var h = '<div class="dt-head" style="--kc:' + kindColor(d.kind) + '"><span class="kindlabel"><b>' + esc(k.name) + '</b><span class="no">' + esc(noStr(d)) + '</span></span>' +
       '<h2>' + esc(d.title) + '</h2>' +
       ((d.tags || []).length ? '<div class="tagrow">' + d.tags.map(function (t) { return '<button type="button" class="tag" data-tagjump="' + esc(t) + '">#' + esc(t) + '</button>'; }).join('') + '</div>' : '') +
@@ -242,6 +254,10 @@
   // （どちらも押すと脳みその中のシートで出典を見せる。ほかのアプリへは飛ばない）
   function srcCard(s, link) {
     var cv = safeUrl(s.cover);
+    if (importSrc(s)) {
+      return '<div class="src imp"><span class="cover" aria-hidden="true"><span class="ic">' + (/^diary:/.test(s.importId) ? '日' : 'n') + '</span></span>' +
+        '<span class="si"><b>' + esc(s.title || '取り込み') + '</b><small>' + (/^diary:/.test(s.importId) ? '日記' : 'noteネタ') + 'から取り込み</small></span></div>';
+    }
     if (s.spotId) {
       var ph = '<span class="cover" aria-hidden="true">' + (cv ? '<img src="' + esc(cv) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '<span class="pin"></span>') + '</span>';
       var si = ph + '<span class="si"><b>' + esc(s.title || '（名称なし）') + '</b><small>' + esc(s.place || (link ? 'アーキマップの建物' : '')) + '</small></span>';
@@ -323,6 +339,7 @@
       put(r, d); return;
     }
     if (t.id === 'dtLink') {
+      $('pkTitle').textContent = 'つなぐ知識を選ぶ';
       openPicker(r.id, manualOf(r.id), function (other, on) { setLink(r.id, other, on); });
     }
   });
@@ -420,12 +437,12 @@
     var show = ED.kind === 'B' || !!ED.source;
     $('edSrcFld').hidden = !show;
     if (!show) return;
-    var linked = linkedSrc(ED.source), spot = !!(ED.source && ED.source.spotId);
-    $('edSrcLab').textContent = spot ? '出典（建物）' : '出典（本）';
+    var linked = linkedSrc(ED.source), spot = !!(ED.source && ED.source.spotId), imp = importSrc(ED.source);
+    $('edSrcLab').textContent = spot ? '出典（建物）' : imp ? '出典（取り込み）' : '出典（本）';
     $('edSrc').innerHTML = linked ? srcCard(ED.source, false) +
       '<button type="button" class="ax-btn ax-btn-ghost src-x" id="edSrcX">出典を外す</button>' : '';
     $('srcManual').hidden = !!linked;
-    $('srcPage').hidden = spot; // ページは本だけ
+    $('srcPage').hidden = spot || imp; // ページは本だけ
   }
   function renderEdKinds() {
     $('edKinds').innerHTML = kinds().map(function (k) {
@@ -483,6 +500,7 @@
     if (t) { ED.links = ED.links.filter(function (x) { return x !== t.dataset.rmlink; }); renderEdLinks(); }
   });
   $('edAddLink').addEventListener('click', function () {
+    $('pkTitle').textContent = 'つなぐ知識を選ぶ';
     openPicker(ED.id, ED.links, function (id, on) {
       ED.links = on ? uniq(ED.links.concat([id])) : ED.links.filter(function (x) { return x !== id; });
       renderEdLinks();
@@ -536,7 +554,7 @@
     if (!$('edSrcFld').hidden) {
       var page = $('f-page').value.trim().slice(0, 30);
       var src = linkedSrc(ED.source) ? copyData(ED.source) : { title: $('f-srcTitle').value.trim().slice(0, 120) };
-      if (!src.spotId) src.page = page;
+      if (!src.spotId && !src.importId) src.page = page;
       if (!src.page) delete src.page;
       if (src.bookId || src.spotId || src.title) d.source = src; else delete d.source;
     } else if (!ED.source) delete d.source;
@@ -565,6 +583,7 @@
   $('edDelete').addEventListener('click', function () {
     var r = ED && byId(ED.id);
     if (!r) return;
+    $('cfOk').textContent = '削除する'; $('cfOk').className = 'ax-btn ax-btn-danger'; ASK = null;
     $('cfTitle').textContent = '「' + r.data.title + '」を削除しますか？';
     $('cfText').textContent = '写真・使った案件の記録・つながりも消えます。元に戻せません。';
     $('confirm').hidden = false;
@@ -584,7 +603,18 @@
       Promise.all(ops).then(function () { Apps.toast('削除しました'); });
     };
   });
-  $('cfNo').addEventListener('click', function () { $('confirm').hidden = true; });
+  $('cfNo').addEventListener('click', function () { $('confirm').hidden = true; if (ASK) { var f = ASK; ASK = null; f(false); } });
+  // はい／いいえの確認（削除以外にも使う）。Promise<boolean>
+  var ASK = null;
+  function ask(title, text, okLabel, danger) {
+    return new Promise(function (resolve) {
+      $('cfTitle').textContent = title; $('cfText').textContent = text || '';
+      $('cfOk').textContent = okLabel || 'はい'; $('cfOk').className = 'ax-btn ' + (danger ? 'ax-btn-danger' : 'ax-btn-primary');
+      ASK = resolve;
+      $('cfOk').onclick = function () { $('confirm').hidden = true; ASK = null; resolve(true); };
+      $('confirm').hidden = false;
+    });
+  }
 
   // ---------- 設定（種類の追加・接続） ----------
   function renderSettings() {
@@ -601,6 +631,90 @@
   $('settingsBtn').addEventListener('click', function () { renderSettings(); $('settings').hidden = false; });
   $('stClose').addEventListener('click', function () { $('settings').hidden = true; });
   $('stConn').addEventListener('click', function () { $('settings').hidden = true; Apps.openConnectSheet(APP); });
+  $('stImport').addEventListener('click', function () { $('settings').hidden = true; openImport(); });
+  $('stExport').addEventListener('click', function () { $('settings').hidden = true; if (window.BrainWorks) BrainWorks.openExport(); });
+
+  // ---------- 貼って取り込む（noteネタ・日記 → 知識カード） ----------
+  var IMPORT_HEAD = '#brain-import v1';
+  var IM = null; // 読み取った結果 { items:[…], skipped }
+  function str(v, n) { return typeof v === 'string' ? v.slice(0, n) : typeof v === 'number' ? String(v).slice(0, n) : ''; }
+  // テキスト → { ok, error, items:[{ importId, src, kind, title, body, tags, date, dup }], skipped }
+  function parseImport(text) {
+    text = String(text || '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim();
+    if (!text) return { ok: false, error: '' };
+    var nl = text.indexOf('\n');
+    var head = (nl < 0 ? text : text.slice(0, nl)).trim();
+    if (head !== IMPORT_HEAD) return { ok: false, error: '1行目が「' + IMPORT_HEAD + '」ではありません。noteネタ・日記の「脳みそへまとめて書き出す」でコピーしたものを貼ってください' };
+    var arr;
+    try { arr = JSON.parse(nl < 0 ? '' : text.slice(nl + 1)); } catch (e) { return { ok: false, error: '2行目以降が読めません（JSON の形が崩れています）' }; }
+    if (!Array.isArray(arr)) return { ok: false, error: '2行目以降が一覧（JSON の配列）ではありません' };
+    var have = {};
+    items().forEach(function (r) { var sc = r.data.source; if (sc && sc.importId) have[sc.importId] = 1; });
+    var seen = {}, out = [], skipped = 0;
+    arr.slice(0, 1000).forEach(function (x) {
+      if (!x || typeof x !== 'object') { skipped++; return; }
+      var src = x.src === 'note' || x.src === 'diary' ? x.src : '';
+      var id = str(x.id, 120).trim();
+      var body = str(x.body, 20000).replace(/\s+$/, '');
+      var title = str(x.title, 120).trim() || body.split('\n')[0].trim().slice(0, 120);
+      if (!src || !id || !title) { skipped++; return; }
+      var importId = src + ':' + id;
+      if (seen[importId]) return;
+      seen[importId] = 1;
+      var kind = str(x.kind, 4).trim().toUpperCase();
+      if (!kinds().some(function (k) { return k.c === kind; })) kind = 'H';
+      var date = /^\d{4}-\d{2}-\d{2}$/.test(str(x.date, 10)) ? x.date : '';
+      out.push({ importId: importId, src: src, kind: kind, title: title, body: body, date: date,
+        tags: parseTags(Array.isArray(x.tags) ? x.tags.map(function (t) { return str(t, 40); }).join(' ') : str(x.tags, 400)), dup: !!have[importId] });
+    });
+    return { ok: true, items: out, skipped: skipped };
+  }
+  function importCard(x) {
+    return { t: 'k', kind: x.kind, no: null, title: x.title, body: x.body, tags: x.tags, photos: [], links: [], uses: [], createdIn: x.src,
+      source: { title: x.src === 'diary' ? '日記' + (x.date ? ' ' + x.date : '') : 'noteネタ', importId: x.importId } };
+  }
+  function renderImport() {
+    var r = parseImport($('imText').value);
+    IM = r.ok ? r : null;
+    var fresh = r.ok ? r.items.filter(function (x) { return !x.dup; }) : [];
+    $('imMsg').className = 'ax-note' + (r.ok || !r.error ? '' : ' im-err');
+    $('imMsg').textContent = r.ok ? r.items.length + '件（新規 ' + fresh.length + '件・取り込み済み ' + (r.items.length - fresh.length) + '件）' +
+      (r.skipped ? '・読めない ' + r.skipped + '件は飛ばします' : '') : r.error;
+    $('imList').innerHTML = r.ok ? r.items.map(function (x) {
+      return '<div class="im-row' + (x.dup ? ' dup' : '') + '"><span class="no" style="--kc:' + kindColor(x.kind) + '">' + esc(x.kind) + '</span>' +
+        '<span class="rt">' + esc(x.title) + '<small>' + (x.src === 'diary' ? '日記' : 'noteネタ') + (x.date ? ' ' + esc(x.date) : '') + '</small></span>' +
+        '<span class="im-st">' + (x.dup ? '取り込み済み' : '新規') + '</span></div>';
+    }).join('') : '';
+    $('imGo').disabled = !fresh.length;
+    $('imGo').textContent = fresh.length ? fresh.length + '件を取り込む' : '取り込む';
+  }
+  function openImport() {
+    $('imText').value = ''; IM = null; renderImport();
+    $('importSheet').hidden = false;
+  }
+  $('imRead').addEventListener('click', function () {
+    if (!navigator.clipboard || !navigator.clipboard.readText) { $('imText').focus(); Apps.toast('下の欄に貼り付けてください'); return; }
+    navigator.clipboard.readText().then(function (t) {
+      $('imText').value = t || ''; renderImport();
+      if (!t) Apps.toast('クリップボードが空でした', true);
+    }, function () { $('imText').focus(); Apps.toast('クリップボードを読めませんでした。下の欄に貼り付けてください', true); });
+  });
+  $('imText').addEventListener('input', renderImport);
+  $('imClose').addEventListener('click', function () { $('importSheet').hidden = true; });
+  $('imGo').addEventListener('click', function () {
+    if (!IM) return;
+    // 取り込む直前にもう一度、既にあるかを見る（同期で増えた分も飛ばす）
+    var r = parseImport($('imText').value);
+    var fresh = r.ok ? r.items.filter(function (x) { return !x.dup; }) : [];
+    if (!fresh.length) { renderImport(); return; }
+    $('imGo').disabled = true;
+    Promise.all(fresh.map(function (x) { return db.put(importCard(x)); })).then(function () {
+      $('importSheet').hidden = true;
+      Apps.toast(fresh.length + '件を知識に取り込みました（番号は自動で付きます）');
+      S.kind = ''; S.tag = ''; setView('list'); render();
+    }, function (e) { Apps.toast(Apps.errorText(e), true); renderImport(); });
+  });
+  window.__brainImport = { parse: parseImport };
   $('stAdd').addEventListener('submit', function (e) {
     e.preventDefault();
     var c = $('st-code').value.trim().toUpperCase(), name = $('st-name').value.trim();
@@ -897,6 +1011,16 @@
     };
   })();
   window.__brain = { graph: graph };
+  // 実績（works.js）に渡す部品
+  window.BrainCore = {
+    APP: APP, db: db, S: S, wide: wide, $: $,
+    esc: esc, uniq: uniq, today: today, localDay: localDay, copyData: copyData, online: online, kindOf: kindOf, kindColor: kindColor,
+    items: items, byId: byId, noStr: noStr, usesOf: usesOf, ask: ask, setView: setView,
+    openPicker: function (title, current, onToggle) { $('pkTitle').textContent = title; openPicker(null, current, onToggle); },
+    // 知識の詳細を開く（PCでは知識の画面へ切り替える）
+    showCard: function (id) { if (wide.matches) setView('list'); openDetail(id); graph.focus(id); },
+    lightbox: function (url) { $('lbImg').src = url; $('lightbox').hidden = false; }
+  };
 
   graph.onTap(function (id) {
     S.sel = id;
@@ -918,7 +1042,14 @@
     S.view = v;
     $('app').dataset.view = v;
     Array.prototype.forEach.call(document.querySelectorAll('#tabbar [data-view]'), function (b) { b.classList.toggle('on', b.dataset.view === v); });
-    if (v === 'graph') setTimeout(graph.resize, 0);
+    Array.prototype.forEach.call(document.querySelectorAll('#modeSw [data-view]'), function (b) {
+      var on = (b.dataset.view === 'works') === (v === 'works');
+      b.classList.toggle('on', on); b.setAttribute('aria-pressed', on);
+    });
+    var tn = document.querySelector('#tabbar .tab-new');
+    tn.setAttribute('aria-label', v === 'works' ? '実績をささっと作る' : '知識を書く');
+    if (v === 'graph' || v === 'list') setTimeout(graph.resize, 0);
+    if (window.BrainWorks) BrainWorks.render();
   }
   function render() {
     renderFilters(); renderList(); renderDetail(); renderPeek();
@@ -930,7 +1061,16 @@
     var b = e.target.closest('[data-view]');
     if (b) setView(b.dataset.view);
   });
-  Array.prototype.forEach.call(document.querySelectorAll('[data-new]'), function (b) { b.addEventListener('click', function () { openEditor(null); }); });
+  $('modeSw').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-view]');
+    if (b) setView(b.dataset.view);
+  });
+  // ＋：実績タブにいる時は「ささっと作る」
+  Array.prototype.forEach.call(document.querySelectorAll('[data-new]'), function (b) {
+    b.addEventListener('click', function () {
+      if (S.view === 'works' && window.BrainWorks) BrainWorks.quick(); else openEditor(null);
+    });
+  });
   $('kinds').addEventListener('click', function (e) {
     var b = e.target.closest('[data-kind]');
     if (!b) return;
@@ -948,17 +1088,22 @@
   });
   wide.addEventListener('change', function () {
     if (wide.matches) closeDetail();
+    if (window.BrainWorks) BrainWorks.onWide();
     setTimeout(function () { graph.resize(); render(); }, 0);
   });
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
     if (!$('lightbox').hidden) $('lbClose').click();
+    else if (!$('confirm').hidden) $('cfNo').click();
+    else if (!$('importSheet').hidden) $('imClose').click();
     else if (!$('srcSheet').hidden) $('srcSheet').hidden = true;
     else if (!$('picker').hidden) $('pkClose').click();
+    else if (window.BrainWorks && BrainWorks.onEscape()) return;
     else if (!$('confirm').hidden) $('cfNo').click();
     else if (!$('settings').hidden) $('stClose').click();
     else if (!$('editor').hidden) closeEditor(false);
     else if (S.detailOpen) closeDetail();
+    else if (window.BrainWorks) BrainWorks.closeWork();
   });
 
   // ---------- 同期 ----------
