@@ -415,15 +415,23 @@
       });
     });
   }
-  // 書名・著者で探す：国会図書館（ISBNのある本を先に）→ 0件・失敗なら Google Books
+  // 書名・著者で探す：国会図書館で「書名に含む」→「著者」→「どこかに含む」の順に並べる（各グループ内はISBNのある本を先に）。
+  // 0件・失敗なら Google Books
   function searchTitle(q) {
-    return getXml(NDL + 'any=' + encodeURIComponent(q) + '&cnt=40').then(function (doc) {
-      var r = ndlItems(doc);
-      r.sort(function (x, y) { return (y.isbn ? 1 : 0) - (x.isbn ? 1 : 0); });
-      return r.slice(0, 20);
-    }).catch(function () { return []; }).then(function (r) {
+    var e = encodeURIComponent(q);
+    function grp(param) {
+      return getXml(NDL + param + '=' + e + '&cnt=30').then(function (doc) {
+        var r = ndlItems(doc);
+        return r.filter(function (x) { return x.isbn; }).concat(r.filter(function (x) { return !x.isbn; }));
+      }).catch(function () { return null; });
+    }
+    return Promise.all([grp('title'), grp('creator'), grp('any')]).then(function (gs) {
+      var out = [], seen = {};
+      gs.forEach(function (g) { (g || []).forEach(function (x) { var k = x.isbn || x.title + '|' + x.author; if (!seen[k]) { seen[k] = 1; out.push(x); } }); });
+      return out.slice(0, 25);
+    }).then(function (r) {
       if (r.length) return r;
-      return getJson(GBOOKS + encodeURIComponent(q) + '&maxResults=20&printType=books').then(function (res) {
+      return getJson(GBOOKS + e + '&maxResults=20&printType=books').then(function (res) {
         return (res && res.items || []).map(function (it) { return gbItem(it.volumeInfo); }).filter(function (x) { return x.title; });
       });
     });
