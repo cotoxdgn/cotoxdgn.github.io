@@ -10,7 +10,9 @@
  *  POST（Content-Type: text/plain）で JSON を送る → JSON が返る。
  *  text/plain の POST は「単純リクエスト」なので、ブラウザの事前確認（CORS preflight）が起きない。
  *  { key, action, app, ... }  →  { ok: true, now, ... } / { ok: false, error }
- *  action: ping / list / put / delete / batch / image / imageData / imageDelete / names / geocode
+ *  action: ping / list / put / delete / batch / image / imageData / imageDelete / names / geocode / mapLink
+ *          yoteiCal / yoteiResults / yoteiCreateEvent（予定合わせ・合言葉が要る）
+ *          yoteiGet / yoteiAnswer（予定合わせの相手用・合言葉なし。下の「予定合わせ」を参照）
  */
 
 var CONNECT_URL = 'https://cotoxdgn.github.io/connect/';
@@ -195,6 +197,8 @@ function doPost(e) {
 function handle_(req) {
   if (!req || typeof req !== 'object') return { ok: false, error: 'bad_request' };
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  // 予定合わせの相手用の窓口（合言葉なし）。合言葉の確認より前に分け、ここから先の処理には進ませない
+  if (req.action === 'yoteiGet' || req.action === 'yoteiAnswer') return yoteiPublic_(ss, req);
   var conf = ss.getSheetByName(CONF_SHEET);
   var pass = conf ? String(conf.getRange(CELL_KEY).getValue()).trim() : '';
   if (!pass) return { ok: false, error: 'no_setup' };
@@ -204,6 +208,12 @@ function handle_(req) {
     if (g.error) return { ok: false, error: g.error };
     g.ok = true; g.now = now_();
     return g;
+  }
+  if (req.action === 'yoteiCal') {   // カレンダーを読むだけ（スプシに書かない）ので、ロックなし
+    var yc = yoteiCal_(req);
+    if (yc.error) return yc.detail ? { ok: false, error: yc.error, detail: yc.detail } : { ok: false, error: yc.error };
+    yc.ok = true; yc.now = now_();
+    return yc;
   }
 
   var lock = LockService.getScriptLock();
@@ -224,9 +234,11 @@ function handle_(req) {
       case 'imageData': res = imageData_(conf, req); break;
       case 'imageDelete': res = imageDelete_(conf, req); break;
       case 'names': res = names_(conf); break;
+      case 'yoteiResults': res = yoteiResults_(ss, req); break;
+      case 'yoteiCreateEvent': res = yoteiCreateEvent_(ss, req); break;
       default: res = { error: 'bad_action' };
     }
-    if (res.error) return { ok: false, error: res.error };
+    if (res.error) return res.detail ? { ok: false, error: res.error, detail: res.detail } : { ok: false, error: res.error };
     res.ok = true;
     res.now = now_();
     return res;
@@ -481,4 +493,306 @@ function out_(obj) {
 function authorizeMapLink() {
   var r = UrlFetchApp.fetch('https://maps.google.com/', { muteHttpExceptions: true, followRedirects: false });
   Logger.log('ok ' + r.getResponseCode());
+}
+
+// エディタから1回実行して「カレンダーの表示と編集」を許可するための関数（予定合わせ用）
+// 実行 → 許可 →［デプロイを管理］→ 新バージョン。予定を読んだ件数をログに出すだけで、何も書かない
+function authorizeCalendar() {
+  var cal = CalendarApp.getDefaultCalendar();
+  var t = new Date();
+  Logger.log('ok ' + cal.getEvents(t, new Date(t.getTime() + 86400000)).length);
+}
+
+// ---------- 予定合わせ（yotei） ----------
+/*
+ * データの置き場所
+ *  ・シート app=yotei … 自分用のレコード（ふつうの put / list / delete で同期。合言葉が要る）
+ *      data = { kind:'event', title, start:'YYYY-MM-DD', end:'YYYY-MM-DD', from:9, to:21, step:30, need:60,
+ *               deadline:'YYYY-MM-DD', token:'英数字32文字', mine:['0110…', …], status:'open'|'closed'|'decided',
+ *               decided:{ start:ISO, end:ISO } }
+ *      時刻はすべて日本時間。マスは「1日1本の 0/1 の文字列」（長さ＝(to-from)*60/step、日数＝start〜end）。
+ *      トークンは自分の端末で作る（crypto の乱数）。作り直し・締め切り・削除もふつうの put / delete で行う
+ *  ・シート yotei_answers … 相手の答え。1行＝1人（予定合わせID＋端末ID＋名前が同じなら同じ人として上書き）
+ *      A eventId ／ B device ／ C createdAt ／ D updatedAt ／ E edits（直した回数）／ F data（JSON {name, cells}）
+ *      名前は JSON の中にだけ入れる（セルの先頭が = にならないので、式として読まれない）
+ *  ・シート yotei_writes … 書き込みの記録（1つの予定合わせに1時間60回までの数え用）。A eventId ／ B at
+ *
+ * 合言葉なしの窓口（yoteiGet / yoteiAnswer）が使うのは、app=yotei の読み取りと、上の2シートだけ。
+ * ほかのシート・画像・カレンダーには触れない。トークンが合わない・消した・期限切れは、どれも not_found だけを返す。
+ * 掃除：期間の終わりから30日たった予定合わせ・消した予定合わせの答えは、次の書き込み・結果の読み込みのときに消す
+ * （トリガーは使わない）。期限切れの予定合わせは、相手の窓口からは見つからない扱いになる。
+ */
+var YOTEI_APP = 'yotei';
+var YOTEI_ANS = 'yotei_answers';
+var YOTEI_WRITES = 'yotei_writes';
+var YOTEI_ANS_HEADER = ['eventId', 'device', 'createdAt', 'updatedAt', 'edits', 'data'];
+var YOTEI_TOKEN_RE = /^[A-Za-z0-9]{32}$/;
+var YOTEI_DEVICE_RE = /^[A-Za-z0-9_-]{16,64}$/;
+var YOTEI_YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+var YOTEI_MAX_BODY = 5000;     // 相手から1回に受け取る量（文字）
+var YOTEI_MAX_PEOPLE = 5;      // 1つの予定合わせに答えられる人数
+var YOTEI_MAX_EDITS = 20;      // 1人が直せる回数
+var YOTEI_MAX_WRITES = 60;     // 1つの予定合わせへの書き込み（1時間あたり）
+var YOTEI_MAX_DAYS = 14;
+var YOTEI_KEEP_DAYS = 30;      // 期間の終わりから何日で答えを消すか
+var DAY_MS = 86400000;
+
+function yoteiDay_(ymd) { return YOTEI_YMD_RE.test(String(ymd)) ? Date.parse(ymd + 'T00:00:00+09:00') : NaN; }
+function yoteiNow_() { return new Date().getTime(); }
+
+// 予定合わせの形を確かめ、日数・1日のマス数を返す（壊れていれば null）
+function yoteiShape_(d) {
+  if (!d || d.kind !== 'event') return null;
+  var s = yoteiDay_(d.start), e = yoteiDay_(d.end);
+  if (isNaN(s) || isNaN(e) || e < s) return null;
+  var days = Math.round((e - s) / DAY_MS) + 1;
+  var from = +d.from, to = +d.to, step = +d.step;
+  if (days > YOTEI_MAX_DAYS || !(step === 30 || step === 60)) return null;
+  if (from !== Math.floor(from) || to !== Math.floor(to) || from < 0 || to > 24 || from >= to) return null;
+  return { days: days, rows: (to - from) * 60 / step, start: s, end: e };
+}
+
+function yoteiExpired_(shape) { return yoteiNow_() >= shape.end + DAY_MS * (1 + YOTEI_KEEP_DAYS); }
+
+// open / closed / decided（締切は締切日の終わり＝翌日0時、期間が終わっても受付終了）
+function yoteiState_(d, shape) {
+  if (d.status === 'decided') return 'decided';
+  if (d.status !== 'open') return 'closed';
+  var dl = yoteiDay_(d.deadline), now = yoteiNow_();
+  if (!isNaN(dl) && now >= dl + DAY_MS) return 'closed';
+  if (now >= shape.end + DAY_MS) return 'closed';
+  return 'open';
+}
+
+// 生きている予定合わせ（消していない・形が正しい・期限切れでない）を id → {data, shape} で
+function yoteiEvents_(ss) {
+  var sh = sheet_(ss, YOTEI_APP, false), out = {};
+  if (!sh) return out;
+  rows_(sh).forEach(function (r) {
+    if (r.deleted || !r.data) return;
+    var d; try { d = JSON.parse(r.data); } catch (e) { return; }
+    var shape = yoteiShape_(d);
+    if (!shape || yoteiExpired_(shape)) return;
+    out[r.id] = { id: r.id, data: d, shape: shape };
+  });
+  return out;
+}
+
+function yoteiByToken_(ss, token) {
+  var sh = sheet_(ss, YOTEI_APP, false);
+  if (!sh) return null;
+  var list = rows_(sh);
+  for (var i = 0; i < list.length; i++) {
+    var r = list[i];
+    if (r.deleted || r.data.indexOf(token) < 0) continue;
+    var d; try { d = JSON.parse(r.data); } catch (e) { continue; }
+    if (d.token !== token) continue;
+    var shape = yoteiShape_(d);
+    if (!shape || yoteiExpired_(shape)) return null;
+    return { id: r.id, data: d, shape: shape };
+  }
+  return null;
+}
+
+function yoteiSheet_(ss, name, header) {
+  var sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    sh.getRange(1, 1, 1, header.length).setValues([header]).setFontWeight('bold');
+    sh.getRange(1, 1, 1000, header.length).setNumberFormat('@');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function yoteiAnswerRows_(sh) {
+  var last = sh.getLastRow();
+  if (last < 2) return [];
+  return sh.getRange(2, 1, last - 1, YOTEI_ANS_HEADER.length).getValues().map(function (v, i) {
+    return { row: i + 2, eventId: String(v[0]), device: String(v[1]), createdAt: str_(v[2]), updatedAt: str_(v[3]),
+      edits: +v[4] || 0, data: String(v[5]) };
+  });
+}
+
+// 古い答え・消した予定合わせの答え・1時間より前の書き込み記録を消す（ロックの中で呼ぶ）
+function yoteiCleanup_(ss, live) {
+  var ans = ss.getSheetByName(YOTEI_ANS);
+  if (ans) {
+    var del = yoteiAnswerRows_(ans).filter(function (a) { return a.eventId && !live[a.eventId]; }).map(function (a) { return a.row; });
+    for (var i = del.length - 1; i >= 0; i--) ans.deleteRow(del[i]);
+  }
+  var w = ss.getSheetByName(YOTEI_WRITES);
+  if (w && w.getLastRow() >= 2) {
+    var limit = yoteiNow_() - 3600000;
+    var vals = w.getRange(2, 1, w.getLastRow() - 1, 2).getValues();
+    for (var j = vals.length - 1; j >= 0; j--) {
+      var at = Date.parse(str_(vals[j][1]));
+      if (!live[String(vals[j][0])] || isNaN(at) || at < limit) w.deleteRow(j + 2);
+    }
+  }
+}
+
+// ---- 合言葉なしの窓口 ----
+function yoteiPublic_(ss, req) {
+  var NF = { ok: false, error: 'not_found' };
+  try {
+    if (JSON.stringify(req).length > YOTEI_MAX_BODY) return { ok: false, error: 'too_long' };
+    var token = typeof req.token === 'string' ? req.token : '';
+    if (!YOTEI_TOKEN_RE.test(token)) return NF;
+    if (req.action === 'yoteiGet') {
+      var ev = yoteiByToken_(ss, token);
+      if (!ev) return NF;
+      return { ok: true, now: now_(), event: yoteiPublicView_(ev) };
+    }
+    var lock = LockService.getScriptLock();
+    try { lock.waitLock(10000); } catch (e) { return { ok: false, error: 'busy' }; }
+    try {
+      var r = yoteiAnswer_(ss, token, req);
+      if (r.error) return { ok: false, error: r.error };
+      r.ok = true; r.now = now_();
+      return r;
+    } finally {
+      lock.releaseLock();
+    }
+  } catch (err) {
+    return { ok: false, error: 'server' };   // 相手の窓口では中身（シート名など）を出さない
+  }
+}
+
+// 相手に見せてよいものだけ（自分の空き・トークン・他の人の答えは入れない）
+function yoteiPublicView_(ev) {
+  var d = ev.data, st = yoteiState_(d, ev.shape);
+  var out = { title: String(d.title || '').slice(0, 40), start: d.start, end: d.end, from: +d.from, to: +d.to, step: +d.step,
+    deadline: YOTEI_YMD_RE.test(String(d.deadline)) ? d.deadline : '', state: st };
+  if (st === 'decided' && d.decided) out.decided = { start: String(d.decided.start || ''), end: String(d.decided.end || '') };
+  return out;
+}
+
+function yoteiName_(v) {
+  var n = String(typeof v === 'string' ? v : '').replace(/[\u0000-\u001F\u007F\u2028\u2029]/g, '').replace(/^\s+|\s+$/g, '');
+  var len = n.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '_').length;
+  return len >= 1 && len <= 20 ? n : '';
+}
+
+function yoteiCells_(cells, shape) {
+  if (!Array.isArray(cells) || cells.length !== shape.days) return null;
+  for (var i = 0; i < cells.length; i++) {
+    if (typeof cells[i] !== 'string' || cells[i].length !== shape.rows || !/^[01]+$/.test(cells[i])) return null;
+  }
+  return cells.slice();
+}
+
+function yoteiAnswer_(ss, token, req) {
+  var live = yoteiEvents_(ss);
+  var ev = null;
+  for (var id in live) if (live[id].data.token === token) { ev = live[id]; break; }
+  if (!ev) return { error: 'not_found' };
+  if (yoteiState_(ev.data, ev.shape) !== 'open') return { error: 'closed' };
+  var name = yoteiName_(req.name);
+  if (!name) return { error: 'bad_name' };
+  var device = typeof req.device === 'string' ? req.device : '';
+  if (!YOTEI_DEVICE_RE.test(device)) return { error: 'bad_request' };
+  var cells = yoteiCells_(req.cells, ev.shape);
+  if (!cells) return { error: 'bad_cells' };
+
+  yoteiCleanup_(ss, live);
+  var w = yoteiSheet_(ss, YOTEI_WRITES, ['eventId', 'at']);
+  var recent = w.getLastRow() < 2 ? 0 : w.getRange(2, 1, w.getLastRow() - 1, 1).getValues()
+    .filter(function (v) { return String(v[0]) === ev.id; }).length;
+  if (recent >= YOTEI_MAX_WRITES) return { error: 'too_many' };
+
+  var sh = yoteiSheet_(ss, YOTEI_ANS, YOTEI_ANS_HEADER);
+  var mine = yoteiAnswerRows_(sh).filter(function (a) { return a.eventId === ev.id; });
+  var same = mine.filter(function (a) {
+    if (a.device !== device) return false;
+    try { return JSON.parse(a.data).name === name; } catch (e) { return false; }
+  })[0];
+  var t = now_();
+  var json = JSON.stringify({ name: name, cells: cells });   // 名前と塗ったマス以外は捨てる
+  var row, rec;
+  if (same) {
+    if (same.edits >= YOTEI_MAX_EDITS) return { error: 'too_many_edits' };
+    row = same.row;
+    rec = [ev.id, device, same.createdAt, t, String(same.edits + 1), json];
+  } else {
+    if (mine.length >= YOTEI_MAX_PEOPLE) return { error: 'full' };
+    row = sh.getLastRow() + 1;
+    rec = [ev.id, device, t, t, '0', json];
+  }
+  var range = sh.getRange(row, 1, 1, YOTEI_ANS_HEADER.length);
+  range.setNumberFormat('@');
+  range.setValues([rec]);
+  var wr = w.getRange(w.getLastRow() + 1, 1, 1, 2);
+  wr.setNumberFormat('@');
+  wr.setValues([[ev.id, t]]);
+  return { saved: true, edits: +rec[4], editsLeft: YOTEI_MAX_EDITS - +rec[4] };
+}
+
+// ---- 合言葉が要るもの ----
+// yoteiCal：期間の予定の「始まり・終わり」だけ（件名・場所・中身は返さない。終日の予定・欠席にした予定は除く）
+function yoteiCal_(req) {
+  var s = yoteiDay_(req.from), e = yoteiDay_(req.to);
+  if (isNaN(s) || isNaN(e) || e < s) return { error: 'bad_request' };
+  if ((e - s) / DAY_MS + 1 > YOTEI_MAX_DAYS + 1) return { error: 'too_long' };
+  var evs;
+  try {
+    evs = CalendarApp.getDefaultCalendar().getEvents(new Date(s), new Date(e + DAY_MS));
+  } catch (err) {
+    return { error: 'calendar', detail: String((err && err.message) || err).slice(0, 200) };
+  }
+  var busy = [];
+  evs.forEach(function (ev) {
+    if (ev.isAllDayEvent()) return;
+    try { if (ev.getMyStatus() === CalendarApp.GuestStatus.NO) return; } catch (x) { /* 自分の予定など */ }
+    busy.push({ s: ev.getStartTime().toISOString(), e: ev.getEndTime().toISOString() });
+  });
+  return { busy: busy };
+}
+
+// yoteiResults：答え（名前・塗ったマス・日時）。端末IDは返さない。id を付けるとその予定合わせだけ
+function yoteiResults_(ss, req) {
+  var live = yoteiEvents_(ss);
+  yoteiCleanup_(ss, live);
+  var only = req.id ? String(req.id) : '';
+  var out = {};
+  var sh = ss.getSheetByName(YOTEI_ANS);
+  if (sh) yoteiAnswerRows_(sh).forEach(function (a) {
+    if (!live[a.eventId] || (only && a.eventId !== only)) return;
+    var d; try { d = JSON.parse(a.data); } catch (e) { return; }
+    (out[a.eventId] = out[a.eventId] || []).push({ name: d.name, cells: d.cells, createdAt: a.createdAt, updatedAt: a.updatedAt, edits: a.edits });
+  });
+  return { answers: out };
+}
+
+// yoteiCreateEvent：確認のあとに1件だけ作る（招待メールなし）。件名＝名前、メモ＝答えた人。
+// 作ったら予定合わせを「決定」にする（2台から押しても二重にならない）
+function yoteiCreateEvent_(ss, req) {
+  var id = String(req.id || '');
+  if (!ID_RE.test(id)) return { error: 'bad_id' };
+  var live = yoteiEvents_(ss), ev = live[id];
+  if (!ev) return { error: 'not_found' };
+  if (ev.data.status === 'decided') return { error: 'already' };
+  var s = Date.parse(String(req.start || '')), e = Date.parse(String(req.end || ''));
+  if (isNaN(s) || isNaN(e) || e <= s || e - s > DAY_MS || s < ev.shape.start || e > ev.shape.end + DAY_MS) return { error: 'bad_time' };
+  var names = [];
+  var sh = ss.getSheetByName(YOTEI_ANS);
+  if (sh) yoteiAnswerRows_(sh).forEach(function (a) {
+    if (a.eventId !== id) return;
+    try { names.push(JSON.parse(a.data).name); } catch (x) { /* 無視 */ }
+  });
+  var title = String(ev.data.title || '予定合わせ').slice(0, 40);
+  var made;
+  try {
+    made = CalendarApp.getDefaultCalendar().createEvent(title, new Date(s), new Date(e), {
+      description: '参加：' + (names.length ? names.join('・') : '（答えた人なし）') + '\n（予定合わせで決定）',
+      sendInvites: false
+    });
+  } catch (err) {
+    return { error: 'calendar', detail: String((err && err.message) || err).slice(0, 200) };
+  }
+  var d = ev.data;
+  d.status = 'decided';
+  d.decided = { start: new Date(s).toISOString(), end: new Date(e).toISOString() };
+  var r = put_(ss, { app: YOTEI_APP, id: id, data: d });
+  return { record: r.record, calendarEventId: made && made.getId ? made.getId() : '' };
 }
