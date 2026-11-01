@@ -15,6 +15,9 @@
   var ZXING = 'https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/zxing-browser.min.js';
   var OPENBD = 'https://api.openbd.jp/v1/get?isbn=';
   var GBOOKS = 'https://www.googleapis.com/books/v1/volumes?q=';
+  // 国立国会図書館サーチ（無料・キー不要・回数制限なし）。Google Books はキーなしだと1日の上限に当たりやすいので予備にする
+  var NDL = 'https://ndlsearch.ndl.go.jp/api/opensearch?mediatype=books&';
+  var NDL_THUMB = 'https://ndlsearch.ndl.go.jp/thumbnail/';
   var STS = [{ k: 'want', l: '読みたい' }, { k: 'done', l: '読んだ' }];
   var BRAIN_KINDS = 'DTMLSBHO';
 
@@ -362,22 +365,67 @@
       return it && it.volumeInfo && it.volumeInfo.title ? gbItem(it.volumeInfo, isbn) : null;
     });
   }
-  // openBD → Google Books。どちらにも無ければ null。両方とも通信できなければ reject
+  function getXml(url) {
+    if (!online()) return Promise.reject(new Error('offline'));
+    var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 12000) : 0;
+    return fetch(url, { signal: ctrl ? ctrl.signal : undefined, referrerPolicy: 'no-referrer' }).then(function (res) {
+      clearTimeout(timer);
+      if (!res.ok) throw new Error('http ' + res.status);
+      return res.text();
+    }, function (e) { clearTimeout(timer); throw e; }).then(function (t) { return new DOMParser().parseFromString(t, 'text/xml'); });
+  }
+  var DC = 'http://purl.org/dc/elements/1.1/';
+  function ndlItems(doc) {
+    var out = [], seen = {};
+    Array.prototype.forEach.call(doc.getElementsByTagName('item'), function (it) {
+      function all(tag) { return Array.prototype.map.call(it.getElementsByTagNameNS(DC, tag), function (x) { return String(x.textContent || '').trim(); }).filter(Boolean); }
+      var title = all('title')[0] || '';
+      if (!title) return;
+      var isbn = '';
+      Array.prototype.forEach.call(it.getElementsByTagNameNS(DC, 'identifier'), function (x) {
+        if (!isbn && /ISBN/.test(x.getAttribute('xsi:type') || '')) isbn = toIsbn13(String(x.textContent || '').replace(/[^0-9Xx]/g, '')) || '';
+      });
+      var author = all('creator').map(function (a) { return a.replace(/,\s*/g, '').replace(/\s*\d{4}-?\d{0,4}$/, ''); }).join('、');
+      var key = isbn || title + '|' + author;
+      if (seen[key]) return;
+      seen[key] = 1;
+      out.push({ isbn: isbn, title: title.replace(/\s*:\s*/g, ' '), author: author, publisher: all('publisher')[0] || '', cover: isbn ? NDL_THUMB + isbn + '.jpg' : '' });
+    });
+    return out;
+  }
+  function fromNdl(isbn) {
+    return getXml(NDL + 'isbn=' + isbn + '&cnt=1').then(function (doc) { return ndlItems(doc)[0] || null; });
+  }
+  // openBD → 国会図書館 → Google Books。どれにも無ければ null。全部通信できなければ reject
   function lookupIsbn(isbn) {
     var netErr = 0;
     return fromOpenBD(isbn).catch(function () { netErr++; return null; }).then(function (a) {
       if (a && a.cover) return a;
-      return fromGoogle(isbn).catch(function () { netErr++; return null; }).then(function (b) {
-        if (a) { if (b && b.cover) a.cover = b.cover; return a; }
-        if (b) return b;
-        if (netErr >= 2) throw new Error('network');
-        return null;
+      return fromNdl(isbn).catch(function () { netErr++; return null; }).then(function (n) {
+        var base = a || n;
+        if (base && base.cover) return base;
+        // 表紙が無い（または見つからない）ときだけ Google Books も見る
+        return fromGoogle(isbn).catch(function () { netErr++; return null; }).then(function (b) {
+          if (base) { if (b && b.cover) base.cover = b.cover; return base; }
+          if (b) return b;
+          if (netErr >= 3) throw new Error('network');
+          return null;
+        });
       });
     });
   }
+  // 書名・著者で探す：国会図書館（ISBNのある本を先に）→ 0件・失敗なら Google Books
   function searchTitle(q) {
-    return getJson(GBOOKS + encodeURIComponent(q) + '&maxResults=20&printType=books').then(function (res) {
-      return (res && res.items || []).map(function (it) { return gbItem(it.volumeInfo); }).filter(function (x) { return x.title; });
+    return getXml(NDL + 'any=' + encodeURIComponent(q) + '&cnt=40').then(function (doc) {
+      var r = ndlItems(doc);
+      r.sort(function (x, y) { return (y.isbn ? 1 : 0) - (x.isbn ? 1 : 0); });
+      return r.slice(0, 20);
+    }).catch(function () { return []; }).then(function (r) {
+      if (r.length) return r;
+      return getJson(GBOOKS + encodeURIComponent(q) + '&maxResults=20&printType=books').then(function (res) {
+        return (res && res.items || []).map(function (it) { return gbItem(it.volumeInfo); }).filter(function (x) { return x.title; });
+      });
     });
   }
 
