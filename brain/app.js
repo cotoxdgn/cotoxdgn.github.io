@@ -6,6 +6,8 @@
  *   - 最初から入っている種類（BASE_KINDS）と同じ記号が追加分にあっても、表示は最初からの方を使う（レコードは書き換えない）
  * 本のメモ（B）・ほかのアプリから作ったカードは出典を持てる：data.source = { bookId, title, author, cover, page }
  *   - bookId は本棚（app=hondana）の本の id。本棚の本の詳細には、source.bookId が一致するカードが並ぶ
+ * 建築map（app=archmap）の建物も出典にできる：data.source = { spotId, title(建物名), place(住所・地名。あれば), cover(写真のhttps URL。あれば) }
+ *   - spotId は建築mapの記録の id。建築mapの記録の編集画面には、source.spotId が一致するカードが並ぶ。ページ欄はない
  * 入口：?new=<種類>&title=<下書き>&src=<出典のJSON>&back=<戻り先（相対URL）>&from=<元のアプリ名> で「知識を書く」を開く。番号は保存時にここで振る
  *       ?open=<知識id> でその知識の詳細を開く
  */
@@ -21,6 +23,7 @@
     B: '例：暗がりがあるから金が映える', H: '思いついたことを1行で（例：玄関に一時置きの棚を必ず提案する）'
   };
   var HONDANA = '../hondana/';
+  var ARCHMAP = '../archmap/';
   var KINDS_ID = 'kinds';
 
   var db = Apps.collection(APP);
@@ -69,12 +72,23 @@
   function kindOf(c) { return kinds().filter(function (k) { return k.c === c; })[0] || { c: c || 'O', name: c || 'ほか' }; }
   function kindColor(c) { return isBase(c) ? 'var(--k-' + c + ')' : 'var(--k-x)'; }
   // 出典（本など）
-  function srcOf(d) { return d && d.source && typeof d.source === 'object' && (d.source.bookId || d.source.title) ? d.source : null; }
+  function srcOf(d) { return d && d.source && typeof d.source === 'object' && (d.source.bookId || d.source.spotId || d.source.title) ? d.source : null; }
+  // つながった出典（本棚の本・建築mapの建物）か
+  function linkedSrc(s) { return !!(s && (s.bookId || s.spotId)); }
   function safeUrl(u) { u = String(u || ''); return /^https:\/\//.test(u) ? u : ''; }
   function coverOf(d) { var s = srcOf(d); return s ? safeUrl(s.cover) : ''; }
-  function srcLine(s) { return [s.title, s.page].filter(Boolean).join(' '); }
-  function sameBook(a, b) { var x = srcOf(a.data), y = srcOf(b.data); return !!(x && y && x.bookId && x.bookId === y.bookId); }
+  function srcLine(s) { return [s.title, s.spotId ? '' : s.page].filter(Boolean).join(' '); }
+  // 同じ出典（同じ本・同じ建物）なら自動でつながる。戻り値は理由の言葉（なければ ''）
+  function sameSrc(a, b) {
+    var x = srcOf(a.data), y = srcOf(b.data);
+    if (!x || !y) return '';
+    if (x.bookId && x.bookId === y.bookId) return '同じ本';
+    if (x.spotId && x.spotId === y.spotId) return '同じ建物';
+    return '';
+  }
+  function sameBook(a, b) { return !!sameSrc(a, b); }
   function bookHref(s) { return HONDANA + '?book=' + encodeURIComponent(s.bookId); }
+  function spotHref(s) { return ARCHMAP + '?spot=' + encodeURIComponent(s.spotId); }
   function noStr(d) { return (d.kind || 'O') + '-' + pad3(d.no); }
   function nextNo(kind) {
     var m = 0;
@@ -95,7 +109,7 @@
     if (!r) return [];
     var man = manualOf(id);
     return items().filter(function (o) { return o.id !== id && man.indexOf(o.id) < 0 && (sharedTags(r, o).length || sameBook(r, o)); })
-      .map(function (o) { return { r: o, tags: sharedTags(r, o), book: sameBook(r, o) }; })
+      .map(function (o) { return { r: o, tags: sharedTags(r, o), book: sameSrc(r, o) }; })
       .sort(function (a, b) { return (b.tags.length + (b.book ? 1 : 0)) - (a.tags.length + (a.book ? 1 : 0)); });
   }
   function thumbHtml(r, size) {
@@ -118,7 +132,7 @@
       if (S.tag && (d.tags || []).indexOf(S.tag) < 0) return false;
       if (q) {
         var sc = srcOf(d) || {};
-        var hay = [d.title, d.body, noStr(d), (d.tags || []).join(' '), kindOf(d.kind).name, sc.title, sc.author,
+        var hay = [d.title, d.body, noStr(d), (d.tags || []).join(' '), kindOf(d.kind).name, sc.title, sc.author, sc.place,
           usesOf(d).map(function (u) { return u.name; }).join(' ')].join('\n').toLowerCase();
         if (q.split(/\s+/).some(function (w) { return hay.indexOf(w) < 0; })) return false;
       }
@@ -208,16 +222,22 @@
     h += '</div>';
     h += '<div><span class="lab">つながる知識</span><div class="rel">' +
       man.map(function (o) { return relItem(o, '手動', 'man'); }).join('') +
-      au.map(function (x) { return relItem(x.r, x.tags.length ? '#' + x.tags[0] : '同じ本', 'auto'); }).join('') +
+      au.map(function (x) { return relItem(x.r, x.tags.length ? '#' + x.tags[0] : x.book, 'auto'); }).join('') +
       (!man.length && !au.length ? '<p class="rel-none">まだつながりはありません。同じタグを付けるか、手動でつなげます。</p>' : '') +
       '<button type="button" class="ax-btn" id="dtLink">＋ 手動でつなぐ</button></div></div>';
     h += '<p class="dt-foot">作成 ' + esc(localDay(r.createdAt)) + ' ・ 更新 ' + esc(localDay(r.updatedAt)) + (r.pending ? ' ・ 送信待ち' : '') + '</p>';
     if (S.back) h = '<a class="ax-btn ax-btn-primary back-app" href="' + esc(S.back) + '">‹ ' + esc(S.from) + 'に戻る</a>' + h;
     $('detail').innerHTML = h;
   }
-  // 出典の札（本の表紙・書名・著者・ページ）。本棚の本なら「本棚で開く」
+  // 出典の札（本の表紙・書名・著者・ページ）。本棚の本なら「本棚で開く」、建築mapの建物なら「建築mapで開く」
   function srcCard(s, link) {
     var cv = safeUrl(s.cover);
+    if (s.spotId) {
+      var ph = '<span class="cover" aria-hidden="true">' + (cv ? '<img src="' + esc(cv) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '<span class="pin"></span>') + '</span>';
+      var si = ph + '<span class="si"><b>' + esc(s.title || '（名称なし）') + '</b><small>' + esc(s.place || (link ? '建築mapの建物' : '')) + '</small></span>';
+      if (link) return '<a class="src spot" href="' + esc(spotHref(s)) + '">' + si + '<span class="go">建築mapで開く ›</span></a>';
+      return '<div class="src spot">' + si + '<span class="go">建築mapの建物</span></div>';
+    }
     var cover = '<span class="cover" aria-hidden="true">' + (cv ? '<img src="' + esc(cv) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '<span class="vt">' + esc(s.title || '') + '</span>') + '</span>';
     var inner = cover + '<span class="si"><b>' + esc(s.title || '（書名なし）') + '</b><small>' + esc([s.author, s.page].filter(Boolean).join('　')) + '</small></span>';
     if (link && s.bookId) return '<a class="src" href="' + esc(bookHref(s)) + '">' + inner + '<span class="go">本棚で開く ›</span></a>';
@@ -326,7 +346,7 @@
     $('edFrom').hidden = !entry;
     if (entry) $('edFromText').textContent = (S.from || '元のアプリ') + 'から開きました。' + (sc ? '種類と出典は入れてあります' : '種類は選んであります');
     $('f-page').value = sc && sc.page || '';
-    $('f-srcTitle').value = sc && !sc.bookId ? sc.title || '' : '';
+    $('f-srcTitle').value = sc && !linkedSrc(sc) ? sc.title || '' : '';
     $('edTitle').textContent = r ? '知識を編集' : '知識を書く';
     $('f-title').value = d.title || '';
     $('f-body').value = d.body || '';
@@ -342,10 +362,12 @@
     var show = ED.kind === 'B' || !!ED.source;
     $('edSrcFld').hidden = !show;
     if (!show) return;
-    var linked = ED.source && ED.source.bookId;
+    var linked = linkedSrc(ED.source), spot = !!(ED.source && ED.source.spotId);
+    $('edSrcLab').textContent = spot ? '出典（建物）' : '出典（本）';
     $('edSrc').innerHTML = linked ? srcCard(ED.source, false) +
       '<button type="button" class="ax-btn ax-btn-ghost src-x" id="edSrcX">出典を外す</button>' : '';
     $('srcManual').hidden = !!linked;
+    $('srcPage').hidden = spot; // ページは本だけ
   }
   function renderEdKinds() {
     $('edKinds').innerHTML = kinds().map(function (k) {
@@ -451,13 +473,13 @@
     d.photos = ED.photos.filter(function (p) { return p.id; }).map(function (p) { return p.id; });
     d.links = ED.links.filter(function (x) { return byId(x); });
     d.uses = usesOf(d);
-    // 出典：本棚の本はそのまま＋ページ、手入れなら書名＋ページ
+    // 出典：本棚の本はそのまま＋ページ、建築mapの建物はそのまま、手入れなら書名＋ページ
     if (!$('edSrcFld').hidden) {
       var page = $('f-page').value.trim().slice(0, 30);
-      var src = ED.source && ED.source.bookId ? copyData(ED.source) : { title: $('f-srcTitle').value.trim().slice(0, 120) };
-      src.page = page;
+      var src = linkedSrc(ED.source) ? copyData(ED.source) : { title: $('f-srcTitle').value.trim().slice(0, 120) };
+      if (!src.spotId) src.page = page;
       if (!src.page) delete src.page;
-      if (src.bookId || src.title) d.source = src; else delete d.source;
+      if (src.bookId || src.spotId || src.title) d.source = src; else delete d.source;
     } else if (!ED.source) delete d.source;
     var fromEntry = ED.entry;
     var removed = ED.orig.filter(function (p) { return d.photos.indexOf(p) < 0; });
@@ -922,14 +944,15 @@
     var kind = P.get('new'), open = P.get('open');
     if (!kind && !open) return;
     S.back = safeBack(P.get('back'));
-    S.from = (P.get('from') || '').slice(0, 12) || (/hondana/.test(S.back) ? '本棚' : '元のアプリ');
+    S.from = (P.get('from') || '').slice(0, 12) || (/hondana/.test(S.back) ? '本棚' : /archmap/.test(S.back) ? '建築map' : '元のアプリ');
     var src = null;
     try { src = JSON.parse(P.get('src') || 'null'); } catch (e) { src = null; }
     if (src && typeof src === 'object') {
       var s2 = {};
-      ['bookId', 'title', 'author', 'cover', 'page'].forEach(function (k) { if (src[k] != null && src[k] !== '') s2[k] = String(src[k]).slice(0, k === 'cover' ? 500 : 160); });
+      ['bookId', 'spotId', 'title', 'author', 'place', 'cover', 'page'].forEach(function (k) { if (src[k] != null && src[k] !== '') s2[k] = String(src[k]).slice(0, k === 'cover' ? 500 : 160); });
       if (s2.cover && !safeUrl(s2.cover)) delete s2.cover;
-      src = s2.bookId || s2.title ? s2 : null;
+      if (s2.spotId) { delete s2.bookId; delete s2.page; delete s2.author; } // 建物の出典は本の項目を持たない
+      src = s2.bookId || s2.spotId || s2.title ? s2 : null;
     } else src = null;
     var title = (P.get('title') || '').slice(0, 120);
     // 再読み込みでもう一度開かないよう、URL からは消す（戻り先は覚えておく）

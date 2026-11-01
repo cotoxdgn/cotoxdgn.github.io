@@ -57,10 +57,13 @@ const server = http.createServer((req, res) => {
 });
 
 async function wire(ctx) {
-  await ctx.route('https://cdnjs.cloudflare.com/**', r => {
+  // MapLibre は jsDelivr（以前は cdnjs）から読む。どちらでも試験用の同じ版を返す
+  const maplibre = r => {
     const name = new URL(r.request().url()).pathname.split('/').pop();
     return r.fulfill({ path: path.join(MAPLIBRE, name) });
-  });
+  };
+  await ctx.route('https://cdnjs.cloudflare.com/**', maplibre);
+  await ctx.route('https://cdn.jsdelivr.net/npm/maplibre-gl@*/**', maplibre);
   await ctx.route('https://fonts.googleapis.com/**', r => r.fulfill({ contentType: 'text/css', body: '' }));
   await ctx.route('https://tiles.openfreemap.org/**', r => {
     const u = new URL(r.request().url()).pathname;
@@ -245,6 +248,121 @@ const serverList = () => gas.ctx.handle_({ key: KEY, action: 'list', app: 'archm
       await c.close();
     });
   }
+
+  // ---------- 脳みそとの行き来 ----------
+  const brainList = () => gas.ctx.handle_({ key: KEY, action: 'list', app: 'brain' }).records;
+  const brainSent = async p => {
+    for (let i = 0; i < 100; i++) {
+      if (await p.evaluate(() => Apps.pendingCount().then(n => n === 0 && Apps.collection('brain').all().every(r => !r.pending)))) return;
+      await p.waitForTimeout(100);
+    }
+    throw new Error('脳みその送信待ちが残ったまま');
+  };
+  const toastHas = (p, s) => p.waitForFunction(x => [...document.querySelectorAll('.ax-toast')].some(e => e.textContent.includes(x)), s);
+  const museum = () => serverList().find(r => r.data.name.includes('川沿いの小さな美術館'));
+  await t('脳みそ：記録から「脳みそに残す」（テイスト）→ 保存 → 建築mapに戻ると書きかけと一覧が出る', async () => {
+    const rec = museum();
+    await page.locator('.spot', { hasText: '川沿いの小さな美術館' }).click();
+    await page.waitForSelector('#editor:not([hidden])');
+    assert.strictEqual(await page.textContent('#bnLab'), '脳みそのメモ 0件');
+    await page.fill('#f-one', '川に向かって段々に下りていく展示室（書きかけ）');
+    await page.click('#toBrainBtn');
+    await page.waitForURL(/\/brain\/$/);
+    await page.waitForSelector('#editor:not([hidden])');
+    assert.strictEqual(await page.inputValue('#f-title'), '（試験）川沿いの小さな美術館');
+    assert.ok(/テイスト/.test(await page.textContent('#edKinds .chip.on')));
+    assert.ok(await page.locator('#edSrc .src.spot').isVisible());
+    assert.ok(/建築mapの建物/.test(await page.textContent('#edSrc')));
+    assert.strictEqual(await page.textContent('#edSrcLab'), '出典（建物）');
+    assert.ok(await page.locator('#srcPage').isHidden(), 'ページ欄は出さない');
+    assert.ok(/建築mapから開きました/.test(await page.textContent('#edFromText')));
+    await page.fill('#f-body', '水辺に向けて床を段々に下げる');
+    await page.screenshot({ path: path.join(SHOT, 'phone-brain-editor.png') });
+    await page.click('#edSave');
+    await page.waitForSelector('#editor', { state: 'hidden' });
+    await brainSent(page);
+    const b = brainList().find(r => r.data.source && r.data.source.spotId === rec.id);
+    assert.ok(b, '脳みそに出典つきで保存');
+    assert.strictEqual(b.data.kind, 'T');
+    const pubPhoto = rec.data.photos.find(p => p.pub).id;
+    assert.deepStrictEqual(Object.keys(b.data.source).sort(), ['cover', 'spotId', 'title']);
+    assert.ok(b.data.source.cover.startsWith('https://drive.google.com/thumbnail?id=' + pubPhoto));
+    const go = page.locator('#detail a.src.spot');
+    assert.ok(/建築mapで開く/.test(await go.textContent()));
+    assert.strictEqual(await go.getAttribute('href'), '../archmap/?spot=' + rec.id);
+    await page.screenshot({ path: path.join(SHOT, 'phone-brain-detail.png') });
+    await page.click('#detail .back-app');
+    await page.waitForURL(/\/archmap\/$/);
+    await page.waitForSelector('#editor:not([hidden])');
+    assert.strictEqual(await page.inputValue('#f-one'), '川に向かって段々に下りていく展示室（書きかけ）', '書きかけが戻る');
+    await page.waitForFunction(() => document.querySelectorAll('#bnotes .bref').length === 1);
+    assert.strictEqual(await page.textContent('#bnLab'), '脳みそのメモ 1件');
+    assert.ok((await page.getAttribute('#bnotes .bref', 'href')).startsWith('../brain/?open=' + b.id));
+    await page.locator('#brainFld').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(SHOT, 'phone-brain-back.png') });
+  });
+
+  await t('脳みそ：ディテールの画面から「脳みそに残す」（ディテール）→「建築mapで開く」で戻る', async () => {
+    const rec = museum();
+    await page.click('#detBtn');
+    await page.waitForSelector('#detail:not([hidden])');
+    await page.click('#dtBrainBtn');
+    await page.waitForURL(/\/brain\/$/);
+    await page.waitForSelector('#editor:not([hidden])');
+    assert.strictEqual(await page.inputValue('#f-title'), '（試験）川沿いの小さな美術館のディテール');
+    assert.ok(/ディテール/.test(await page.textContent('#edKinds .chip.on')));
+    await page.click('#edSave');
+    await page.waitForSelector('#editor', { state: 'hidden' });
+    await brainSent(page);
+    const ds = brainList().filter(r => r.data.source && r.data.source.spotId === rec.id);
+    assert.strictEqual(ds.length, 2);
+    assert.ok(ds.some(r => r.data.kind === 'D'));
+    // 同じ建物どうしは自動でつながる
+    assert.ok(/同じ建物/.test(await page.textContent('#detail .rel')));
+    await page.click('#detail a.src.spot');
+    await page.waitForURL(/\/archmap\/$/);
+    await page.waitForSelector('#editor:not([hidden])');
+    await page.waitForFunction(() => document.querySelectorAll('#bnotes .bref').length === 2);
+    // 一覧から脳みそのカードを開ける
+    await page.locator('#bnotes .bref', { hasText: 'のディテール' }).click();
+    await page.waitForURL(/\/brain\/$/);
+    await page.waitForSelector('.app.detail-open');
+    assert.ok(/のディテール/.test(await page.textContent('#detail h2')));
+    await page.click('#detail .back-app');
+    await page.waitForURL(/\/archmap\/$/);
+    await page.waitForSelector('#editor:not([hidden])');
+    // 書きかけのまま閉じる（保存しない）
+    page.once('dialog', d => d.accept());
+    await page.click('#edClose');
+    await page.waitForSelector('#editor', { state: 'hidden' });
+    assert.strictEqual(museum().data.one, '川に向かって段々に下りていく展示室', '保存していない書きかけはスプシに行かない');
+  });
+
+  await t('脳みそ：まだ保存していない新しい記録では「先に保存してください」', async () => {
+    await page.click('#addBtn');
+    await page.fill('#f-name', '（試験）未保存の建物');
+    await page.click('#toBrainBtn');
+    await toastHas(page, '先に保存してください');
+    assert.ok(/\/archmap\/$/.test(page.url()));
+    assert.ok(/保存すると/.test(await page.textContent('#bnotes')));
+    page.once('dialog', d => d.accept());
+    await page.click('#edClose');
+    await page.waitForSelector('#editor', { state: 'hidden' });
+  });
+
+  await t('?spot=<id> で開くとその記録が開き、URL から消える。無い id は知らせる', async () => {
+    const rec = museum();
+    await page.goto(BASE + '/archmap/?spot=' + encodeURIComponent(rec.id));
+    await page.waitForSelector('#editor:not([hidden])');
+    assert.strictEqual(await page.inputValue('#f-name'), '（試験）川沿いの小さな美術館');
+    assert.ok(/\/archmap\/$/.test(page.url()));
+    await page.waitForFunction(() => document.querySelectorAll('#bnotes .bref').length === 2);
+    await page.click('#edClose');
+    await page.waitForSelector('#editor', { state: 'hidden' });
+    await page.goto(BASE + '/archmap/?spot=nope-123');
+    await toastHas(page, 'その記録はまだこの端末にありません');
+    assert.ok(await page.locator('#editor').isHidden());
+  });
 
   await t('アプリも横にはみ出さない（390px）', async () => {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));

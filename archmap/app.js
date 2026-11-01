@@ -1,11 +1,16 @@
 /* おしゃれ建築map（記録用）
  * 1件 = { name, lat?, lng?, architect, visited, list, photos:[{id,pub}], one, details:[{id,photo,x,y,part,spec,note,pub}], tags:[], isPublic }
- * 写真はドライブに置き、レコードには id だけを持つ。公開版には「公開データを書き出す」で作る public.json だけを渡す。 */
+ * 写真はドライブに置き、レコードには id だけを持つ。公開版には「公開データを書き出す」で作る public.json だけを渡す。
+ * 脳みそ（app=brain）へ：記録・ディテールの画面の「脳みそに残す」で ../brain/?new=T|D&title=&src={spotId,title,cover}&back=../archmap/?spot=<id>&from=建築map を開く。
+ *   記録の編集画面には、脳みそのカードのうち data.source.spotId がこの記録の id のものを並べる（脳みそは読むだけ・書き換えない）
+ *   ?spot=<id> で開くと、その記録を開く（脳みその「建築mapで開く」から） */
 (function () {
   'use strict';
   var APP = 'archmap';
   var A = window.ArchMap;
   var db = Apps.collection(APP);
+  var brain = Apps.collection('brain');   // 脳みその控え（読むだけ）
+  var BRAIN = '../brain/';
   var $ = function (id) { return document.getElementById(id); };
   var LAST_LIST_KEY = 'archmap.lastList';
 
@@ -131,6 +136,7 @@
     $('edDelete').hidden = !r;
     renderPhotos();
     renderLoc();
+    renderBrainNotes();
     $('editor').hidden = false;
     $('editor').scrollTop = 0;
     if (!pickMap) {
@@ -287,6 +293,44 @@
     dropDraft();
     $('editor').hidden = true;
   }
+
+  // ---------- 脳みそへ ----------
+  function brainUrl(params) {
+    return BRAIN + '?' + Object.keys(params).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); }).join('&');
+  }
+  function spotBack(id) { return '../archmap/?spot=' + encodeURIComponent(id); }
+  function brainNotesOf(id) {
+    return brain.all().filter(function (r) {
+      var d = r.data;
+      return d && d.t === 'k' && d.source && d.source.spotId === id;
+    }).sort(function (a, b) { return String(a.data.kind).localeCompare(String(b.data.kind)) || (a.data.no || 0) - (b.data.no || 0); });
+  }
+  function pad3(n) { n = String(n || 0); while (n.length < 3) n = '0' + n; return n; }
+  // 種類 T（テイスト）・D（ディテール）でカードを書きに行く。保存済みの記録だけ
+  function toBrain(kind) {
+    if (!draft) return;
+    readForm();
+    if (!draftId) { Apps.toast('先に保存してください（保存した記録から脳みそに残せます）', true); return; }
+    var name = draft.name || '';
+    var src = { spotId: draftId, title: name || '（名称未入力）' };
+    var ph = draft.photos.filter(function (p) { return p.pub; })[0] || draft.photos[0];
+    var cv = ph ? Apps.imageUrl(ph.id, 400) : '';
+    if (/^https:\/\//.test(cv)) src.cover = cv;
+    var title = kind === 'D' ? (name ? name + 'のディテール' : 'ディテール') : name;
+    stashDraft(); // 脳みそから戻ったとき、書きかけのまま続けられるように
+    location.href = brainUrl({ 'new': kind, title: title, src: JSON.stringify(src), back: spotBack(draftId), from: '建築map' });
+  }
+  function renderBrainNotes() {
+    if (!draft) return;
+    var notes = draftId ? brainNotesOf(draftId) : [];
+    $('bnLab').textContent = '脳みそのメモ ' + notes.length + '件';
+    $('bnotes').innerHTML = !draftId ? '<p class="bn-none">保存すると、この建物から脳みそにメモを残せます。</p>' :
+      notes.length ? notes.map(function (n) {
+        return '<a class="bref" href="' + A.esc(brainUrl({ open: n.id, back: spotBack(draftId), from: '建築map' })) + '"><span class="circ">' + A.esc(n.data.kind || 'O') + '<br>' + A.esc(pad3(n.data.no)) + '</span>' +
+          '<span class="rt">' + A.esc(n.data.title) + '</span><span class="go">›</span></a>';
+      }).join('') : '<p class="bn-none">この建物から残したメモはまだありません。</p>';
+  }
+  brain.onChange(function () { if (draft && !$('editor').hidden) renderBrainNotes(); });
 
   // ---------- ディテールのメモ ----------
   var dtPhoto = '';
@@ -536,6 +580,8 @@
   };
   $('f-name').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); $('nameFindBtn').click(); } });
   $('detBtn').onclick = openDetail;
+  $('toBrainBtn').onclick = function () { toBrain('T'); };
+  $('dtBrainBtn').onclick = function () { toBrain('D'); };
   $('dtBack').onclick = function () { $('detail').hidden = true; };
   $('dtAddNoPhoto').onclick = function () { addNote('', 0, 0); };
   $('exportBtn').onclick = openExport;
@@ -561,12 +607,38 @@
     Apps.toast('書きかけの記録を戻しました');
   })();
 
-  Apps.ensureConnected(APP).then(function () { return db.sync(); }).then(function () {
+  // ?spot=<id> で開いたら、その記録を開く（脳みその「建築mapで開く」・「建築mapに戻る」から）
+  (function openSpotFromUrl() {
+    var id = null;
+    try { id = new URLSearchParams(location.search).get('spot'); } catch (e) { id = null; }
+    if (!id) return;
+    try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) { /* 無視 */ }
+    var show = function () {
+      if (!db.get(id)) return false;
+      state.cur = id;
+      if (draft && !$('editor').hidden) {
+        if (draftId === id) { renderBrainNotes(); return true; } // 書きかけを戻したところ：そのまま続ける
+        readForm();
+        if (JSON.stringify(draft) !== original) { Apps.toast('書きかけの記録を先に開いています。閉じてから開き直してください'); return true; }
+        draft = null; draftId = null; dropDraft();
+      }
+      openEditor(id);
+      return true;
+    };
+    db.ready.then(function () {
+      if (show()) return;
+      // まだこの端末にない：同期してからもう一度
+      var again = function () { if (!show()) Apps.toast('その記録はまだこの端末にありません（同期してみてください）', true); };
+      if (Apps.isConnected(APP)) db.sync().then(again, again); else again();
+    });
+  })();
+
+  Apps.ensureConnected(APP).then(function () { brain.sync().catch(function () {}); return db.sync(); }).then(function () {
     $('status').textContent = '';
   }).catch(function () { /* 'error' で表示済み */ });
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
 
   // テスト用（画面の状態確認）
-  window.__archmap = { db: db, publicJson: publicJson };
+  window.__archmap = { db: db, brain: brain, publicJson: publicJson };
 })();

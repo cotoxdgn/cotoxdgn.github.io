@@ -215,6 +215,11 @@ svg { stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round
 .src b { font-weight: 500; display: block; line-height: 1.35; overflow-wrap: anywhere; }
 .src small { font-size: 12px; color: var(--mute); }
 .src .go { font-size: 12px; color: var(--k-B); white-space: nowrap; }
+/* 建築mapの建物：写真は正方形、色はテイスト寄り */
+.src.spot { border-color: var(--k-T); }
+.src.spot .cover { aspect-ratio: 1; border-radius: 6px; background: var(--k-T); padding: 0; align-items: center; }
+.src.spot .pin { width: 12px; height: 12px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid var(--paper); }
+.src.spot .go { color: var(--k-T); }
 .ed-src { display: grid; gap: 4px; justify-items: start; }
 .ed-src:empty { display: none; }
 .src-x { min-height: 32px; font-size: 13px; padding: 2px 8px; color: var(--mute); }

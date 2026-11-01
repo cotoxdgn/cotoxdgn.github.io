@@ -85,6 +85,9 @@
     <div class="fld"><label for="f-one">ひとことメモ（公開されます）</label><textarea class="ax-input" id="f-one" rows="2"></textarea></div>
     <div class="fld"><span class="lbl">ディテールのメモ</span>
       <button class="ax-btn" type="button" id="detBtn">ディテールのメモを開く</button></div>
+    <div class="fld" id="brainFld"><span class="lbl" id="bnLab">脳みそのメモ</span>
+      <div class="bnotes" id="bnotes"></div>
+      <button class="ax-btn brain-btn" type="button" id="toBrainBtn">＋ 脳みそに残す（テイスト）</button></div>
     <div class="fld"><label for="f-tags">タグ（スペース区切り）</label><input class="ax-input" id="f-tags" autocomplete="off" placeholder="RC打放し 階段 水辺"></div>
     <div class="toggle">
       <div><b>HPで公開する</b><p>オンにした記録だけ公開データに入ります</p></div>
@@ -106,6 +109,7 @@
   <div class="dt-photo" id="dtPhoto"></div>
   <p class="hint pad">写真をタップした位置に番号が付きます。番号ごとに部位・寸法・素材を書けます。</p>
   <ol class="notes" id="notes"></ol>
+  <div class="pad dt-brain"><button class="ax-btn brain-btn" type="button" id="dtBrainBtn">＋ 脳みそに残す（ディテール）</button></div>
 </section>
 
 <!-- 公開データ -->
