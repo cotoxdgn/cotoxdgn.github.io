@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="予定合わせ">
+<meta name="theme-color" content="#ECEEE9">
+<title>予定合わせ</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Old+Mincho:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../shared/apps.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<!-- 一覧 -->
+<section class="scr on" id="v-list" aria-label="一覧">
+  <div class="bar"><h1 class="brand">予定合わせ<span>2〜3人用</span></h1>
+    <div class="r" style="display:flex;align-items:center;gap:2px"><span class="pend" id="pend" hidden></span>
+      <button class="ibtn" type="button" id="connBtn" aria-label="スプシとの接続" title="スプシとの接続"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></button></div></div>
+  <div class="body"><div class="evs" id="evs"></div>
+    <p class="empty" id="evEmpty" hidden>まだありません。右下の ＋ から作ります。</p>
+    <p class="note" style="padding:12px 16px 90px">受付中は答えた人数、決定済みは決まった日時が出ます。</p></div>
+  <button class="fab" type="button" id="newBtn" aria-label="新しく作る"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+</section>
+
+<!-- 作る -->
+<section class="scr" id="v-create" aria-label="新しく作る">
+  <div class="bar"><button class="lnk l" type="button" data-go="list">やめる</button><h2>新しく作る</h2><span></span></div>
+  <div class="body"><div class="pad">
+    <div><label class="lab" for="cName">名前（相手にも見えます）</label><input class="inp" id="cName" maxlength="30" placeholder="例：打合せ"></div>
+    <div><span class="lab">期間（最大14日）</span>
+      <div class="row2"><input class="inp" type="date" id="cStart" aria-label="はじまり"><span>〜</span><input class="inp" type="date" id="cEnd" aria-label="おわり"></div></div>
+    <div><span class="lab">時間帯</span>
+      <div class="row2"><select class="inp" id="cFrom" aria-label="何時から"></select><span>〜</span><select class="inp" id="cTo" aria-label="何時まで"></select></div></div>
+    <div><span class="lab">マスの大きさ</span><div class="seg" id="stepSeg"></div></div>
+    <div><span class="lab">必要な長さ</span><div class="seg" id="needSeg"></div></div>
+    <div><label class="lab" for="cDead">締切（この日の終わりまで受け付け）</label><input class="inp" type="date" id="cDead"></div>
+    <p class="err" id="cErr" hidden></p>
+    <p class="note">次の画面で、Googleカレンダーの予定から自分の空きを自動で塗ります（予定の時刻だけを読み、件名は使いません）。</p>
+  </div></div>
+  <div class="foot"><button class="btn pri wide" type="button" id="toMine">次へ：自分の空き</button></div>
+</section>
+
+<!-- 自分の空き -->
+<section class="scr" id="v-mine" aria-label="自分の空き">
+  <div class="bar"><button class="lnk l" type="button" id="mineBack">‹ 戻る</button><h2>自分の空き</h2><span></span></div>
+  <div class="body"><div class="pad">
+    <div class="banner" id="calBanner"></div>
+    <div class="legend"><span><i class="sw-on"></i>空き</span><span><i class="sw-busy"></i>カレンダーに予定あり</span></div>
+    <div class="wk" id="mineWeek"></div>
+    <div class="paintbox"><div class="grid" id="gMine" aria-label="自分の空きのマス目"></div></div>
+    <div class="wk"><span class="cnt" id="mineCnt"></span><button class="btn ghost sm" type="button" id="refill">カレンダーから塗り直す</button></div>
+    <p class="note">マスをなぞると塗れます（塗った所をなぞると消えます）。左の時刻の列をなぞると上下に動きます。</p>
+  </div></div>
+  <div class="foot"><button class="btn pri wide" type="button" id="mineDone">相手用リンクを作る</button></div>
+</section>
+
+<!-- 送る -->
+<section class="scr" id="v-share" aria-label="相手に送る">
+  <div class="bar"><button class="lnk l" type="button" data-go="list">‹ 一覧</button><h2>相手に送る</h2><span></span></div>
+  <div class="body"><div class="pad">
+    <div><span class="lab">相手用リンク</span>
+      <div class="linkbox" id="linkBox"></div>
+      <p class="note" style="margin-top:6px">朱色の部分が、この予定合わせだけの長い番号です。知っている人だけが答えられます。</p></div>
+    <div class="two">
+      <button class="btn" type="button" id="copyBtn">コピー</button>
+      <button class="btn pri" type="button" id="shareBtn">LINEなどで送る</button>
+    </div>
+    <div><span class="lab">相手に見えるもの</span>
+      <div class="preview"><b id="pvName"></b><span class="note" id="pvTime"></span><span class="note" id="pvDead"></span></div>
+      <p class="note" style="margin-top:6px">コトさんの予定、他の人の名前と答えは見えません。</p></div>
+    <button class="btn ghost wide" type="button" id="reissue">リンクを作り直す（古いリンクは使えなくなる）</button>
+  </div></div>
+  <div class="foot"><button class="btn wide" type="button" id="toResult">結果を見る</button></div>
+</section>
+
+<!-- 結果 -->
+<section class="scr" id="v-result" aria-label="結果">
+  <div class="bar"><button class="lnk l" type="button" data-go="list">‹ 一覧</button><h2 id="rTitle"></h2><button class="lnk r" type="button" id="rShare">送る</button></div>
+  <div class="body"><div class="rwrap">
+    <div class="r-main">
+      <div class="legend" id="rLegend"></div>
+      <div class="wk" id="rWeek"></div>
+      <div class="paintbox" id="rGridBox"><div class="grid heat" id="gHeat" aria-label="重なりのマス目"></div></div>
+    </div>
+    <div class="r-side">
+      <div id="rDecided"></div>
+      <div id="rCandsBox"><span class="lab">候補ベスト3（全員空き → 長く続く → 早い日）</span><div class="cands" id="cands"></div>
+        <button class="btn pri wide side-cal" type="button" id="calBtn2" style="margin-top:10px"></button></div>
+      <div class="cellinfo" id="rCell"></div>
+      <div id="rPplBox"><span class="lab">答えた人</span><div class="ppl" id="ppl"></div></div>
+      <div class="admin" id="rAdmin"></div>
+    </div>
+  </div></div>
+  <div class="foot"><button class="btn pri wide" type="button" id="calBtn"></button></div>
+</section>
+
+<div class="sheet-bg" id="sheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="shH">
+    <h3 id="shH">Googleカレンダーに入れる</h3>
+    <dl class="kv" id="shKv"></dl>
+    <p class="note">コトさんのカレンダーに1件だけ作ります。相手への招待メールは送りません。</p>
+    <div class="acts"><button class="btn" type="button" id="calCancel">やめる</button><button class="btn pri" type="button" id="calDo">入れる</button></div>
+  </div>
+</div>
+
+<script src="../shared/apps.js"></script>
+<script src="endpoint.js"></script>
+<script src="grid.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

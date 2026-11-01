@@ -17,7 +17,7 @@
 ## アプリ名（APP）
 
 英小文字・数字・`-` `_`、30文字まで。スプシのシート名が `app=<APP>` になります（初回保存時に自動作成）。
-決定済み：`routine` `diary` `archmap` `filemap` `brain` `wanko` `hondana`
+決定済み：`routine` `diary` `archmap` `filemap` `brain` `wanko` `hondana` `yotei`
 
 ## 基本の形
 
@@ -113,6 +113,23 @@ Apps.call(app, action, params) // → Promise<レスポンス>（ok:false は Er
 | `image` | `mime`, `base64`, `name?` | `image: { id, url, thumb, name, bytes }` |
 | `imageData` | `id` | `mime`, `base64` |
 | `imageDelete` | `id` | — |
+| `yoteiCal` | `from`, `to`（YYYY-MM-DD、15日まで） | `busy: [{ s, e }]`（予定の始まり・終わりの ISO だけ。件名などは返さない。終日・欠席の予定は除く） |
+| `yoteiResults` | `id?` | `answers: { 予定合わせID: [{ name, cells, createdAt, updatedAt, edits }] }`（端末IDは返さない） |
+| `yoteiCreateEvent` | `id`, `start`, `end`（ISO） | `record`（決定済みにした予定合わせ）, `calendarEventId`。既定のカレンダーに1件だけ作る（招待なし）。決定済みなら `already` |
+
+予定合わせの相手用の窓口（**合言葉なし**。`key` は見ない。合言葉の確認より前に分かれ、ほかの action には進めない）：
+
+| action | 送るもの | 返るもの |
+|---|---|---|
+| `yoteiGet` | `token`（英数字32文字） | `event: { title, start, end, from, to, step, deadline, state（open・closed・decided）, decided? }`（自分の空き・他の人の答えは返さない） |
+| `yoteiAnswer` | `token`, `name`（20文字まで）, `device`（端末ごとのランダムID）, `cells`（1日1本の 0/1 文字列。期間・時間帯の形と同じものだけ） | `saved`, `edits`, `editsLeft` |
+
+- トークンが違う・形が違う・消した・期間の終わりから30日過ぎた → どれも `not_found` だけ
+- 受付中だけ書ける（締切日の終わり・期間の終わりを過ぎた／締め切った／決定済み → `closed`）
+- 上限：1回5,000文字（`too_long`）、1つの予定合わせに5人（`full`）、1人20回まで直せる（`too_many_edits`）、1つの予定合わせへの書き込みは1時間に60回（`too_many`）
+- 同じ予定合わせ・同じ `device`・同じ `name` なら上書き。名前と塗ったマス以外の項目は捨てる
+- 保存先：シート `yotei_answers`（1行1人）と `yotei_writes`（回数の記録）。予定合わせ本体は `app=yotei` のレコード（ふつうの put / list / delete）。形は `gas/Code.gs` の「予定合わせ」のコメントを参照
+- 掃除：消した・期限切れの予定合わせの答えは、次の `yoteiAnswer` / `yoteiResults` のときに消す（トリガー不要）
 
 ## エラー
 
@@ -154,4 +171,6 @@ BrainNote.noLabel(card.data);                               // 'B-001'／番号�
 ```
 node test/gas.test.js      # Code.gs（モック）
 node test/shared.test.js   # apps.js ↔ Code.gs の通し
+node test/yotei.test.js    # 予定合わせの窓口（Code.gs・モック）
+node yotei/test/e2e.js     # 予定合わせの画面（Playwright）
 ```

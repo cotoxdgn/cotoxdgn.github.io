@@ -32,6 +32,7 @@ module.exports = function makeGas() {
     set(r, c, v) { while (this.cells.length < r) this.cells.push([]); const row = this.cells[r - 1]; while (row.length < c) row.push(''); row[c - 1] = v; }
     get(r, c) { const row = this.cells[r - 1]; return row && row[c - 1] !== undefined ? row[c - 1] : ''; }
     setFrozenRows() {}
+    deleteRow(r) { this.cells.splice(r - 1, 1); }
   }
   class SS {
     constructor() { this.sheets = [new Sheet('シート1')]; }
@@ -66,6 +67,21 @@ module.exports = function makeGas() {
     static now() { return clockBox.t; }
   }
   const ss = new SS();
+  // カレンダー（予定合わせ用）：events に { s, e（ミリ秒）, title, allDay, status } を入れておく。作った予定は created に
+  const cal = { events: [], created: [], fail: '', reads: 0 };
+  const calEvent = ev => ({ getStartTime: () => new RealDate(ev.s), getEndTime: () => new RealDate(ev.e), isAllDayEvent: () => !!ev.allDay,
+    getMyStatus: () => ev.status || 'OWNER', getTitle: () => ev.title || '' });
+  const CalendarApp = {
+    GuestStatus: { NO: 'NO', YES: 'YES', OWNER: 'OWNER' },
+    getDefaultCalendar() {
+      if (cal.fail) throw new Error(cal.fail);
+      return {
+        getName: () => 'テスト',
+        getEvents: (s, e) => { cal.reads++; return cal.events.filter(ev => ev.s < +e && +s < ev.e).map(calEvent); },
+        createEvent: (title, s, e, opts) => { const x = { id: 'cal' + (++idSeq), title, s: +s, e: +e, opts }; cal.created.push(x); return { getId: () => x.id }; }
+      };
+    }
+  };
   const ctx = {
     Date: FakeDate, JSON, Math, String, Array, Object, isNaN, RegExp,
     SpreadsheetApp: { getActiveSpreadsheet: () => ss, getUi: () => { throw new Error('no ui'); } },
@@ -86,9 +102,10 @@ module.exports = function makeGas() {
     },
     ScriptApp: { getService: () => ({ getUrl: () => 'https://script.google.com/macros/s/ABC/exec' }) },
     ContentService: { createTextOutput: t => ({ text: t, setMimeType() { return this; } }), MimeType: { JSON: 'json' } },
-    HtmlService: {}
+    HtmlService: {},
+    CalendarApp, Logger: { log() {} }
   };
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'gas', 'Code.gs'), 'utf8'), ctx, { filename: 'Code.gs' });
-  return { ctx, ss, drive, clockBox, FakeDate };
+  return { ctx, ss, drive, clockBox, FakeDate, cal };
 };

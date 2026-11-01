@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#ECEEE9">
+<title>予定合わせ</title>
+<link rel="icon" href="../icons/icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Old+Mincho:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../../shared/apps.css">
+<link rel="stylesheet" href="../app.css">
+</head>
+<body>
+<!-- 読み込み中・見つからない・受付終了 -->
+<section class="scr on" id="g-msg" aria-live="polite">
+  <div class="guest-top"><small>予定合わせ</small><h2 id="mTitle">読み込んでいます…</h2><span class="meta" id="mMeta"></span></div>
+  <div class="body"><div class="pad">
+    <div class="big-ok" id="mBox" hidden><div class="mk off" id="mMark"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></div><h3 id="mHead"></h3><p class="note" id="mText"></p></div>
+    <button class="btn wide" type="button" id="mRetry" hidden>もう一度読み込む</button>
+  </div></div>
+</section>
+
+<!-- 1 名前 -->
+<section class="scr" id="g-name" aria-label="名前を入れる">
+  <div class="guest-top"><small>コトさんから予定合わせのお願い</small><h2 class="gTitle"></h2><span class="meta gMeta"></span></div>
+  <div class="body"><div class="pad">
+    <div class="steps"><span class="on">1 名前</span><span>2 空きを塗る</span><span>3 送る</span></div>
+    <div><label class="lab" for="gName">お名前（20文字まで）</label><input class="inp" id="gName" maxlength="20" placeholder="例：鈴木" autocomplete="name" enterkeyhint="next"></div>
+    <p class="err" id="nameErr" hidden></p>
+    <p class="note" id="nameNote"></p>
+  </div></div>
+  <div class="foot"><button class="btn pri wide" type="button" id="toPaint">次へ</button></div>
+</section>
+
+<!-- 2 塗る -->
+<section class="scr" id="g-paint" aria-label="空きを塗る">
+  <div class="guest-top"><small>空いている時間を指でなぞってください</small><h2 class="gTitle"></h2><span class="meta" id="gWho"></span></div>
+  <div class="body"><div class="pad" style="gap:12px">
+    <div class="steps"><span>1 名前</span><span class="on">2 空きを塗る</span><span>3 送る</span></div>
+    <div class="legend"><span><i class="sw-on"></i>空いている</span><span>塗った所をもう一度なぞると消えます</span></div>
+    <div class="wk" id="gWeek"></div>
+    <div class="paintbox"><div class="grid" id="gGrid" aria-label="空きを塗るマス目"></div></div>
+    <div class="wk"><span class="cnt" id="gCnt"></span><button class="btn ghost sm" type="button" id="gClear">全部消す</button></div>
+    <p class="err" id="sendErr" hidden></p>
+  </div></div>
+  <div class="foot"><button class="btn pri wide" type="button" id="gSend">この内容で送る</button>
+    <button class="lnk" type="button" id="gBackName">‹ 名前を直す</button></div>
+</section>
+
+<!-- 3 送れました -->
+<section class="scr" id="g-done" aria-label="送れました">
+  <div class="guest-top"><small>コトさんから予定合わせのお願い</small><h2 class="gTitle"></h2><span class="meta gMeta"></span></div>
+  <div class="body"><div class="pad">
+    <div class="big-ok"><div class="mk"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></div><h3 id="doneHead">送れました</h3>
+      <p class="note">ありがとうございます。決まったら、コトさんから連絡があります。</p></div>
+    <button class="btn wide" type="button" id="gEdit">答えを直す（締切まで）</button>
+    <p class="note" id="doneNote"></p>
+  </div></div>
+</section>
+
+<script src="../endpoint.js"></script>
+<script src="../grid.js"></script>
+<script src="guest.js"></script>
+</body>
+</html>
