@@ -1,5 +1,5 @@
-/* ルーティン：習慣の達成記録（1版目）
- * レコードは2種類（同じシート app=routine）
+/* ルーティン：習慣の達成記録＋起床・就寝記録
+ * レコード（同じシート app=routine）。睡眠のレコードは sleep.js の先頭を参照
  *   習慣：id = h-xxxx            data = { kind:'habit', name, time, color, order, since, archivedOn }
  *   記録：id = log-YYYYMMDD-<習慣id> data = { kind:'log', date:'YYYY-MM-DD', habit, at }
  *   記録は「日付＋習慣」で id が決まるので、同じ日に二重にはならない。取り消しは削除。
@@ -23,9 +23,16 @@
   var CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
   var FLOWER = '<svg class="flower" viewBox="0 0 20 20" aria-hidden="true"><g fill="var(--rose)"><circle cx="10" cy="5" r="4"/><circle cx="15" cy="10" r="4"/><circle cx="10" cy="15" r="4"/><circle cx="5" cy="10" r="4"/></g><circle cx="10" cy="10" r="3" fill="var(--mustard)"/></svg>';
 
+  var MOON = '<svg class="moon" viewBox="0 0 12 12" aria-hidden="true"><path d="M10.2 7.6A4.6 4.6 0 0 1 4.4 1.8a4.6 4.6 0 1 0 5.8 5.8z" fill="var(--blue)"/></svg>';
+  var SL = window.RoutineSleep;
+  var SHORTCUT = '睡眠を送る';
+  var SHORTCUT_URL = 'shortcuts://run-shortcut?name=' + encodeURIComponent(SHORTCUT);
+  var SHORTCUT_FORCE = SHORTCUT_URL + '&input=text&text=' + encodeURIComponent('いま');
+
   var db = Apps.collection(APP);
   var $ = function (id) { return document.getElementById(id); };
   var state = { habits: [], allHabits: [], logs: {}, today: '', month: null, editing: null, color: 'sage' };
+  var sl = { days: {}, goalData: null, hist: SL.history(null), hol: {}, range: 'w', kind: 'wake', sel: null, editDate: null, key: '', keyShown: false };
 
   // ---------- 日付 ----------
   function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -55,6 +62,12 @@
     state.allHabits = hs;
     state.habits = hs.filter(function (h) { return !h.archivedOn; });
     state.logs = logs;
+    var b = SL.build(list);
+    sl.days = b.days;
+    sl.goalData = b.goalData;
+    sl.hist = SL.history(b.goalData);
+    sl.hol = {};
+    ((b.goalData && Array.isArray(b.goalData.hol)) ? b.goalData.hol : SL.DEFAULT_HOL).forEach(function (w) { sl.hol[w] = 1; });
   }
   function done(date, hid) { return !!state.logs[date + '|' + hid]; }
   function habitsOn(date) {
@@ -118,7 +131,7 @@
     var html = WD.map(function (w, i) { return '<div class="wd' + (i === 0 ? ' sun' : i === 6 ? ' sat' : '') + '">' + w + '</div>'; }).join('');
     var first = new Date(y, mo, 1), days = new Date(y, mo + 1, 0).getDate();
     for (var i = 0; i < first.getDay(); i++) html += '<div></div>';
-    var fullN = 0, best = 0, run = 0, per = {}, elapsed = 0;
+    var fullN = 0, best = 0, run = 0, per = {}, elapsed = 0, sleepN = 0;
     for (var d = 1; d <= days; d++) {
       var ds = ymd(new Date(y, mo, d));
       var cls = 'day', inner = '<span>' + d + '</span>';
@@ -126,6 +139,7 @@
       else {
         elapsed++;
         if (ds === state.today) cls += ' today';
+        if (sleepGood(ds)) { sleepN++; inner += MOON; }
         state.allHabits.forEach(function (h) { if (done(ds, h.id)) per[h.id] = (per[h.id] || 0) + 1; });
         if (fullDay(ds)) {
           cls += ' full'; fullN++; run++; best = Math.max(best, run);
@@ -141,9 +155,10 @@
     cal.innerHTML = html;
     $('legend').innerHTML = state.habits.map(function (h) {
       return '<span><i class="dot" style="background:var(--' + h.color + ')"></i>' + esc(h.name) + '</span>';
-    }).join('') + '<span>' + FLOWER + '全部できた日</span>';
+    }).join('') + '<span>' + FLOWER + '全部できた日</span><span>' + MOON + '睡眠が目標内（起床・就寝・長さ）</span>';
     var sum = '<div><b class="num">' + fullN + '日</b><small>全部できた日</small></div>' +
-      '<div><b class="num">' + best + '日</b><small>この月の最長連続</small></div>';
+      '<div><b class="num">' + best + '日</b><small>この月の最長連続</small></div>' +
+      '<div><b class="num">' + sleepN + '／' + elapsed + '</b><small>睡眠が目標内の日</small></div>';
     state.allHabits.forEach(function (h) {
       if (h.archivedOn && !per[h.id]) return;
       sum += '<div><b class="num">' + (per[h.id] || 0) + '／' + elapsed + '</b><small>' + esc(h.name) + '</small></div>';
@@ -271,16 +286,284 @@
   $('connBtn').onclick = function () { Apps.openConnectSheet(APP); };
   Apps.on('connection', function () { renderHabits(); });
 
+
+  // ---------- 睡眠 ----------
+  function sleepRec(ds) { var d = sl.days[ds]; return d && d.value ? d.value : null; }
+  function goalOf(ds) { return SL.goalOn(sl.hist, ds); }
+  function sleepJudge(ds) { var v = sleepRec(ds); return v ? SL.judge(v, goalOf(ds)) : null; }
+  function sleepGood(ds) { var j = sleepJudge(ds); return !!(j && j.all); }
+  function md(ds) { var d = parse(ds); return (d.getMonth() + 1) + '/' + d.getDate(); }
+  function isHol(ds) { return !!sl.hol[parse(ds).getDay()]; }
+  function dayLabel(ds) { return md(ds) + '(' + WD[parse(ds).getDay()] + (isHol(ds) ? '・休' : '') + ')'; }
+  function sign(d) { d = Math.round(d); return (d > 0 ? '+' : d < 0 ? '−' : '±') + Math.abs(d); }
+  function hhmm(iso) { var d = new Date(iso); return isNaN(d) ? '' : d.getHours() + ':' + pad(d.getMinutes()); }
+  // 今朝の分がまだ無ければ昨日から数える（今朝の分があって目標外なら 0）
+  function sleepStreak(key) {
+    var d = state.today, n = 0;
+    if (!sleepRec(d)) d = addDays(d, -1);
+    for (var j = sleepJudge(d); j && j[key] && n < 3700; j = sleepJudge(d)) { n++; d = addDays(d, -1); }
+    return n;
+  }
+  function tag(ok, ngText) { return '<span class="tag ' + (ok ? 'ok' : 'ng') + '">' + (ok ? '目標内' : ngText) + '</span>'; }
+
+  function renderSleep() {
+    var t = parse(state.today);
+    $('slSub').textContent = (t.getMonth() + 1) + '月' + t.getDate() + '日（' + WD[t.getDay()] + (isHol(state.today) ? '・休日' : '') + '）の朝';
+    var g = goalOf(state.today), v = sleepRec(state.today), box = $('slToday');
+    if (!v) {
+      var early = new Date().getHours() < 9;
+      box.innerHTML = '<div class="missing" id="slMissing"><p><b>今朝の記録がまだ届いていません</b></p><p class="small">' +
+        (early ? '9:00 か、朝いちばんのアプリを開いたときに自動で届きます。' : '9:00 に iPhone がロックされていると、送れないことがあります。') + '</p>' +
+        '<div class="btns"><a class="ax-btn ax-btn-primary" id="slRun" href="' + SHORTCUT_URL + '">ショートカットを今すぐ実行</a>' +
+        '<button class="ax-btn" type="button" id="slManual">手で入れる</button></div></div>';
+      $('slRun').onclick = waitForArrival;
+      $('slManual').onclick = function () { openEdit(state.today); };
+    } else {
+      var j = SL.judge(v, g);
+      box.innerHTML = '<div class="card sl-night" id="slCard">' +
+        '<div class="cell"><small>昨夜の就寝</small><b id="slBed">' + SL.bedClock(v.bed) + '</b><span class="sl-diff" id="slBedDiff">' + tag(j.okBed, g.band + '分超') + SL.bedClock(g.bed) + ' より' + SL.diffText(j.dBed) + '</span></div>' +
+        '<div class="cell"><small>今朝の起床</small><b id="slWake">' + SL.clock(v.wake) + '</b><span class="sl-diff" id="slWakeDiff">' + tag(j.okWake, g.band + '分超') + SL.clock(g.wake) + ' より' + SL.diffText(j.dWake) + '</span></div>' +
+        '<div class="sl-len"><div class="top"><small>眠った長さ</small><b class="num" id="slLen">' + SL.lenText(v.len) + '</b></div>' +
+        '<span class="sl-diff" id="slLenDiff">' + tag(j.okLen, 'たりない') + '目標 ' + SL.lenText(g.sleepLen) + '以上・' + SL.lenDiffText(j.dLen) + '</span></div>' +
+        '<div class="sl-from"><span id="slSrc">' + (v.fixed ? '手で直した値' : 'ヘルスケアから ' + hhmm(v.receivedAt) + ' に届きました') + '</span>' +
+        (v.fixed ? '' : '<a href="' + SHORTCUT_FORCE + '" id="slResend">もう一度送る</a>') + '</div></div>';
+      if ($('slResend')) $('slResend').onclick = waitForArrival;
+    }
+    $('stWake').textContent = sleepStreak('okWake');
+    $('stBed').textContent = sleepStreak('okBed');
+    $('stLen').textContent = sleepStreak('okLen');
+    $('lenN').textContent = SL.lenText(g.sleepLen);
+    Array.prototype.forEach.call(document.querySelectorAll('.bandN'), function (e) { e.textContent = g.band; });
+    renderChart();
+    renderRecent();
+  }
+  // ショートカットから戻ってきたら受け取る
+  var waitTimer = null;
+  function waitForArrival() {
+    Apps.toast('「' + SHORTCUT + '」を開きます。終わったらこのアプリに戻ってください');
+    var n = 0;
+    clearInterval(waitTimer);
+    waitTimer = setInterval(function () {
+      if (++n > 24 || sleepRec(state.today)) { clearInterval(waitTimer); return; }
+      if (!document.hidden && Apps.isConnected(APP)) db.sync().catch(function () {});
+    }, 5000);
+  }
+
+  // グラフ（SVG）。縦＝目標との差（上ほどおそい／長い）、点線＝目標、帯＝目標内
+  var NS = 'http://www.w3.org/2000/svg';
+  function el(tagName, at, txt) { var e = document.createElementNS(NS, tagName); for (var k in at) e.setAttribute(k, at[k]); if (txt != null) e.textContent = txt; return e; }
+  function diffOf(ds) { var j = sleepJudge(ds); return j ? (sl.kind === 'wake' ? j.dWake : sl.kind === 'bed' ? j.dBed : j.dLen) : null; }
+  function renderChart() {
+    var svg = $('chart'); while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var n = sl.range === 'w' ? 7 : 30, W = 340, H = 200, L = 40, R = 8, T = 10, B = sl.range === 'w' ? 40 : 28;
+    var pw = W - L - R, ph = H - T - B, LIM = sl.kind === 'len' ? 120 : 60;
+    var g = goalOf(state.today), goal = sl.kind === 'wake' ? g.wake : sl.kind === 'bed' ? g.bed : g.sleepLen;
+    var y = function (d) { return T + ph / 2 - (Math.max(-LIM, Math.min(LIM, d)) / LIM) * (ph / 2); };
+    var days = []; for (var i = n - 1; i >= 0; i--) days.push(addDays(state.today, -i));
+    var changed = sl.hist.some(function (h) { return h.from > days[0] && h.from <= days[n - 1]; });
+    $('cTitle').textContent = (sl.kind === 'wake' ? '起床' : sl.kind === 'bed' ? '就寝' : '眠った長さ') + '　' + md(days[0]) + '〜' + md(days[n - 1]) + '　' +
+      (sl.kind === 'len' ? '上ほど長い' : '上ほどおそい') + (changed ? '（途中で目標を変更。各日はその時の目標との差）' : '');
+    if (sl.kind === 'len') svg.appendChild(el('rect', { x: L, y: T, width: pw, height: y(0) - T, fill: 'var(--band)' }));
+    else svg.appendChild(el('rect', { x: L, y: y(g.band), width: pw, height: y(-g.band) - y(g.band), fill: 'var(--band)' }));
+    var ticks = [-LIM, -LIM / 2, LIM / 2, LIM];
+    ticks.forEach(function (d) { svg.appendChild(el('line', { x1: L, x2: W - R, y1: y(d), y2: y(d), stroke: 'var(--grid)', 'stroke-width': 1 })); });
+    [-LIM, -LIM / 2, 0, LIM / 2, LIM].forEach(function (d) {
+      var t = sl.kind === 'len' ? SL.clock(goal + d) : sl.kind === 'bed' ? SL.bedClock(goal + d) : SL.clock(goal + d);
+      svg.appendChild(el('text', { x: L - 6, y: y(d) + 4, 'text-anchor': 'end', 'class': d === 0 ? 'tgt' : '' }, t));
+    });
+    svg.appendChild(el('line', { x1: L, x2: W - R, y1: y(0), y2: y(0), stroke: 'var(--ink)', 'stroke-width': 1.5, 'stroke-dasharray': '4 4' }));
+    var cw = pw / n, y0 = y(0);
+    days.forEach(function (ds, i) {
+      var cx = L + cw * (i + 0.5), hol = isHol(ds), d = diffOf(ds), col = hol ? 'var(--hol)' : 'var(--wk)';
+      if (sl.sel === ds) svg.appendChild(el('rect', { x: cx - cw / 2, y: T, width: cw, height: ph, fill: 'var(--ink)', opacity: 0.07, rx: 4 }));
+      if (sl.range === 'w') {
+        svg.appendChild(el('text', { x: cx, y: H - B + 16, 'text-anchor': 'middle' }, WD[parse(ds).getDay()]));
+        svg.appendChild(el('text', { x: cx, y: H - B + 31, 'text-anchor': 'middle', fill: hol ? 'var(--ink)' : 'var(--muted)' }, hol ? md(ds) + '休' : md(ds)));
+      } else if ((parse(ds).getDate() % 5 === 0 || parse(ds).getDate() === 1) && i > 1 && i < n - 1) {
+        svg.appendChild(el('text', { x: cx, y: H - B + 16, 'text-anchor': 'middle' }, md(ds)));
+      }
+      if (d != null) {
+        var py = y(d), out = Math.abs(d) > LIM, sz = sl.range === 'w' ? 5 : 4;
+        svg.appendChild(el('line', { x1: cx, x2: cx, y1: y0, y2: py, stroke: col, 'stroke-width': 2, 'stroke-linecap': 'round' }));
+        if (out) {
+          var up = d > 0, tip = up ? T + 1 : T + ph - 1, base = up ? tip + 9 : tip - 9;
+          svg.appendChild(el('path', { d: 'M' + (cx - 6) + ' ' + base + 'L' + cx + ' ' + tip + 'L' + (cx + 6) + ' ' + base + 'Z', fill: col, stroke: 'var(--card)', 'stroke-width': 2, 'stroke-linejoin': 'round', 'class': 'pt out' }));
+        } else if (hol) {
+          svg.appendChild(el('rect', { x: cx - sz, y: py - sz, width: sz * 2, height: sz * 2, rx: 2, fill: col, stroke: 'var(--card)', 'stroke-width': 2, 'class': 'pt' }));
+        } else {
+          svg.appendChild(el('circle', { cx: cx, cy: py, r: sz, fill: col, stroke: 'var(--card)', 'stroke-width': 2, 'class': 'pt' }));
+        }
+      } else if (sl.range === 'w') {
+        svg.appendChild(el('text', { x: cx, y: y0 - 6, 'text-anchor': 'middle' }, '—'));
+      }
+      var hit = el('rect', { x: cx - cw / 2, y: 0, width: cw, height: H, fill: 'transparent', 'data-d': ds, tabindex: sl.range === 'w' ? 0 : -1, role: 'button', 'aria-label': dayLabel(ds) });
+      hit.style.cursor = 'pointer';
+      hit.addEventListener('click', function () { sl.sel = ds; renderChart(); });
+      hit.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sl.sel = ds; renderChart(); } });
+      svg.appendChild(hit);
+    });
+    $('cLegend').innerHTML = '<span><i style="background:var(--wk);border-radius:50%"></i>平日</span><span><i style="background:var(--hol);border-radius:2px"></i>休日（' +
+      WD.filter(function (w, k) { return sl.hol[k]; }).join('・') + '）</span><span><i style="background:var(--band)"></i>' +
+      (sl.kind === 'len' ? '目標以上' : '目標±' + g.band + '分') + '</span><span><i style="height:0;border-top:2px dashed var(--ink);width:14px"></i>目標</span>';
+    if (sl.sel) showTip(sl.sel); else $('tip').textContent = '点を押すと、その日の時刻と差が出ます';
+  }
+  function showTip(ds) {
+    var v = sleepRec(ds);
+    if (!v) { $('tip').textContent = dayLabel(ds) + '　記録なし'; return; }
+    var j = SL.judge(v, goalOf(ds));
+    $('tip').textContent = dayLabel(ds) + '　' + (sl.kind === 'wake' ? '起床 ' + SL.clock(v.wake) + '（' + SL.diffText(j.dWake) + '）'
+      : sl.kind === 'bed' ? '就寝 ' + SL.bedClock(v.bed) + '（' + SL.diffText(j.dBed) + '）'
+      : '長さ ' + SL.lenText(v.len) + '（' + SL.lenDiffText(j.dLen) + '）') + (v.fixed ? '・手で直した値' : '');
+  }
+
+  function renderRecent() {
+    var html = '';
+    for (var i = 0; i < 7; i++) {
+      var ds = addDays(state.today, -i), v = sleepRec(ds), hol = isHol(ds), j = v ? SL.judge(v, goalOf(ds)) : null;
+      var mark = '<i class="mk" style="background:' + (hol ? 'var(--hol);border-radius:2px' : 'var(--wk);border-radius:50%') + '"></i>';
+      html += '<button class="row" type="button" data-ed="' + ds + '">' + mark + '<span class="d">' + md(ds) + '(' + WD[parse(ds).getDay()] + ')<small>' + (hol ? '休日' : '平日') + (v && v.fixed ? '・直した' : '') + '</small></span>' +
+        (v ? '<span class="v"><span>就寝 ' + SL.bedClock(v.bed) + '</span><span>起床 ' + SL.clock(v.wake) + '</span><small>' + sign(j.dBed) + '分</small><small>' + sign(j.dWake) + '分</small>' +
+          '<small class="l">長さ ' + SL.lenText(v.len) + (j.okLen ? '' : '（' + SL.lenDiffText(j.dLen) + '）') + '</small></span>'
+          : '<span class="v"><span class="muted">記録なし</span></span>') + '<span aria-hidden="true" class="muted">›</span></button>';
+    }
+    $('slRecent').innerHTML = html;
+    Array.prototype.forEach.call($('slRecent').querySelectorAll('[data-ed]'), function (b) { b.onclick = function () { openEdit(b.getAttribute('data-ed')); }; });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-range]'), function (b) { b.onclick = function () { sl.range = b.getAttribute('data-range'); sl.sel = null; syncSeg(); renderChart(); }; });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-kind]'), function (b) { b.onclick = function () { sl.kind = b.getAttribute('data-kind'); syncSeg(); renderChart(); }; });
+  function syncSeg() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-range]'), function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-range') === sl.range); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-kind]'), function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-kind') === sl.kind); });
+  }
+
+  // 手入力・修正
+  function fixId(ds) { return 'sleepfix-' + SL.compact(ds); }
+  function openEdit(ds) {
+    sl.editDate = ds;
+    if (location.hash === '#sleep-edit') fillEdit(); else location.hash = '#sleep-edit';
+  }
+  function fillEdit() {
+    var ds = sl.editDate, day = sl.days[ds], v = sleepRec(ds), g = goalOf(ds);
+    var auto = day && day.auto;
+    $('eDate').value = ds;
+    $('eDate').max = state.today;
+    $('eTitle').textContent = v ? '記録を直す' : '記録を入れる';
+    $('eFrom').textContent = auto ? 'ヘルスケアから：就寝 ' + SL.bedClock(auto.bed) + '・起床 ' + SL.clock(auto.wake) + '（' + SL.lenText(auto.len) + '）' : 'ヘルスケアからの記録はありません（手入力）';
+    $('eBed').value = SL.toInput(v ? v.bed : g.bed);
+    $('eWake').value = SL.toInput(v ? v.wake : g.wake);
+    $('ePrev').textContent = md(addDays(ds, -1)) + ' の夜に寝て、' + md(ds) + ' の朝に起きた分です。';
+    $('eReset').hidden = !(day && day.fix && auto);
+    $('eDel').hidden = !v;
+  }
+  $('slNew').onclick = function () { openEdit(state.today); };
+  $('eDate').addEventListener('change', function () { if ($('eDate').value) { sl.editDate = $('eDate').value; fillEdit(); } });
+  $('eForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var ds = sl.editDate;
+    if (!ds || !$('eBed').value || !$('eWake').value) return;
+    db.put({ kind: 'sleepfix', date: ds, bed: SL.bedFromInput($('eBed').value), wake: SL.minOf($('eWake').value), at: new Date().toISOString() }, fixId(ds));
+    sl.sel = ds;
+    location.hash = '#sleep';
+    Apps.toast(md(ds) + ' の記録を保存しました');
+  });
+  $('eReset').onclick = function () {
+    db.remove(fixId(sl.editDate));
+    location.hash = '#sleep';
+    Apps.toast('ヘルスケアの値に戻しました');
+  };
+  $('eDel').onclick = function () {
+    var ds = sl.editDate, day = sl.days[ds];
+    if (!confirm(md(ds) + ' の記録を消しますか？')) return;
+    // ヘルスケアの値は残し（あとで届き直しても出ないよう）「消した」印を置く
+    if (day && day.auto) db.put({ kind: 'sleepfix', date: ds, removed: true, at: new Date().toISOString() }, fixId(ds));
+    else db.remove(fixId(ds));
+    location.hash = '#sleep';
+    Apps.toast(md(ds) + ' の記録を消しました');
+  };
+
+  // 目標
+  var BANDS = [10, 15, 20, 30], gBand = 15, gHol = {};
+  function fillGoal() {
+    var g = goalOf(state.today);
+    $('gWake').value = SL.toInput(g.wake);
+    $('gBed').value = SL.toInput(g.bed);
+    var opts = '';
+    for (var m = 300; m <= 600; m += 30) opts += '<option value="' + m + '"' + (m === g.sleepLen ? ' selected' : '') + '>' + SL.lenText(m) + '以上</option>';
+    if ((g.sleepLen - 300) % 30 || g.sleepLen < 300 || g.sleepLen > 600) opts += '<option value="' + g.sleepLen + '" selected>' + SL.lenText(g.sleepLen) + '以上</option>';
+    $('gLen').innerHTML = opts;
+    gBand = g.band; gHol = {}; for (var k in sl.hol) gHol[k] = 1;
+    drawGoalCtl();
+    $('gHist').innerHTML = sl.hist.slice().reverse().map(function (h) {
+      return '<div class="row"><div class="txt"><span>' + (h.from <= '2000-01-01' ? 'はじめ' : h.from.slice(0, 4) + '/' + md(h.from) + ' から') +
+        '</span><small>起床 ' + SL.clock(h.wake) + '・就寝 ' + SL.bedClock(h.bed) + '・' + SL.lenText(h.sleepLen) + '以上・±' + h.band + '分</small></div></div>';
+    }).join('');
+  }
+  function drawGoalCtl() {
+    $('gBand').innerHTML = BANDS.map(function (b) { return '<button type="button" data-b="' + b + '" aria-pressed="' + (b === gBand) + '">±' + b + '分</button>'; }).join('');
+    $('gHol').innerHTML = WD.map(function (w, i) { return '<button type="button" data-w="' + i + '" aria-pressed="' + !!gHol[i] + '" aria-label="' + w + '曜日">' + w + '</button>'; }).join('');
+    Array.prototype.forEach.call($('gBand').querySelectorAll('button'), function (b) { b.onclick = function () { gBand = +b.getAttribute('data-b'); drawGoalCtl(); }; });
+    Array.prototype.forEach.call($('gHol').querySelectorAll('button'), function (b) { b.onclick = function () { var i = b.getAttribute('data-w'); if (gHol[i]) delete gHol[i]; else gHol[i] = 1; drawGoalCtl(); }; });
+  }
+  $('gForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var hol = Object.keys(gHol).map(Number).sort();
+    var data = SL.setGoal(sl.goalData, state.today, { wake: SL.minOf($('gWake').value), bed: SL.bedFromInput($('gBed').value), sleepLen: +$('gLen').value, band: gBand, hol: hol });
+    db.put(data, 'sleep-goal');
+    location.hash = '#sleep';
+    Apps.toast('目標を保存しました（今日から。前の日はその時の目標のまま）');
+  });
+
+  // 自動で送る設定
+  function fillSetup() {
+    var c = Apps.getConnection(APP);
+    $('skUrl').textContent = c && c.url ? c.url : 'まだスプシとつながっていません（習慣 → スプレッドシートとの接続）';
+    $('sk').textContent = sl.keyShown && sl.key ? sl.key : '••••••••••••••••';
+    $('skShow').textContent = sl.keyShown ? '隠す' : '表示';
+  }
+  function keyError(e) {
+    if (e && (e.code === 'bad_action')) return 'スプシのプログラムが古いようです。Code.gs を貼り替えて［デプロイを管理］→ 新バージョンにしてください';
+    return Apps.errorText(e);
+  }
+  function getKey(renew) {
+    if (sl.key && !renew) return Promise.resolve(sl.key);
+    return Apps.call(APP, 'sleepKey', renew ? { renew: true } : {}).then(function (r) { sl.key = r.sleepKey; return sl.key; });
+  }
+  function copyText(text, label) {
+    var ok = function () { Apps.toast(label + 'をコピーしました'); };
+    try { navigator.clipboard.writeText(text).then(ok, function () { Apps.toast('コピーできませんでした。表示して長押しでコピーしてください', true); }); }
+    catch (e) { Apps.toast('コピーできませんでした。表示して長押しでコピーしてください', true); }
+  }
+  $('skShow').onclick = function () {
+    if (sl.keyShown) { sl.keyShown = false; fillSetup(); return; }
+    getKey(false).then(function () { sl.keyShown = true; fillSetup(); }, function (e) { Apps.toast(keyError(e), true); });
+  };
+  $('skCopy').onclick = function () {
+    getKey(false).then(function (k) { copyText(k, '睡眠用の合言葉'); }, function (e) { Apps.toast(keyError(e), true); });
+  };
+  $('skUrlCopy').onclick = function () {
+    var c = Apps.getConnection(APP);
+    if (!c) { Apps.toast('まだスプシとつながっていません', true); return; }
+    copyText(c.url, '送り先URL');
+  };
+  $('skNew').onclick = function () {
+    if (!confirm('睡眠用の合言葉を作り直しますか？\n今のショートカットは送れなくなるので、新しい合言葉に貼り替えてください。')) return;
+    getKey(true).then(function () { sl.keyShown = true; fillSetup(); Apps.toast('作り直しました。ショートカットの合言葉も貼り替えてください'); }, function (e) { Apps.toast(keyError(e), true); });
+  };
+
   // ---------- 画面の切り替え ----------
-  var VIEWS = ['today', 'calendar', 'habits', 'notify'];
+  var VIEWS = ['today', 'calendar', 'sleep', 'habits', 'notify', 'sleep-edit', 'sleep-goal', 'sleep-setup'];
+  var TAB_OF = { notify: 'habits', 'sleep-edit': 'sleep', 'sleep-goal': 'sleep', 'sleep-setup': 'sleep' };
   function route() {
     var v = (location.hash || '').slice(1);
     if (VIEWS.indexOf(v) < 0) v = 'today';
     VIEWS.forEach(function (k) { $('v-' + k).hidden = k !== v; });
     Array.prototype.forEach.call(document.querySelectorAll('.tabbar a'), function (a) {
-      var cur = a.getAttribute('data-v') === v || (v === 'notify' && a.getAttribute('data-v') === 'habits');
+      var cur = a.getAttribute('data-v') === (TAB_OF[v] || v);
       if (cur) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
+    if (v === 'sleep-goal') fillGoal();
+    if (v === 'sleep-edit') { if (!sl.editDate) sl.editDate = state.today; fillEdit(); }
+    if (v === 'sleep-setup') fillSetup();
     window.scrollTo(0, 0);
   }
   window.addEventListener('hashchange', route);
@@ -294,6 +577,7 @@
     renderToday();
     renderCalendar();
     renderHabits();
+    renderSleep();
     db.pendingCount().then(function (n) { $('syncState').textContent = n ? '送信待ち ' + n + '件' : ''; }, function () {});
   }
   function refreshDay() {

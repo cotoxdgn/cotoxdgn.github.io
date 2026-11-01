@@ -13,6 +13,7 @@
  *  action: ping / list / put / delete / batch / image / imageData / imageDelete / names / geocode / mapLink
  *          yoteiCal / yoteiResults / yoteiCreateEvent（予定合わせ・合言葉が要る）
  *          yoteiGet / yoteiAnswer（予定合わせの相手用・合言葉なし。下の「予定合わせ」を参照）
+ *          sleepPut（睡眠の記録。睡眠用の合言葉でも使える）／ sleepKey（睡眠用の合言葉を見る・作り直す。下の「睡眠」を参照）
  */
 
 var CONNECT_URL = 'https://cotoxdgn.github.io/connect/';
@@ -31,6 +32,7 @@ var CELL_KEY = 'B1';     // 合言葉（自動）
 var CELL_URL = 'B2';     // 接続URL（自動）
 var CELL_TARGET = 'B3';  // 対象アプリ（空＝全アプリ共通、例：wanko）
 var CELL_FOLDER = 'B4';  // 画像フォルダID（自動）
+var CELL_SLEEP_KEY = 'B5'; // 睡眠用の合言葉（自動）。iPhone のショートカットに書き込む。これで出来るのは sleepPut だけ
 // 名前表（家族用＝B3 が wanko のスプシだけ作る）。A列＝見出し、B列＝名前を手で入力
 var NAMES_TITLE_ROW = 8;
 var NAMES_LABELS = ['わんこ1', 'わんこ2', '家族1', '家族2', '家族3', '家族4'];
@@ -53,14 +55,16 @@ function conf_() {
   conf.getRange('A2').setValue('接続URL（自動）');
   conf.getRange('A3').setValue('対象アプリ（空欄＝全アプリ共通）');
   conf.getRange('A4').setValue('画像フォルダID（自動）');
-  conf.getRange('A1:A4').setFontWeight('bold');
-  conf.getRange('B1:B4').setNumberFormat('@');
+  conf.getRange('A5').setValue('睡眠用の合言葉（自動）');
+  conf.getRange('A1:A5').setFontWeight('bold');
+  conf.getRange('B1:B5').setNumberFormat('@');
   conf.getRange('A6').setValue('入力は不要です（家族用のスプシだけ、B3 にアプリ名 wanko を入れます）。端末の設定は、メニュー「アプリ設定」→「この端末をつなぐ」から行います。B1・B2 は人に見せないでください。');
   var key = String(conf.getRange(CELL_KEY).getValue()).trim();
   if (!key) {
     key = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
     conf.getRange(CELL_KEY).setValue(key);
   }
+  sleepKeyOf_(conf, false);
   if (String(conf.getRange(CELL_TARGET).getValue()).trim() === 'wanko') namesTable_(conf);
   return conf;
 }
@@ -202,7 +206,11 @@ function handle_(req) {
   var conf = ss.getSheetByName(CONF_SHEET);
   var pass = conf ? String(conf.getRange(CELL_KEY).getValue()).trim() : '';
   if (!pass) return { ok: false, error: 'no_setup' };
-  if (String(req.key || '') !== pass) return { ok: false, error: 'bad_key' };
+  // 睡眠用の合言葉は sleepPut だけ。ほかの action は合言葉違いと同じ答えで断る
+  var sleepPass = String(conf.getRange(CELL_SLEEP_KEY).getValue()).trim();
+  var sleepOnly = !!sleepPass && sleepPass !== pass && String(req.key || '') === sleepPass;
+  if (sleepOnly && req.action !== 'sleepPut') return { ok: false, error: 'bad_key' };
+  if (!sleepOnly && String(req.key || '') !== pass) return { ok: false, error: 'bad_key' };
   if (req.action === 'geocode' || req.action === 'mapLink') {   // 場所の検索はスプシに書かないので、順番待ち（ロック）なしで返す
     var g = req.action === 'geocode' ? geocode_(req) : mapLink_(req);
     if (g.error) return { ok: false, error: g.error };
@@ -236,6 +244,8 @@ function handle_(req) {
       case 'names': res = names_(conf); break;
       case 'yoteiResults': res = yoteiResults_(ss, req); break;
       case 'yoteiCreateEvent': res = yoteiCreateEvent_(ss, req); break;
+      case 'sleepPut': res = sleepPut_(ss, req); break;
+      case 'sleepKey': res = sleepKey_(conf, req); break;
       default: res = { error: 'bad_action' };
     }
     if (res.error) return res.detail ? { ok: false, error: res.error, detail: res.detail } : { ok: false, error: res.error };
@@ -795,4 +805,63 @@ function yoteiCreateEvent_(ss, req) {
   d.decided = { start: new Date(s).toISOString(), end: new Date(e).toISOString() };
   var r = put_(ss, { app: YOTEI_APP, id: id, data: d });
   return { record: r.record, calendarEventId: made && made.getId ? made.getId() : '' };
+}
+
+// ---------- 睡眠（routine の起床・就寝記録） ----------
+/*
+ * iPhone のショートカット「睡眠を送る」が、ヘルスケアの睡眠の記録をそのまま送る（就寝・起床の決め方はアプリ側で計算する）。
+ *  sleepPut：{ key: 睡眠用またはいつもの合言葉, action:'sleepPut', samples:[{ s:開始, e:終了, v:値 }, …] }
+ *    受け取るのは samples だけ（最大300件）。各件の s・e・v 以外は捨て、時刻として読めない件も捨てる。
+ *    日付＝届いた記録のうち最後に終わった時刻の日（日本時間）。シート app=routine に id「sleep-YYYYMMDD」で上書き保存
+ *    （同じ日に何回送っても1行）。中身は { kind:'sleep', date, samples, receivedAt }。
+ *    読める件が1つも無い（ロック中でヘルスケアが読めなかった等）ときは保存せず no_samples を返す（前に届いた分を消さない）。
+ *  sleepKey：いつもの合言葉の端末からだけ。{ renew:true } で作り直す。→ { sleepKey }
+ * 手で直した値（sleepfix-YYYYMMDD）と目標（sleep-goal）は、アプリがふつうの put で保存する。
+ */
+var SLEEP_APP = 'routine';
+var SLEEP_MAX_SAMPLES = 300;
+var SLEEP_JST_MS = 9 * 3600000;   // 日本時間（夏時間なし）
+
+function newSleepKey_() { return 'sl' + Utilities.getUuid().replace(/-/g, ''); }
+
+// 睡眠用の合言葉（空なら作る。renew=true なら作り直す）
+function sleepKeyOf_(conf, renew) {
+  var k = String(conf.getRange(CELL_SLEEP_KEY).getValue()).trim();
+  var pass = String(conf.getRange(CELL_KEY).getValue()).trim();
+  if (!k || renew || k === pass) {
+    do { k = newSleepKey_(); } while (k === pass);
+    conf.getRange(CELL_SLEEP_KEY).setValue(k);
+  }
+  return k;
+}
+
+function sleepKey_(conf, req) {
+  return { sleepKey: sleepKeyOf_(conf, req.renew === true) };
+}
+
+function sleepTime_(v) {
+  if (typeof v !== 'string' || v.length > 40) return NaN;
+  return Date.parse(v);
+}
+
+function sleepPut_(ss, req) {
+  var list = req.samples;
+  if (!Array.isArray(list)) return { error: 'bad_request' };
+  if (list.length > SLEEP_MAX_SAMPLES) return { error: 'too_many' };
+  var samples = [], last = -Infinity;
+  for (var i = 0; i < list.length; i++) {
+    var x = list[i];
+    if (!x || typeof x !== 'object') continue;
+    var s = sleepTime_(x.s), e = sleepTime_(x.e);
+    if (isNaN(s) || isNaN(e) || e < s || e - s > DAY_MS) continue;
+    var v = String(x.v == null ? '' : x.v).replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 20);
+    samples.push({ s: new Date(s).toISOString(), e: new Date(e).toISOString(), v: v });
+    if (e > last) last = e;
+  }
+  if (!samples.length) return { error: 'no_samples' };
+  var date = new Date(last + SLEEP_JST_MS).toISOString().slice(0, 10);
+  var id = 'sleep-' + date.replace(/-/g, '');
+  var r = put_(ss, { app: SLEEP_APP, id: id, data: { kind: 'sleep', date: date, samples: samples, receivedAt: now_() } });
+  if (r.error) return r;
+  return { date: date, id: id, count: samples.length };
 }

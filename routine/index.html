@@ -21,18 +21,21 @@
   --display: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Hiragino Sans", sans-serif;
   --ax-bg: var(--bg); --ax-surface: var(--card); --ax-text: var(--ink); --ax-muted: var(--muted);
   --ax-line: var(--line); --ax-accent: #6F8A73; --ax-accent-text: #FFFFFF;
+  --wk: #3C7DB4; --hol: #C2674F; --band: #E4EBE1; --grid: #E9E4DA; --danger: #9B2C1C;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #22262A; --card: #2F3539; --ink: #E8E4DD; --muted: #A2A6A6; --line: #454C50;
     --sage: #8FA38F; --sage-soft: #3A453B; --rose: #C29790; --rose-soft: #4A3B39; --mustard: #C8A865; --blue: #8EA2B2; --lilac: #A597AF;
     --ax-accent: #9CB39F; --ax-accent-text: #1C2420;
+    --wk: #4F8CC6; --hol: #CF6E54; --band: #384238; --grid: #3B4246; --danger: #F08A78;
   }
 }
 :root[data-theme="dark"] {
   --bg: #22262A; --card: #2F3539; --ink: #E8E4DD; --muted: #A2A6A6; --line: #454C50;
   --sage: #8FA38F; --sage-soft: #3A453B; --rose: #C29790; --rose-soft: #4A3B39; --mustard: #C8A865; --blue: #8EA2B2; --lilac: #A597AF;
   --ax-accent: #9CB39F; --ax-accent-text: #1C2420;
+  --wk: #4F8CC6; --hol: #CF6E54; --band: #384238; --grid: #3B4246; --danger: #F08A78;
 }
 [hidden] { display: none !important; }
 html, body { min-height: 100%; }
@@ -76,13 +79,15 @@ h1, h2, .num { font-family: var(--display); }
 .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; text-align: center; }
 .cal .wd { font-size: 12px; color: var(--muted); padding-bottom: 2px; }
 .cal .wd.sun { color: var(--rose); } .cal .wd.sat { color: var(--blue); }
-.day { min-height: 52px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; padding-top: 4px; gap: 3px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.day { position: relative; min-height: 52px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; padding-top: 4px; gap: 3px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .day.today { box-shadow: inset 0 0 0 2px var(--ink); }
 .day.future { color: var(--line); }
 .day.full { background: var(--rose-soft); }
 .dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; min-height: 18px; align-items: center; max-width: 100%; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: block; }
 .flower { width: 18px; height: 18px; display: block; flex: none; }
+.moon { width: 11px; height: 11px; display: block; flex: none; }
+.day .moon { position: absolute; top: 3px; right: 3px; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
 .legend span { display: flex; align-items: center; gap: 5px; }
 .summary { padding: 14px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
@@ -115,11 +120,68 @@ button.row { width: 100%; background: transparent; border-left: 0; border-right:
 .url code { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; user-select: all; }
 .back { align-self: flex-start; }
 
+/* 睡眠 */
+.gear { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--card); color: var(--ink); display: grid; place-items: center; padding: 0; cursor: pointer; flex: none; }
+.gear svg { width: 22px; height: 22px; }
+.sl-head { align-items: center; }
+.sl-night { padding: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sl-night .cell { display: flex; flex-direction: column; min-width: 0; }
+.sl-night small { font-size: 12px; color: var(--muted); }
+.sl-night b { font-family: var(--display); font-size: 30px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.sl-diff { font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.sl-len { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.sl-len .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.sl-len b { font-size: 22px; }
+.sl-from { grid-column: 1 / -1; font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.sl-from a { color: var(--muted); }
+.tag { font-size: 12px; border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
+.tag.ok { background: var(--sage-soft); } .tag.ng { background: var(--rose-soft); }
+.stats.three { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.stats.three div { padding: 10px 10px; }
+.stats.three small { font-size: 11px; line-height: 1.4; }
+.missing { padding: 18px 16px; display: flex; flex-direction: column; gap: 10px; background: var(--rose-soft); border-radius: 20px; }
+.missing p { margin: 0; }
+.chart { padding: 14px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+.segs { display: flex; gap: 8px; flex-wrap: wrap; justify-content: space-between; }
+.seg { display: inline-grid; grid-auto-flow: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; width: fit-content; }
+.seg button { border: 0; background: transparent; color: var(--ink); padding: 4px 13px; min-height: 36px; font-size: 14px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--card); }
+.chart svg { width: 100%; height: auto; display: block; touch-action: manipulation; }
+.chart svg text { font-size: 11px; fill: var(--muted); }
+.chart svg .tgt { fill: var(--ink); font-weight: 700; }
+.chart .legend { font-size: 12px; gap: 4px 14px; }
+.chart .legend i { display: inline-block; width: 10px; height: 10px; }
+.tip { font-size: 13px; min-height: 22px; font-variant-numeric: tabular-nums; }
+.sl-list .row { gap: 10px; padding: 10px 14px; font-size: 14px; }
+.sl-list .d { width: 74px; flex: none; font-variant-numeric: tabular-nums; display: flex; flex-direction: column; }
+.sl-list .d small { font-size: 11px; color: var(--muted); }
+.sl-list .v { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; font-variant-numeric: tabular-nums; }
+.sl-list .v span { white-space: nowrap; }
+.sl-list .v small { color: var(--muted); font-size: 12px; }
+.sl-list .v .l { grid-column: 1 / -1; }
+.mk { width: 10px; height: 10px; flex: none; display: inline-block; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 12px; color: var(--muted); margin: 0; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.two > div { min-width: 0; display: flex; flex-direction: column; }
+.sl-src { font-size: 13px; color: var(--muted); background: var(--bg); border-radius: 12px; padding: 8px 12px; margin-bottom: 10px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 10px; }
+.chips button { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: transparent; color: var(--ink); padding: 0; cursor: pointer; }
+.chips button[aria-pressed="true"] { background: var(--hol); border-color: var(--hol); color: #fff; font-weight: 700; }
+.steps b { font-weight: 700; }
+.steps.tight { font-size: 14px; gap: 8px; padding: 14px 14px 14px 34px; }
+.kv { display: inline-block; font-size: 12px; background: var(--bg); border-radius: 6px; padding: 0 6px; margin: 1px 0; overflow-wrap: anywhere; }
+.keybox { padding: 12px 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.keybox code { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.warn { background: var(--rose-soft); border-radius: 16px; padding: 10px 14px; font-size: 13px; }
+.danger-text { color: var(--danger); }
+
 /* 下のタブ */
 .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: var(--bg); border-top: 1px solid var(--line);
   display: flex; justify-content: center; padding: 6px max(16px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
 .tabbar .in { width: 100%; max-width: 560px; display: flex; justify-content: space-around; }
-.tabbar a { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: var(--muted); text-decoration: none; min-width: 72px; padding: 4px; border-radius: 12px; }
+.tabbar a { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: var(--muted); text-decoration: none; min-width: 64px; padding: 4px; border-radius: 12px; }
 .tabbar a[aria-current="page"] { color: var(--ink); font-weight: 700; }
 .tabbar svg { width: 24px; height: 24px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -197,15 +259,129 @@ button.row { width: 100%; background: transparent; border-left: 0; border-right:
     <div class="card url"><code id="appUrl"></code><button class="ax-btn" type="button" id="copyUrl">コピー</button></div>
     <p class="small muted" style="margin:0">通知をタップすると Safari で開きます。初めて Safari で開いたときは、接続（QRでつなぐ）を一度だけ行ってください。</p>
   </section>
+
+  <!-- 睡眠 -->
+  <section class="view" id="v-sleep" hidden>
+    <div class="head sl-head"><div><h1>睡眠</h1><span class="sub" id="slSub"></span></div>
+      <a class="gear" href="#sleep-goal" aria-label="睡眠の目標"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></svg></a></div>
+    <div id="slToday"></div>
+    <div class="stats three">
+      <div><b class="num" id="stWake">0</b><small>日連続<br>起床が±<span class="bandN">15</span>分内</small></div>
+      <div><b class="num" id="stBed">0</b><small>日連続<br>就寝が±<span class="bandN">15</span>分内</small></div>
+      <div><b class="num" id="stLen">0</b><small>日連続<br><span id="lenN">7時間</span>以上</small></div>
+    </div>
+    <div class="card chart">
+      <div class="segs">
+        <div class="seg" role="group" aria-label="期間"><button type="button" data-range="w" aria-pressed="true">週</button><button type="button" data-range="m" aria-pressed="false">月</button></div>
+        <div class="seg" role="group" aria-label="見るもの"><button type="button" data-kind="wake" aria-pressed="true">起床</button><button type="button" data-kind="bed" aria-pressed="false">就寝</button><button type="button" data-kind="len" aria-pressed="false">長さ</button></div>
+      </div>
+      <div class="small muted" id="cTitle"></div>
+      <svg id="chart" viewBox="0 0 340 200" role="img" aria-label="目標との差のグラフ"></svg>
+      <div class="tip" id="tip">点を押すと、その日の時刻と差が出ます</div>
+      <div class="legend" id="cLegend"></div>
+    </div>
+    <div class="sect">最近の記録（押すと修正）</div>
+    <div class="list sl-list" id="slRecent"></div>
+    <div class="btns"><button class="ax-btn" type="button" id="slNew">＋ 手で入れる</button><a class="ax-btn ax-btn-ghost" href="#sleep-setup">自動で送る設定 ›</a></div>
+    <p class="note">毎朝、iPhone のショートカットから自動で届きます。ヘルスケアに睡眠が入るアプリなら、おこしてME以外でも使えます。</p>
+  </section>
+
+  <!-- 睡眠：手入力・修正 -->
+  <section class="view" id="v-sleep-edit" hidden>
+    <a class="ax-btn ax-btn-ghost back" href="#sleep">‹ 睡眠へ戻る</a>
+    <div class="head"><h1 id="eTitle">記録を直す</h1></div>
+    <form class="card form" id="eForm">
+      <label for="eDate">日付（起きた日）</label>
+      <input class="ax-input" type="date" id="eDate" required>
+      <div class="sl-src" id="eFrom"></div>
+      <div class="two">
+        <div><label for="eBed">就寝（前の夜）</label><input class="ax-input" type="time" id="eBed" required></div>
+        <div><label for="eWake">起床</label><input class="ax-input" type="time" id="eWake" required></div>
+      </div>
+      <p class="note" id="ePrev" style="margin-bottom:10px"></p>
+      <div class="btns"><button class="ax-btn ax-btn-primary" type="submit">保存</button><button class="ax-btn" type="button" id="eReset">ヘルスケアの値に戻す</button><button class="ax-btn ax-btn-danger" type="button" id="eDel">この日の記録を消す</button></div>
+    </form>
+    <p class="note">直した値はヘルスケアの値とは別に残ります。あとで自動で届いても、直した値が優先されます。</p>
+  </section>
+
+  <!-- 睡眠：目標 -->
+  <section class="view" id="v-sleep-goal" hidden>
+    <a class="ax-btn ax-btn-ghost back" href="#sleep">‹ 睡眠へ戻る</a>
+    <div class="head"><h1>睡眠の目標</h1></div>
+    <form class="card form" id="gForm">
+      <div class="two">
+        <div><label for="gWake">起床の目標</label><input class="ax-input" type="time" id="gWake" required></div>
+        <div><label for="gBed">就寝の目標</label><input class="ax-input" type="time" id="gBed" required></div>
+      </div>
+      <p class="note" style="margin:-4px 0 10px">24:00 は 0:00 と入れます。15:00 より前の時刻は「日付が変わった後」として扱います。</p>
+      <label for="gLen">眠った長さの目標（これ以上なら目標内）</label>
+      <select class="ax-input" id="gLen"></select>
+      <span class="small muted">目標内とみなす幅</span>
+      <div class="seg" role="group" aria-label="目標内とみなす幅" id="gBand" style="margin:2px 0 12px"></div>
+      <span class="small muted">休日の曜日（グラフの色分けだけ。目標は平日と同じ）</span>
+      <div class="chips" id="gHol"></div>
+      <div class="btns"><button class="ax-btn ax-btn-primary" type="submit">保存</button></div>
+    </form>
+    <p class="note">目標を変えると、今日からの記録に新しい目標を使います。それより前の日の差は、その時の目標のまま残ります。</p>
+    <div class="sect">これまでの目標</div>
+    <div class="list" id="gHist"></div>
+  </section>
+
+  <!-- 睡眠：自動で送る設定 -->
+  <section class="view" id="v-sleep-setup" hidden>
+    <a class="ax-btn ax-btn-ghost back" href="#sleep">‹ 睡眠へ戻る</a>
+    <div class="head"><h1>自動で送る設定</h1></div>
+    <p class="small" style="margin:0">iPhone の「ショートカット」で、ヘルスケアの昨夜の睡眠をスプレッドシートへ送ります。最初に1回だけ作れば、あとは毎朝自動です。同じ日に何回送っても上書きされるだけで、二重にはなりません。</p>
+    <div class="sect">① ショートカット「睡眠を送る」を作る</div>
+    <ol class="card steps tight">
+      <li>「ショートカット」アプリ →「＋」→ 名前を <span class="kv">睡眠を送る</span> にする（ⓘ の詳細で「入力を受け取る」を <span class="kv">テキスト</span> に）</li>
+      <li><b>今日すでに送ったかを確かめる</b>（2回目からはすぐ終わる）
+        <br>・<b>日付を書式設定</b>：<span class="kv">現在の日付</span>、書式 <span class="kv">カスタム yyyy-MM-dd</span>（名前を「今日」に）
+        <br>・<b>ファイルを取得</b>：<span class="kv">Shortcuts/睡眠を送った日.txt</span>、「見つからない場合にエラー」をオフ
+        <br>・<b>もし</b> <span class="kv">ショートカットの入力</span> が <span class="kv">いま</span> を含まない：
+        <br>　　<b>もし</b> <span class="kv">ファイル</span> が <span class="kv">今日</span> である →「<b>ショートカットを停止</b>」
+        <br>　　<b>日付を書式設定</b> <span class="kv">現在の日付・カスタム H</span> →「<b>数値</b>」→ <b>もし</b> <span class="kv">数値</span> が <span class="kv">5</span> より小さい →「<b>ショートカットを停止</b>」（夜中に開いたときは送らない）</li>
+      <li><b>ヘルスケアのサンプルを検索</b>：種類 <span class="kv">睡眠分析</span>、条件 <span class="kv">開始日が過去18時間</span>、並び順 <span class="kv">開始日・古い順</span>、上限なし</li>
+      <li><b>各項目を反復</b> の中に <b>辞書</b>：<span class="kv">s＝開始日</span> <span class="kv">e＝終了日</span> <span class="kv">v＝値</span>（日付の書式は ISO 8601・時刻あり）</li>
+      <li>反復の後に <b>辞書</b>：<span class="kv">key＝下の睡眠用の合言葉</span> <span class="kv">action＝sleepPut</span> <span class="kv">samples＝反復の結果</span></li>
+      <li><b>URLの内容を取得</b>：URL <span class="kv">下の送り先URL</span>、方法 <span class="kv">POST</span>、ヘッダ <span class="kv">Content-Type：text/plain</span>、本文 <span class="kv">ファイル＝5の辞書</span></li>
+      <li><b>辞書の値を取得</b> <span class="kv">ok</span> → <b>もし</b> 値 が「はい」：<b>テキスト</b> <span class="kv">今日</span> →「<b>ファイルを保存</b>」<span class="kv">Shortcuts/睡眠を送った日.txt</span>（保存先を尋ねる：オフ、上書き：オン）
+        <br>そうでなければ：<b>通知を表示</b>「睡眠の記録を送れませんでした」</li>
+      <li>一度実行して、ヘルスケアの「睡眠」の読み取りを許可</li>
+    </ol>
+    <div class="sect">② 毎朝 9:00 に動かす</div>
+    <ol class="card steps tight">
+      <li>「オートメーション」→ 右上の「＋」→「時刻」</li>
+      <li>9:00・毎日 を選ぶ</li>
+      <li>「すぐに実行」を選び、「実行時に通知」をオフ</li>
+      <li>「睡眠を送る」を選んで完了</li>
+    </ol>
+    <div class="sect">③ 起きたら必ず開くアプリを開いたときにも動かす</div>
+    <ol class="card steps tight">
+      <li>「オートメーション」→「＋」→「App」</li>
+      <li>「App」で、朝いちばんに開くアプリを選ぶ（例：LINE・おこしてME・カレンダー）。「開いている」にチェック</li>
+      <li>「すぐに実行」を選び、「実行時に通知」をオフ</li>
+      <li>「睡眠を送る」を選んで完了</li>
+    </ol>
+    <p class="note" style="margin:0">ロックがかかったまま 9:00 になるとヘルスケアが読めず送れないことがあるので、③でロックを外してアプリを開いたときにも送ります。今日すでに送っていれば、①の2ですぐ終わるので、何度動いても負担になりません。確認なしで動くのは iOS 17 以降、通知を消せるのは iOS 18 以降です（iOS の版で呼び名が少し違うことがあります）。</p>
+    <div class="sect">送り先URL（スプシのプログラム）</div>
+    <div class="card keybox"><code id="skUrl">—</code><button class="ax-btn" type="button" id="skUrlCopy">コピー</button></div>
+    <div class="sect">睡眠用の合言葉</div>
+    <div class="card keybox"><code id="sk">••••••••••••••••</code><button class="ax-btn" type="button" id="skShow">表示</button><button class="ax-btn" type="button" id="skCopy">コピー</button></div>
+    <div class="warn">この合言葉はショートカットの中に書き込まれます。<b>ショートカットは人に共有しないでください。</b>この合言葉で出来るのは「睡眠の記録を送る」ことだけで、他のアプリのデータは読めません。漏れたかもと思ったら作り直して、ショートカットに貼り替えてください（いつもの合言葉や他の端末のつなぎ直しは不要です）。</div>
+    <button class="ax-btn ax-btn-danger" type="button" id="skNew" style="align-self:flex-start">睡眠用の合言葉を作り直す</button>
+  </section>
 </main>
 
 <nav class="tabbar" aria-label="画面の切り替え"><div class="in">
   <a href="#today" data-v="today"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>今日</a>
   <a href="#calendar" data-v="calendar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 10h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>カレンダー</a>
+  <a href="#sleep" data-v="sleep"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/></svg>睡眠</a>
   <a href="#habits" data-v="habits"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>習慣</a>
 </div></nav>
 
 <script src="../shared/apps.js"></script>
+<script src="sleep.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
