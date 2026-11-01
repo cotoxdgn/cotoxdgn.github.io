@@ -199,8 +199,8 @@ function handle_(req) {
   var pass = conf ? String(conf.getRange(CELL_KEY).getValue()).trim() : '';
   if (!pass) return { ok: false, error: 'no_setup' };
   if (String(req.key || '') !== pass) return { ok: false, error: 'bad_key' };
-  if (req.action === 'geocode') {   // 場所の検索はスプシに書かないので、順番待ち（ロック）なしで返す
-    var g = geocode_(req);
+  if (req.action === 'geocode' || req.action === 'mapLink') {   // 場所の検索はスプシに書かないので、順番待ち（ロック）なしで返す
+    var g = req.action === 'geocode' ? geocode_(req) : mapLink_(req);
     if (g.error) return { ok: false, error: g.error };
     g.ok = true; g.now = now_();
     return g;
@@ -387,6 +387,38 @@ function geocode_(req) {
   return { status: res && res.status, results: out };
 }
 
+// Googleマップの共有リンク（maps.app.goo.gl など）→ 名前と緯度経度。リンク先をたどって最終URLから読む
+function mapLink_(req) {
+  var url = String(req.url || '').trim();
+  var ok = function (u) { return /^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|(www\.)?google\.(com|co\.jp)\/maps|maps\.google\.(com|co\.jp))\b/i.test(u); };
+  if (!ok(url)) return { error: 'bad_link' };
+  for (var i = 0; i < 6; i++) {
+    if (parseMapUrl_(url)) break;
+    var res = UrlFetchApp.fetch(url, { followRedirects: false, muteHttpExceptions: true });
+    var loc = res.getHeaders()['Location'] || res.getHeaders()['location'];
+    if (!loc) {
+      // リダイレクトでなくページが返った場合は、中の地図URLを探す
+      var m = /https:\/\/www\.google\.[a-z.]+\/maps\/[^"'\s<>]+/.exec(res.getContentText());
+      if (!m) break;
+      loc = m[0].replace(/\\u003d/g, '=').replace(/\\u0026/g, '&').replace(/&amp;/g, '&');
+    }
+    url = loc;
+  }
+  var p = parseMapUrl_(url);
+  if (!p) return { error: 'no_place' };
+  return { place: p };
+}
+function parseMapUrl_(u) {
+  u = String(u || '');
+  var m = /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/.exec(u) || /@(-?\d+\.\d+),(-?\d+\.\d+)/.exec(u) ||
+    /[?&](?:q|query|ll)=(-?\d+\.\d+),\s*(-?\d+\.\d+)/.exec(decodeURIComponent(u));
+  if (!m) return null;
+  var name = '';
+  var n = /\/maps\/place\/([^\/@?]+)/.exec(u);
+  if (n) { try { name = decodeURIComponent(n[1].replace(/\+/g, ' ')); } catch (e) { name = n[1]; } }
+  return { name: name, lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+}
+
 // ---------- 画像 ----------
 function image_(conf, req) {
   if (!validApp_(req.app)) return { error: 'bad_app' };
@@ -442,4 +474,10 @@ function imageDelete_(conf, req) {
 
 function out_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// エディタから1回実行して「外部URLへの接続」を許可するための関数
+function authorizeMapLink() {
+  var r = UrlFetchApp.fetch('https://maps.google.com/', { muteHttpExceptions: true, followRedirects: false });
+  Logger.log('ok ' + r.getResponseCode());
 }

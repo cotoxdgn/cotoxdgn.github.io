@@ -412,8 +412,40 @@
   $('f-pub').onclick = function () { var b = $('f-pub'); b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); };
   $('f-photo').addEventListener('change', function () { var fs = Array.prototype.slice.call(this.files || []); this.value = ''; addPhotos(fs); });
   $('locBtn').onclick = useHere;
+  var MAP_LINK_RE = /https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|(www\.)?google\.(com|co\.jp)\/maps|maps\.google\.(com|co\.jp))\S*/i;
+  // Googleマップの共有リンクから名前と場所を入れる（短いリンクは自分用スプシのプログラムでたどる）
+  function useMapLink(text) {
+    var m = MAP_LINK_RE.exec(text || '');
+    if (!m) return false;
+    var direct = A.parseLatLng(m[0]);
+    var apply = function (p) {
+      setLoc(p.lat, p.lng, true);
+      if (p.name && !$('f-name').value.trim()) $('f-name').value = p.name;
+      else if (p.name && MAP_LINK_RE.test($('f-name').value)) $('f-name').value = p.name;
+      hideHits(); $('manual').open = false;
+      Apps.toast('Googleマップの場所を入れました');
+    };
+    if (direct && !/maps\.app\.goo\.gl|goo\.gl\/maps/.test(m[0])) { apply({ lat: direct.lat, lng: direct.lng, name: '' }); return true; }
+    var box = $('geoHits'); box.hidden = false; box.innerHTML = '<p class="geo-msg">Googleマップのリンクを読んでいます…</p>';
+    Apps.call(APP, 'mapLink', { url: m[0] }, { timeout: 20000 }).then(function (d) { apply(d.place); }, function (e) {
+      box.innerHTML = '<p class="geo-msg">リンクから場所を読めませんでした（' + A.esc(Apps.errorText(e)) + '）。Googleマップで場所を開き直して［共有］→［リンクをコピー］をもう一度試してください。</p>';
+    });
+    return true;
+  }
+  function gmapsBlock(q) {
+    var wrap = document.createElement('div'); wrap.className = 'gmaps';
+    wrap.innerHTML = '<p class="geo-msg">見つからない・違うときは、Googleマップで探して［共有］→［リンクをコピー］し、下に貼ってください。</p>' +
+      '<div class="ax-row name-row"><a class="ax-btn small" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q) + '">Googleマップで探す</a></div>' +
+      '<div class="ax-row name-row"><input class="ax-input" id="gmLink" placeholder="https://maps.app.goo.gl/…" autocomplete="off"><button class="ax-btn small" type="button" id="gmLinkBtn">貼って反映</button></div>';
+    wrap.querySelector('#gmLinkBtn').onclick = function () {
+      var v = wrap.querySelector('#gmLink').value;
+      if (!useMapLink(v)) Apps.toast('Googleマップのリンクを貼ってください', true);
+    };
+    return wrap;
+  }
   $('latlngBtn').onclick = function () {
     var text = $('f-latlng').value.trim();
+    if (useMapLink(text)) return;
     var p = A.parseLatLng(text);
     if (p) { setLoc(p.lat, p.lng, true); hideHits(); return; }
     if (!text) { Apps.toast('住所か緯度経度を入れてください', true); return; }
@@ -441,7 +473,8 @@
     }).then(function (hits) {
       box.innerHTML = '';
       if (!hits.length) {
-        box.innerHTML = '<p class="geo-msg">「' + A.esc(q) + '」は見つかりませんでした。地名を足す（例：' + A.esc(q) + ' 京都）か、地図をタップしてください。</p>';
+        box.innerHTML = '<p class="geo-msg">「' + A.esc(q) + '」は見つかりませんでした。</p>';
+        box.appendChild(gmapsBlock(q));
         return;
       }
       hits.forEach(function (x) {
@@ -456,11 +489,13 @@
         };
         box.appendChild(b);
       });
+      box.appendChild(gmapsBlock(q));
     });
   }
   $('nameFindBtn').onclick = function () {
     var q = $('f-name').value.trim();
     if (!q) { Apps.toast('先に名称を入れてください', true); $('f-name').focus(); return; }
+    if (useMapLink(q)) return;
     searchPlace(q);
   };
   $('f-name').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); $('nameFindBtn').click(); } });
