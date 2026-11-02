@@ -1,5 +1,5 @@
 /* このアプリをオフラインでも開けるようにする仕組み（実績の公開ページ public/ は対象外：常に最新の works.json を読む）。CACHE の名前はアプリごとに変え、更新のたびに番号を上げる */
-var CACHE = 'brain-v8';
+var CACHE = 'brain-v9';
 var SHELL = ['./', 'index.html', 'app.js', 'works.js', 'app.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png',
   '../shared/apps.js', '../shared/apps.css'];
 
