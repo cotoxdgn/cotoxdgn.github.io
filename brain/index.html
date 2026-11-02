@@ -82,7 +82,7 @@
     <div class="works" id="works"></div>
     <div class="empty" id="wEmpty" hidden>
       <h2>まだ実績がありません</h2>
-      <p>案件名だけで1件作れます。写真をまとめて放り込み、気づいたことをメモしておくだけで大丈夫です。人に見せたくなったら、あとから仕上げて公開ページにできます。</p>
+      <p>案件名だけで1件作れます。写真をまとめて放り込み、気づいたことをメモしておくだけで大丈夫です。人に見せたくなったら、あとから詳しく書いて公開ページにできます。</p>
       <button class="ax-btn ax-btn-primary" type="button" data-wquick>ささっと作る</button>
     </div>
     <p class="nohit" id="wNoHit" hidden>条件に合う実績はありません</p>
@@ -92,7 +92,7 @@
   <section class="pane pane-work" id="paneWork" aria-label="実績の詳細">
     <div class="dt-bar">
       <button class="ax-btn ax-btn-ghost back" type="button" id="wBack">‹ 一覧</button>
-      <button class="ax-btn" type="button" id="wFinBtn">仕上げ</button>
+      <button class="ax-btn" type="button" id="wFinBtn">詳しく書く</button>
     </div>
     <div class="dt" id="wDetail"></div>
     <div class="dt-none" id="wNone"><p>左の一覧から実績を選ぶと、写真・メモ・使った知識が出ます。</p></div>
@@ -240,12 +240,12 @@
   </form>
 </div>
 
-<!-- 実績：仕上げ -->
+<!-- 実績：詳しく書く -->
 <div class="editor" id="finish" hidden role="dialog" aria-modal="true" aria-labelledby="fTitle">
   <form class="ed" id="fForm">
     <div class="ed-bar">
       <button class="ax-btn ax-btn-ghost" type="button" id="fCancel">やめる</button>
-      <h2 id="fTitle">仕上げ</h2>
+      <h2 id="fTitle">詳しく書く</h2>
       <button class="ax-btn ax-btn-primary" type="submit" id="fSave">保存</button>
     </div>
     <div class="ed-body" id="fBody"></div>
@@ -271,7 +271,7 @@
       <div class="outlist">
         <div><span class="y">出る</span><span>公開用の名前・時期・場所（市区）・広さ・エンドユーザー・ご要望・こだわり・工夫</span></div>
         <div><span class="y">出る</span><span>「公開」をオンにした写真（ビフォー・アフターの印）／選んだ知識の名前と種類</span></div>
-        <div><span class="n">出ない</span><span>案件名・施主名・番地・費用帯・メモ・公開オフの写真・知識の本文と番号・スプシの記録番号</span></div>
+        <div><span class="n">出ない</span><span>案件名・施主名・費用帯・メモ・公開オフの写真・知識の本文と番号・スプシの記録番号</span></div>
       </div>
     </div>
     <div><span class="lab">前回の書き出しから</span><div class="outlist" id="exDiff"></div></div>

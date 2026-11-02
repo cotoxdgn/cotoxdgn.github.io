@@ -417,9 +417,16 @@ const inked = async page => {
     await page.screenshot({ path: path.join(SHOT, 'phone-w2-detail.png') });
   });
 
-  await t('実績：仕上げ → 写真に印と公開 → 公開をオン（名前と写真が揃うまでは押せない）', async () => {
+  await t('実績：詳しく書く → 写真に印と公開 → 公開をオン（名前と写真が揃うまでは押せない）', async () => {
+    assert.strictEqual((await page.textContent('#wFinBtn')).trim(), '詳しく書く');
+    assert.strictEqual((await page.textContent('#wDetail [data-wfin]')).trim(), '詳しく書く');
     await page.click('#wFinBtn');
     await page.waitForSelector('#finish:not([hidden])');
+    assert.strictEqual(await page.textContent('#fTitle'), '詳しく書く');
+    // 番地の項目は無い。出ない項目は施主名・費用帯・メモ（と案件名）
+    assert.strictEqual(await page.locator('#f-addr').count(), 0);
+    assert.ok(!(await page.textContent('#fBody')).includes('番地'));
+    assert.deepStrictEqual(await page.$$eval('#fBody .priv [data-f]', a => a.map(e => e.dataset.f)), ['name', 'client', 'cost', 'memo']);
     assert.ok(await page.isDisabled('#fPub'));
     await page.fill('#f-pubName', '（試験）北区 築40年マンション、回遊できるLDK');
     await page.fill('#f-period', '2026-08');
@@ -429,7 +436,6 @@ const inked = async page => {
     await page.fill('#f-wish', '広いLDKにしたい。');
     await page.fill('#f-point', 'キッチンを中心に回遊できる動線にしました。');
     await page.fill('#f-client', '山田 太郎 様');
-    await page.fill('#f-addr', '大阪市北区梅田1-2-3');
     await page.selectOption('#f-cost', '900〜1,200万');
     await page.fill('#f-memo', '（試験）ひみつのメモ');
     assert.ok(await page.isDisabled('#fPub'), '公開する写真がまだない');
@@ -474,7 +480,7 @@ const inked = async page => {
     assert.strictEqual(it.photos.length, 2);
     assert.deepStrictEqual(it.photos.map(p => Object.keys(p).sort().join()), ['ba,url', 'ba,url']);
     assert.deepStrictEqual(it.know, [{ kind: 'D', kindName: 'ディテール', title: '（試験）床見切りの段差ゼロ処理' }]);
-    for (const secret of ['山田', '太郎', '梅田', '1-2-3', '900〜1,200万', 'ひみつのメモ', '（試験）A邸', w.id, w.data.photos[2].id, '遮音等級', byTitle('段差ゼロ').id, 'D-001']) {
+    for (const secret of ['山田', '太郎', '900〜1,200万', 'ひみつのメモ', '（試験）A邸', w.id, w.data.photos[2].id, '遮音等級', byTitle('段差ゼロ').id, 'D-001']) {
       assert.ok(!worksJson.includes(secret), '書き出しに入っている：' + secret);
     }
     await settled(page);
@@ -483,7 +489,7 @@ const inked = async page => {
     await page.click('#exClose');
   });
 
-  await t('実績：施主名・番地が公開する文章に入っていたら書き出しを止める', async () => {
+  await t('実績：施主名が公開する文章に入っていたら書き出しを止める', async () => {
     await page.click('#wFinBtn');
     await page.fill('#f-point', 'キッチンを中心に回遊できる動線にしました。山田さんのご家族のために。');
     await page.click('#fExport');
@@ -493,7 +499,7 @@ const inked = async page => {
     assert.ok(await page.isDisabled('#exDownload'));
     assert.ok(await page.isDisabled('#exCopy'));
     assert.strictEqual(await page.inputValue('#exText'), '');
-    // 「直す」→ 仕上げが開く。直して書き出せる
+    // 「直す」→ 詳しく書くが開く。直して書き出せる
     await page.click('#exStop [data-exfix]');
     await page.waitForSelector('#finish:not([hidden])');
     await page.fill('#f-point', 'キッチンを中心に回遊できる動線にしました。');
@@ -502,10 +508,10 @@ const inked = async page => {
     assert.ok(await page.isHidden('#exStop'));
     assert.ok((await page.textContent('#exDiff')).includes('変わりなし'));
     await page.click('#exClose');
-    // 番地（数字の並び）・名前の片方だけでも見つける
+    // 名前の片方だけでも見つける。前に入れた番地（addr）は見ない（番地は書かない運用）
     const found = await page.evaluate(() => window.BrainWorks._leaks({ name: 'x', client: '佐藤 花子', addr: '大阪市北区梅田１－２－３', city: '大阪市北区',
       pubName: '梅田1-2-3の住まい', wish: '花子さんの夢', photos: [] }));
-    assert.ok(found.includes('花子') && found.some(w => /1-2-3/.test(w)), JSON.stringify(found));
+    assert.ok(found.includes('花子') && !found.some(w => /1-2-3|梅田/.test(w)), JSON.stringify(found));
   });
 
   await t('公開ページ（スマホ幅）：1件のページに公開項目だけが出る', async () => {
@@ -519,7 +525,7 @@ const inked = async page => {
     assert.ok((await pub.title()).includes('｜coto'));
     const text = await pub.textContent('#pp');
     for (const v of ['2026年8月 完成', '大阪市北区', '68㎡', '30代ご夫婦', '広いLDKにしたい', '段差ゼロ', 'ディテール']) assert.ok(text.includes(v), v);
-    for (const v of ['山田', '梅田', '1,200万', 'ひみつのメモ', '（試験）A邸', '遮音等級']) assert.ok(!text.includes(v), v);
+    for (const v of ['山田', '1,200万', 'ひみつのメモ', '（試験）A邸', '遮音等級']) assert.ok(!text.includes(v), v);
     assert.strictEqual(await pub.locator('.pp-hero .ph .ba.after').count(), 1, '表紙はアフター');
     assert.strictEqual(await pub.locator('.pp-hero img').count(), 1);
     await pub.waitForFunction(() => [...document.images].every(i => i.complete));
@@ -604,6 +610,81 @@ const inked = async page => {
     assert.strictEqual(await pub.locator('.pair .ba.before').count() + await pub.locator('.pair .ba.after').count(), 2);
     await pub.screenshot({ path: path.join(SHOT, 'pc-w3-public.png'), fullPage: true });
     await pub.close();
+  });
+
+  await t('実績：写真を1枚ずつ消す（詳細・詳しく書く。確認1回、保存のあとゴミ箱へ、表紙は次の公開写真に）', async () => {
+    const trashed = id => gas.drive.byId[id] && gas.drive.byId[id].trashed;
+    // 前に入れた番地が残っていても出さない・書き出さない（データは消さない）
+    const w0 = workBy('（試験）A邸改');
+    gas.ctx.handle_({ key: KEY, action: 'put', app: 'brain', id: w0.id, data: Object.assign({}, w0.data, { addr: '大阪市北区梅田9-9-9' }) });
+    await page.click('#syncBtn');
+    await page.locator('#tabbar [data-view=works]').click();
+    await page.locator('#works .wk', { hasText: '（試験）A邸改' }).click();
+    await page.waitForSelector('.app.work-open');
+    await page.waitForFunction(() => document.querySelectorAll('#wDetail .wgal .wgi').length === 3);
+    assert.ok(!(await page.textContent('#wDetail')).includes('梅田'));
+    await page.fill('#wq', '梅田');
+    assert.strictEqual(await page.locator('#works .wk').count(), 0, '番地では検索しない');
+    await page.fill('#wq', '');
+    assert.ok(!JSON.stringify(await page.evaluate(() => window.BrainWorks._buildPublic())).includes('梅田'));
+    const [pA, pB, pC] = workBy('（試験）A邸改').data.photos.map(p => p.id); // A=アフター・公開（表紙）, B=ビフォー・公開, C=公開しない
+    // 詳細：やめると何も変わらない
+    await page.click('#wDetail [data-wdel="' + pC + '"]');
+    await page.waitForSelector('#confirm:not([hidden])');
+    assert.ok((await page.textContent('#cfTitle')).includes('この写真を消しますか'));
+    assert.ok(!(await page.textContent('#cfText')).includes('公開ページからも外れます'));
+    await page.click('#cfNo');
+    assert.strictEqual(await page.locator('#wDetail .wgal .wgi').count(), 3);
+    // 詳細：公開しない写真を消す
+    await page.click('#wDetail [data-wdel="' + pC + '"]');
+    await page.click('#cfOk');
+    await page.waitForFunction(() => document.querySelectorAll('#wDetail .wgal .wgi').length === 2);
+    await settled(page);
+    for (let i = 0; i < 50 && !trashed(pC); i++) await page.waitForTimeout(100);
+    assert.deepStrictEqual(workBy('（試験）A邸改').data.photos.map(p => p.id), [pA, pB]);
+    assert.ok(trashed(pC), 'ドライブのゴミ箱へ');
+    assert.ok(!trashed(pA) && !trashed(pB));
+    // 詳しく書く：表紙（公開中）を消す → 次の公開写真が表紙。公開はそのまま
+    await page.click('#wFinBtn');
+    await page.waitForSelector('#finish:not([hidden])');
+    await page.fill('#f-user', '（試験）書きかけの下書き');
+    await page.click('[data-frm="0"]');
+    await page.waitForSelector('#confirm:not([hidden])');
+    const cf = await page.textContent('#cfText');
+    assert.ok(cf.includes('公開ページからも外れます') && cf.includes('表紙'), cf);
+    await page.click('#cfOk');
+    await page.waitForFunction(() => document.querySelectorAll('#fBody .pcell').length === 1);
+    await settled(page);
+    for (let i = 0; i < 50 && !trashed(pA); i++) await page.waitForTimeout(100);
+    assert.ok(trashed(pA));
+    let w = workBy('（試験）A邸改');
+    assert.deepStrictEqual(w.data.photos.map(p => [p.id, p.pub, p.ba]), [[pB, true, 'before']]);
+    assert.strictEqual(w.data.published, true);
+    assert.strictEqual(w.data.addr, '大阪市北区梅田9-9-9', 'データ自体は消さない');
+    assert.ok(await page.locator('#fBody .pcell .cover').isVisible(), '次の公開写真が表紙');
+    assert.strictEqual(await page.inputValue('#f-user'), '（試験）書きかけの下書き', '下書きは残る');
+    assert.strictEqual(await page.getAttribute('#fPub', 'aria-pressed'), 'true');
+    // 保存しても消した写真は戻らない・二重に消さない
+    await page.click('#fSave');
+    await page.waitForSelector('#finish', { state: 'hidden' });
+    await settled(page);
+    w = workBy('（試験）A邸改');
+    assert.deepStrictEqual(w.data.photos.map(p => p.id), [pB]);
+    assert.ok(!trashed(pB));
+    assert.ok(!JSON.stringify(await page.evaluate(() => window.BrainWorks._buildPublic())).includes(pA));
+    // 最後の公開写真を消すと公開もオフ（書きかけに戻る）
+    await page.click('#wDetail [data-wdel="' + pB + '"]');
+    await page.click('#cfOk');
+    await page.waitForFunction(() => !document.querySelector('#wDetail .wgal'));
+    await settled(page);
+    w = workBy('（試験）A邸改');
+    assert.strictEqual(w.data.photos.length, 0);
+    assert.strictEqual(w.data.published, false);
+    assert.strictEqual((await page.textContent('#wDetail .st')).trim(), '書きかけ');
+    for (let i = 0; i < 50 && !trashed(pB); i++) await page.waitForTimeout(100);
+    assert.ok(trashed(pB));
+    await page.click('#wBack');
+    assert.ok(await page.locator('#wChips .chip', { hasText: '書きかけ' }).isVisible());
   });
 
   // ---------- 貼って取り込む（noteネタ・日記） ----------

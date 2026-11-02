@@ -1,14 +1,16 @@
 /* 実績ポートフォリオ（脳みその「実績」タブ）。app.js の後に読む（window.BrainCore を使う）
- * 2段の流れ：①ささっと作る（案件名だけで保管・写真とメモは任意） ②人に見せたくなった案件だけ仕上げて「公開」をオン
+ * 2段の流れ：①ささっと作る（案件名だけで保管・写真とメモは任意） ②人に見せたくなった案件だけ「詳しく書く」で書き足して「公開」をオン
  *
  * 実績のレコード（知識カードとは別の種類。知識の一覧・つながりの図・番号付けには混ざらない）：
  *   data = { t:'w', name(案件名), slug(公開番号：推測しにくい英数字10文字), memo,
  *            photos:[{ id(ドライブの画像id), pub:bool(公開ページに出す), ba:''|'before'|'after' }],   … 先頭の公開写真が表紙。1件60枚まで
  *            pubName, period:'YYYY-MM'(完成), city(市区まで), area(㎡), user(エンドユーザー), wish(ご要望), point(こだわり・工夫),
  *            hideKnow:[知識id](公開ページに出さない使った知識), published:bool,
- *            client(施主名), addr(番地まで), cost(費用帯) }
- *   - 公開ページに出ない：name・client・addr・cost・memo・公開オフの写真・スプシの記録id
- *   - 状態：published なら公開中／公開用の項目か写真の印を書き始めたら仕上げ中／それ以外は保管中
+ *            client(施主名), cost(費用帯) }
+ *   - 公開ページに出ない：name・client・cost・memo・公開オフの写真・スプシの記録id
+ *   - 番地は書かない。前に入れた addr が残っていても、表示・書き出し・検索には使わない（データはそのまま残す）
+ *   - 状態：published なら公開中／公開用の項目か写真の印を書き始めたら書きかけ／それ以外は保管中
+ * 写真は1枚ずつ消せる（詳細・詳しく書くの両方。確認1回 → 保存が通ってからドライブのゴミ箱へ）
  * 使った知識は実績側に持たない：知識カードの uses[].name が実績の name と同じものを自動で並べる。
  *   案件名を変えたら、カード側の記録の名前も（確認のうえ）新しい名前に揃える
  * 書き出しの控え：id 'works-export' data = { t:'wexport', at, list:[{ w, title }] }（前回から増えた・消えたを出すため）
@@ -24,7 +26,7 @@
   var db = C.db, esc = C.esc, $ = C.$;
   var MAX_PHOTOS = 60;
   var COSTS = ['〜300万', '300〜600万', '600〜900万', '900〜1,200万', '1,200万〜'];
-  var STATUS = { keep: '保管中', work: '仕上げ中', pub: '公開中' };
+  var STATUS = { keep: '保管中', work: '書きかけ', pub: '公開中' };
   var PUB_TEXT = ['pubName', 'period', 'city', 'area', 'user', 'wish', 'point'];
   var EXPORT_ID = 'works-export';
   var BRAND = 'coto';
@@ -34,7 +36,7 @@
 
   var W = { filter: 'all', q: '', sel: null, open: false, up: 0 };
   var Q = null;   // ささっと作る：{ photos:[{id}|{busy}], uploaded:[], busy }
-  var F = null;   // 仕上げの下書き：{ id, d, orig(元の写真id) }
+  var F = null;   // 詳しく書くの下書き：{ id, d, orig(元の写真id) }
 
   // ---------- データ ----------
   function works() { return db.all().filter(function (r) { return r.data && r.data.t === 'w'; }); }
@@ -105,7 +107,7 @@
   function buildPublic() {
     return { v: 1, brand: BRAND, generatedAt: new Date().toISOString(), items: publishable().map(function (r) { return pubItem(r.data); }) };
   }
-  // 施主名・番地に入れた文字が、公開する文章に入っていないか。見つかった言葉の一覧を返す
+  // 施主名に入れた文字が、公開する文章に入っていないか。見つかった言葉の一覧を返す
   function norm(t) { return String(t || '').normalize('NFKC').replace(/\s+/g, ''); }
   function leaks(d) {
     var it = pubItem(d);
@@ -115,13 +117,6 @@
     if (client) {
       needles.push(norm(client));
       client.split(/[\s・,、]+/).forEach(function (w) { needles.push(norm(w.replace(/(様|さま|さん|邸|殿)$/, ''))); });
-    }
-    var addr = norm(d.addr);
-    if (addr) {
-      needles.push(addr);
-      var city = norm(d.city);
-      if (city && addr.indexOf(city) === 0) needles.push(addr.slice(city.length));
-      (addr.match(/\d+(?:(?:-|丁目|番地?|号|の)\d+)+/g) || []).forEach(function (m) { needles.push(m); });
     }
     return C.uniq(needles.filter(function (w) { return w && w.length >= 2 && txt.indexOf(w) >= 0; }));
   }
@@ -135,7 +130,7 @@
   function renderList() {
     var all = works(), n = { all: all.length, keep: 0, work: 0, pub: 0 };
     all.forEach(function (r) { n[status(r.data)]++; });
-    $('wChips').innerHTML = [['all', 'すべて'], ['keep', '保管中'], ['work', '仕上げ中'], ['pub', '公開中']].map(function (x) {
+    $('wChips').innerHTML = [['all', 'すべて'], ['keep', '保管中'], ['work', '書きかけ'], ['pub', '公開中']].map(function (x) {
       return '<button type="button" class="chip' + (W.filter === x[0] ? ' on' : '') + '" data-wfilter="' + x[0] + '">' + x[1] + '<span class="n">' + n[x[0]] + '</span></button>';
     }).join('');
     var q = W.q.trim().toLowerCase();
@@ -143,7 +138,7 @@
       var d = r.data;
       if (W.filter !== 'all' && status(d) !== W.filter) return false;
       if (q) {
-        var hay = [d.name, d.pubName, d.city, d.addr].join('\n').toLowerCase();
+        var hay = [d.name, d.pubName, d.city].join('\n').toLowerCase();
         if (q.split(/\s+/).some(function (w) { return hay.indexOf(w) < 0; })) return false;
       }
       return true;
@@ -175,11 +170,12 @@
     var h = '<div class="wd-head"><h2>' + esc(d.name) + '</h2><div class="meta"><span class="st ' + st + '">' + STATUS[st] + '</span>' +
       [d.city, ym(d.period), d.area ? d.area + '㎡' : ''].filter(Boolean).map(esc).join('<span aria-hidden="true">・</span>') + '</div></div>';
     h += ph.length ? '<div class="wgal">' + ph.map(function (p) {
-      return '<button type="button" data-wphoto="' + esc(p.id) + '" aria-label="写真を大きく見る">' + phHtml(p.id, p.ba, 900) + '</button>';
+      return '<div class="wgi"><button type="button" data-wphoto="' + esc(p.id) + '" aria-label="写真を大きく見る">' + phHtml(p.id, p.ba, 900) + '</button>' +
+        '<button type="button" class="wdel" data-wdel="' + esc(p.id) + '" aria-label="この写真を消す">×</button></div>';
     }).join('') + '</div>' : '<p class="ax-note">写真はまだありません。</p>';
     h += '<div class="w-add"><label class="ax-btn" for="w-photo">＋ 写真をまとめて追加</label><span class="ax-note" id="wUpNote">' +
       (W.up ? '送信中 ' + W.up + '枚…' : ph.length + ' / ' + MAX_PHOTOS + '枚') + '</span></div>';
-    h += '<div><span class="lab">メモ</span>' + (d.memo ? '<p class="memo">' + esc(d.memo) + '</p>' : '<p class="memo none">まだメモはありません。「仕上げ」の下の方で書けます。</p>') + '</div>';
+    h += '<div><span class="lab">メモ</span>' + (d.memo ? '<p class="memo">' + esc(d.memo) + '</p>' : '<p class="memo none">まだメモはありません。「詳しく書く」の下の方で書けます。</p>') + '</div>';
     h += '<div><span class="lab">使った知識 ' + used.length + '件<span class="auto-tag">自動</span></span><div class="know">' +
       (used.length ? used.map(function (x) {
         var k = x.r.data;
@@ -189,7 +185,7 @@
       '<button class="ax-btn" type="button" id="wAddKnow">＋ 使った知識を足す</button></div></div>';
     if (st !== 'pub') {
       h += '<div class="next"><p><b>人に見せたくなったら</b>　時期・場所・ご要望などを足して、公開ページにできます。急がなくて大丈夫です。</p>' +
-        '<button class="ax-btn ax-btn-primary" type="button" data-wfin="1">仕上げる</button></div>';
+        '<button class="ax-btn ax-btn-primary" type="button" data-wfin="1">詳しく書く</button></div>';
     } else {
       h += '<div class="next"><p><b>公開中</b>　「公開データを書き出す」で反映したあと、リンクを送る・HPに貼ることができます。</p>' +
         '<div class="urlbox">' + esc(PUBLIC_URL + '?w=') + '<em>' + esc(d.slug) + '</em></div>' +
@@ -227,6 +223,7 @@
     var r = wById(W.sel);
     if (!t || !r) return;
     if (t.dataset.wphoto) { C.lightbox(img(t.dataset.wphoto, 1600)); return; }
+    if (t.dataset.wdel) { deletePhoto(r.id, t.dataset.wdel); return; }
     if (t.dataset.card) { C.showCard(t.dataset.card); return; }
     if (t.dataset.wfin) { openFinish(r.id); return; }
     if (t.id === 'wCopyUrl') { copyText(pubUrl(r.data), 'リンクをコピーしました'); return; }
@@ -257,6 +254,41 @@
       return db.put(d, wid);
     }).catch(function (e) { Apps.toast(Apps.errorText(e), true); });
     return chain;
+  }
+  // 写真を1枚消す（詳細・詳しく書くの両方から）。確認1回 → 保存が通ってからドライブのゴミ箱へ。
+  // 表紙は「先頭の公開写真」なので、表紙を消すと次の公開写真が表紙になる。公開写真が無くなったら公開もオフ
+  function deletePhoto(wid, pid) {
+    var r0 = wById(wid), p0 = r0 && photosOf(r0.data).filter(function (p) { return p.id === pid; })[0];
+    if (!p0) return Promise.resolve(false);
+    var wasCover = cover(r0.data) === pid;
+    var msg = 'ドライブの写真はゴミ箱へ移します。' +
+      (p0.pub ? '公開中の写真なので、公開ページからも外れます（次の書き出しで反映）。' : '') +
+      (wasCover ? '表紙の写真です。次の公開写真が表紙になります。' : '');
+    return C.ask('この写真を消しますか？', msg, '消す', true).then(function (yes) {
+      if (!yes) return false;
+      var ok = false;
+      chain = chain.then(function () {
+        var r = wById(wid);
+        if (!r) return;
+        var d = C.copyData(r.data);
+        d.photos = photosOf(d).filter(function (p) { return p.id !== pid; });
+        if (d.photos.length === photosOf(r.data).length) return;
+        var off = d.published && !canPublish(d);
+        if (off) d.published = false;
+        return db.put(d, wid).then(function () {
+          ok = true;
+          Apps.deleteImage(C.APP, pid).catch(function () {});
+          if (F && F.id === wid) {
+            F.d.photos = F.d.photos.filter(function (p) { return p.id !== pid; });
+            F.orig = F.orig.filter(function (p) { return p !== pid; });
+            if (F.d.published && !canPublish(F.d)) F.d.published = false;
+            renderFinish();
+          }
+          Apps.toast(off ? '写真を消しました。公開する写真が無くなったので、公開をオフにしました' : '写真を消しました');
+        });
+      }).catch(function (e) { Apps.toast('写真を消せませんでした：' + Apps.errorText(e), true); });
+      return chain.then(function () { return ok; });
+    });
   }
   function pickFiles(files, have) {
     if (!C.online()) { Apps.toast('写真はつながってから追加してください', true); return []; }
@@ -343,7 +375,7 @@
     if (nameTaken(name)) { Apps.toast('「' + name + '」の実績はもうあります。詳細から写真を足せます', true); return; }
     var d = { t: 'w', name: name, slug: newSlug(), memo: $('q-memo').value.replace(/\s+$/, ''),
       photos: Q.photos.filter(function (p) { return p.id; }).map(function (p) { return { id: p.id, pub: false, ba: '' }; }),
-      pubName: '', period: '', city: '', area: '', user: '', wish: '', point: '', hideKnow: [], published: false, client: '', addr: '', cost: '' };
+      pubName: '', period: '', city: '', area: '', user: '', wish: '', point: '', hideKnow: [], published: false, client: '', cost: '' };
     closeQuick(true);
     db.put(d).then(function (rec) {
       Apps.toast('「' + name + '」を保管しました');
@@ -352,7 +384,7 @@
     }, function (err) { Apps.toast(Apps.errorText(err), true); });
   });
 
-  // ---------- 仕上げ ----------
+  // ---------- 詳しく書く ----------
   function fld(lab, key, o) {
     o = o || {};
     var v = esc(F.d[key] || '');
@@ -382,7 +414,7 @@
     var h = '<div class="sec"><h3 class="sec-h">' + EYE + '公開ページに出る項目<small>見る人に見える</small></h3>' +
       fld('公開用の名前', 'pubName', { ph: '例：北区 築40年マンション、回遊できるLDK', note: '案件名（' + esc(d.name) + '）は出ません' }) +
       '<div class="row2">' + fld('時期（完成）', 'period', { type: 'month' }) + fld('広さ（㎡）', 'area', { mode: 'decimal', ph: '例：68', max: 8 }) + '</div>' +
-      fld('場所（市区まで）', 'city', { ph: '例：大阪市北区', note: '番地は下の「出ない項目」へ', max: 60 }) +
+      fld('場所（市区まで）', 'city', { ph: '例：大阪市北区', max: 60 }) +
       fld('エンドユーザー', 'user', { ph: '例：30代ご夫婦＋お子さま1人' }) +
       fld('ご要望', 'wish', { area: true, ph: 'お客様が最初に望んでいたこと' }) +
       fld('こだわり・工夫', 'point', { area: true, rows: 4, ph: 'どう応えたか、どこを工夫したか' }) + '</div>';
@@ -392,7 +424,7 @@
           (p.ba === 'before' ? 'ビフォー' : p.ba === 'after' ? 'アフター' : '印なし') + '）">' + phHtml(p.id, p.ba, 300) + '</button>' +
           '<button type="button" class="pub' + (p.pub ? ' on' : '') + '" data-fpub="' + i + '" aria-pressed="' + !!p.pub + '" aria-label="この写真を公開">' +
           (p.pub ? '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg>') + '</button>' +
-          '<button type="button" class="prm" data-frm="' + i + '" aria-label="この写真を外す">×</button>' +
+          '<button type="button" class="prm" data-frm="' + i + '" aria-label="この写真を消す">×</button>' +
           (p === firstPub ? '<span class="cover">表紙</span>' : '') + '</div>';
       }).join('') + '</div><p class="ax-note">右上の ✓ がついた写真だけが公開ページに出ます。✓の最初の1枚が表紙です。</p>' :
         '<p class="ax-note">写真がまだありません。詳細の「写真をまとめて追加」から入れられます。</p>') + '</div>';
@@ -403,7 +435,7 @@
       }).join('') : '<p class="ax-note">まだありません</p>') + '</div></div>';
     h += '<div class="sec priv"><h3 class="sec-h">' + LOCK + '公開ページに出ない項目<small>自分だけ</small></h3>' +
       fld('案件名', 'name', { max: 60, note: '変えると、脳みそのカードの「使った案件」の名前も揃えます（確認あり）' }) +
-      fld('施主名', 'client', { ph: '例：山田 様' }) + fld('住所（番地まで）', 'addr', { ph: '例：大阪市北区〇〇1-2-3' }) +
+      fld('施主名', 'client', { ph: '例：山田 様' }) +
       fld('費用帯', 'cost', { sel: COSTS }) +
       fld('メモ', 'memo', { area: true, rows: 4 }) + '</div>';
     var ok = canPublish(d);
@@ -440,7 +472,7 @@
     var ph = F.d.photos;
     if (t.dataset.fba != null) { var p = ph[+t.dataset.fba]; p.ba = p.ba === '' ? 'before' : p.ba === 'before' ? 'after' : ''; renderFinish(); return; }
     if (t.dataset.fpub != null) { var q = ph[+t.dataset.fpub]; q.pub = !q.pub; if (F.d.published && !canPublish(F.d)) { F.d.published = false; Apps.toast('公開する写真が無くなったので、公開をオフにしました'); } renderFinish(); return; }
-    if (t.dataset.frm != null) { ph.splice(+t.dataset.frm, 1); if (F.d.published && !canPublish(F.d)) F.d.published = false; renderFinish(); return; }
+    if (t.dataset.frm != null) { var x = ph[+t.dataset.frm]; if (x) deletePhoto(F.id, x.id); return; }
     if (t.id === 'fPub') {
       if (F.d.published) { F.d.published = false; Apps.toast('公開をオフにしました。次の書き出しで公開ページから消えます'); }
       else if (canPublish(F.d)) { F.d.published = true; Apps.toast('公開をオンにしました。保存して書き出すと反映されます'); }
@@ -457,7 +489,7 @@
     d.name = String(d.name || '').trim().slice(0, 60);
     if (!d.name) { Apps.toast('案件名は空にできません', true); $('f-name').focus(); return Promise.resolve(false); }
     if (nameTaken(d.name, f.id)) { Apps.toast('「' + d.name + '」の実績はもうあります', true); return Promise.resolve(false); }
-    PUB_TEXT.concat(['client', 'addr', 'cost']).forEach(function (k) { d[k] = String(d[k] || '').trim(); });
+    PUB_TEXT.concat(['client', 'cost']).forEach(function (k) { d[k] = String(d[k] || '').trim(); });
     d.memo = String(d.memo || '').replace(/\s+$/, '');
     if (d.published && !canPublish(d)) d.published = false;
     var renamed = d.name !== f.name0 ? usedCards(f.name0) : [];
@@ -519,7 +551,7 @@
     var bad = publishable().map(function (r) { return { r: r, words: leaks(r.data) }; }).filter(function (x) { return x.words.length; });
     $('exSum').textContent = '公開オンの実績：' + data.items.length + '件。オンの案件だけを works.json にまとめます。';
     $('exStop').hidden = !bad.length;
-    $('exStop').innerHTML = bad.length ? '<b>書き出しを止めています</b><p>施主名・番地に入れた文字が、公開する文章に入っています。直してから書き出してください。</p>' +
+    $('exStop').innerHTML = bad.length ? '<b>書き出しを止めています</b><p>施主名に入れた文字が、公開する文章に入っています。直してから書き出してください。</p>' +
       bad.map(function (x) {
         return '<div class="ex-bad"><span>' + esc(x.r.data.name) + '：' + x.words.map(function (w) { return '「' + esc(w) + '」'; }).join('') + '</span>' +
           '<button class="ax-btn" type="button" data-exfix="' + esc(x.r.id) + '">直す</button></div>';
