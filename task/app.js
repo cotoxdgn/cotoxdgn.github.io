@@ -138,7 +138,7 @@
     box.innerHTML = '';
     list.forEach(function (t) {
       var lk = locked(t);
-      var row = el('div', 'task' + (t.done ? ' done' : '') + (!t.done && t.date < today ? ' carry' : '') + (lk ? ' locked' : ''));
+      var row = el('div', 'task' + (t.done ? ' done' : '') + (!t.done && t.date < today ? ' carry' : '') + (lk ? ' locked' : (!t.done && t.wait ? ' waiting' : '')));
       var cb = el('button', 'cb'); cb.type = 'button';
       cb.setAttribute('aria-label', lk ? '前提待ちのため完了にできません：' + t.todo : (t.done ? '完了を外す：' : '完了にする：') + t.todo);
       if (lk) cb.setAttribute('aria-disabled', 'true');
