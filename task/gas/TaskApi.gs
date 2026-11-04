@@ -42,6 +42,7 @@ var TASKAPI = {
   INSERT_ROW: 4,   // 新しいタスクを入れる行（既存GASと同じ）
   FIRST_ROW: 4,    // ここから下をタスクとして読む
   ACTUAL_HEADER: '実働',
+  WAIT_HEADER: '👤',  // 待ち相手の列（空でなければ、アプリに「〇〇待ち」と出す）
   // 見出しの文字で列を探す（列の順番が変わっても動くように）。見つからなければ既定列を使う
   COLS: {
     no:     { head: 'No',   def: 1 },
@@ -220,6 +221,8 @@ function taskApi_cols(sh) {
   var c = {};
   for (var k in TASKAPI.COLS) c[k] = taskApi_findCol(heads, TASKAPI.COLS[k].head, k !== 'todo') || TASKAPI.COLS[k].def;
   c.actual = taskApi_findCol(heads, TASKAPI.ACTUAL_HEADER, true);
+  // 待ち相手（👤）：見つからないときは読まない（違う列を「待ち」と表示しないため、既定列は使わない）
+  c.wait = taskApi_findCol(heads.map(function (x) { return x.replace(/[\uFE0E\uFE0F]/g, ''); }), TASKAPI.WAIT_HEADER, false);
   c.width = heads.length;
   return c;
 }
@@ -255,7 +258,8 @@ function taskApi_rowToTask(row, v, c, today) {
     slot: slot,
     slotRaw: slot ? '' : slotEmoji,
     detail: String(v[c.detail - 1] || ''),
-    actual: c.actual ? taskApi_num(v[c.actual - 1]) : null
+    actual: c.actual ? taskApi_num(v[c.actual - 1]) : null,
+    wait: c.wait ? taskApi_text(v[c.wait - 1]).slice(0, 40) : ''
   };
 }
 

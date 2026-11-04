@@ -139,6 +139,7 @@
       body.appendChild(el('div', 'tt', t.todo));
       var meta = el('div', 'meta');
       if (t.pj) meta.appendChild(el('span', 'pj', t.pj));
+      if (!t.done && t.wait) meta.appendChild(el('span', 'chip wait', '⏳ ' + t.wait + ' 待ち'));
       if (!t.done && t.date < today) meta.appendChild(el('span', 'chip', md(t.date) + 'から'));
       if (t.slot) meta.appendChild(el('span', '', SLOT_EMOJI[t.slot] + ' ' + t.slot));
       else if (t.slotRaw) meta.appendChild(el('span', '', t.slotRaw));

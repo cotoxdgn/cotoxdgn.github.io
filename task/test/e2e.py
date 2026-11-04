@@ -65,18 +65,18 @@ try:
         pg.locator('#todayList .task', has_text='表紙を作る').locator('.cb').click()
         check('完了シートが開く', pg.locator('#sheet').is_visible())
         check('実働の初期値は工', pg.inner_text('#shAct') == '1h')
-        pg.click('#steps button[data-d="0.25"]')
-        check('差 +0.25', pg.inner_text('#shDiff') == '+0.25')
+        pg.click('#steps button[data-d="0.1"]')
+        check('差 +0.1', pg.inner_text('#shDiff') == '+0.1')
         pg.screenshot(path=OUT.replace('.png', '-sheet.png'))
         pg.click('#shDone')
         pg.wait_for_selector('#toast:has-text("完了にしました")')
         s = sheet()
-        check('完了列 TRUE・実働列 1.25', s[3][1] is True and s[3][-1] == 1.25)
+        check('完了列 TRUE・実働列 1.1', s[3][1] is True and s[3][-1] == 1.1)
         check('今日完了に移る', pg.locator('#doneList .task', has_text='表紙を作る').count() == 1)
 
         # タイマー
         pg.locator('#carry .task .cb').click()
-        pg.click('#tToggle')
+        if '停止' not in pg.inner_text('#tToggle'): pg.click('#tToggle')   # 開いた時に自動で始まっていなければ始める
         pg.wait_for_timeout(2200)
         check('タイマーが進む', pg.inner_text('#shTimer') != '00:00:00')
         pg.click('#shLater')
@@ -87,6 +87,7 @@ try:
         pg.wait_for_selector('#toast:has-text("完了を外しました")')
         check('完了を外すとシートも FALSE', sheet()[3][1] is False)
 
+        check('👤が空でない未完了に「待ち」の印', pg.locator('.task .chip.wait', has_text='山田さん 待ち').count() >= 1)
         check('横スクロールなし', pg.evaluate('document.documentElement.scrollWidth <= innerWidth'))
         check('JS エラーなし', not errs)
         pg.wait_for_timeout(2600)

@@ -2,7 +2,7 @@
 :root {
   --bg: #EEF1F3; --paper: #FFFFFF; --ink: #1D2329; --muted: #5F6B76; --line: #D6DCE1;
   --accent: #1F5FA8; --accent-ink: #FFFFFF; --accent-soft: #E3EDF8;
-  --warn: #A84C14; --warn-soft: #FBEDE3; --ok: #2F7D4F; --ok-soft: #E2F2E8; --danger: #A3321F;
+  --warn: #A84C14; --warn-soft: #FBEDE3; --wait: #6B4F96; --wait-soft: #ECE6F5; --ok: #2F7D4F; --ok-soft: #E2F2E8; --danger: #A3321F;
   --dim: rgba(10, 14, 18, .45);
   --font: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", sans-serif;
   --num: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -12,7 +12,7 @@
   :root:not([data-theme="light"]) {
     --bg: #14181C; --paper: #1F252B; --ink: #E7ECF0; --muted: #98A3AD; --line: #323A42;
     --accent: #6FA6E6; --accent-ink: #0C1724; --accent-soft: #1F3047;
-    --warn: #E79A66; --warn-soft: #3A281C; --ok: #6CC792; --ok-soft: #1C3427; --danger: #F08A78;
+    --warn: #E79A66; --warn-soft: #3A281C; --wait: #C3A8EA; --wait-soft: #2E2640; --ok: #6CC792; --ok-soft: #1C3427; --danger: #F08A78;
     --dim: rgba(0, 0, 0, .6);
     color-scheme: dark;
   }
@@ -20,7 +20,7 @@
 :root[data-theme="dark"] {
   --bg: #14181C; --paper: #1F252B; --ink: #E7ECF0; --muted: #98A3AD; --line: #323A42;
   --accent: #6FA6E6; --accent-ink: #0C1724; --accent-soft: #1F3047;
-  --warn: #E79A66; --warn-soft: #3A281C; --ok: #6CC792; --ok-soft: #1C3427; --danger: #F08A78;
+  --warn: #E79A66; --warn-soft: #3A281C; --wait: #C3A8EA; --wait-soft: #2E2640; --ok: #6CC792; --ok-soft: #1C3427; --danger: #F08A78;
   --dim: rgba(0, 0, 0, .6);
   color-scheme: dark;
 }
@@ -63,6 +63,7 @@ section { display: grid; gap: 8px; }
 .meta { font-size: 12px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
 .pj { color: var(--accent); font-weight: 700; }
 .chip { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--warn-soft); color: var(--warn); font-weight: 700; }
+.chip.wait { background: var(--wait-soft); color: var(--wait); }
 .chip.run { background: var(--accent-soft); color: var(--accent); }
 .hrs { font-family: var(--num); font-size: 14px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .hrs .over { color: var(--warn); }
