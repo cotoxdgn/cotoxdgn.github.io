@@ -85,6 +85,9 @@
   .log .p { font-size: 11px; color: var(--muted); font-weight: 400; }
   .log.nod li { grid-template-columns: 5.6em 1fr auto; }
   .log.nod .d { display: none; }
+  .log li.editable { grid-template-columns: 5.6em 1fr auto auto; cursor: pointer; }
+  .log li.editable:active { background: var(--line); }
+  .log .ed { font-size: 12px; font-weight: 700; color: var(--ax-muted, #888); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
   .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 12px 0; }
 
   .weekgrid { display: grid; grid-template-columns: 5em repeat(7, 1fr); gap: 6px 2px; align-items: center; text-align: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -242,7 +245,7 @@
       <div class="bar"><button class="back" type="button" data-go="today">← 記録</button></div>
       <h2 class="sec">この1週間</h2>
       <div class="weekgrid" id="week" aria-label="この1週間の状況"></div>
-      <div class="note"><span style="color:var(--mint)">●</span> した　<span style="color:var(--amber)">◌</span> 記録なし</div>
+      <div class="note"><span style="color:var(--mint)">●</span> した　<span style="color:var(--amber)">◌</span> 記録なし　（昨日までは、丸や下の行を押すと直せます）</div>
       <h2 class="sec">ぜんぶの記録（30日分）</h2>
       <div class="daygroup" id="allLog"></div>
     </div>
