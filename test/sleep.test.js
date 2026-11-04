@@ -129,4 +129,21 @@ t('アプリの list で sleep-YYYYMMDD が届く（手で直した値・目標�
   for (const id of ['sleep-20261101', 'sleep-20261031', 'sleepfix-20261101', 'sleep-goal']) assert.ok(ids.includes(id), id);
 });
 
+t('sleepPut（かんたん版）：s・e・v を改行区切りのテキストで受け取れる。ISO・時差なし（日本時間）どちらも読む', () => {
+  SKEY = String(conf.getRange('B5').getValue());
+  tick();
+  const r = call({ key: SKEY, action: 'sleepPut',
+    s: '2026-11-02T00:10:00+09:00\n2026/11/02 3:00', e: '2026-11-02T03:00:00+09:00\n2026/11/02 7:05', v: 'コア\nレム' });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.strictEqual(r.date, '2026-11-02'); assert.strictEqual(r.count, 2);
+  const d = rec('sleep-20261102');
+  assert.strictEqual(d.samples[1].s, '2026-11-01T18:00:00.000Z');
+  assert.strictEqual(d.samples[1].v, 'レム');
+  // 数が合わないものは断る
+  assert.strictEqual(call({ key: SKEY, action: 'sleepPut', s: 'a\nb', e: 'c' }).error, 'bad_request');
+  // 年月日の書き方
+  const r2 = call({ key: SKEY, action: 'sleepPut', s: '2026年11月3日 0:30', e: '2026年11月3日 6:45' });
+  assert.ok(r2.ok, JSON.stringify(r2)); assert.strictEqual(r2.date, '2026-11-03');
+});
+
 console.log(`\n${passed} 件 すべて成功`);
