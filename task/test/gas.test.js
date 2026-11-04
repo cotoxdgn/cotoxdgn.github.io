@@ -175,6 +175,19 @@ t('setWait：👤と前提のセルだけを書く。自分自身・形の違う
   const r2 = call({ key: KEY, action: 'setWait', no, todo, wait: '', pre: '' });
   assert.ok(r2.ok); assert.strictEqual(r2.task.wait, ''); assert.strictEqual(r2.task.pre, '');
   assert.strictEqual(call({ key: KEY, action: 'setWait', no: 999, todo: 'x', wait: 'a' }).error, 'not_found');
+  // 📅・⏰
+  const r3 = call({ key: KEY, action: 'setWait', no, todo, date: '2026-11-05', slot: '夕' });
+  assert.ok(r3.ok, JSON.stringify(r3)); assert.strictEqual(r3.task.date, '2026-11-05'); assert.strictEqual(r3.task.slot, '夕');
+  const r4 = call({ key: KEY, action: 'setWait', no, todo, slot: '13:30' });
+  assert.ok(r4.ok); assert.strictEqual(sh.peek(row, 8).v, 13.5);
+  const r5 = call({ key: KEY, action: 'setWait', no, todo, slot: '' });
+  assert.ok(r5.ok); assert.strictEqual(r5.task.slot, ''); assert.strictEqual(r5.task.slotRaw, '');
+  const b1 = snap();
+  assert.strictEqual(call({ key: KEY, action: 'setWait', no, todo, date: '11/5', wait: 'x' }).error, 'bad_date');
+  assert.strictEqual(call({ key: KEY, action: 'setWait', no, todo, slot: '25:00' }).error, 'bad_slot');
+  assert.strictEqual(call({ key: KEY, action: 'setWait', no, todo, slot: '夜' }).error, 'bad_slot');
+  assert.strictEqual(call({ key: KEY, action: 'setWait', no, todo, date: '2026-11-06', pre: 'てきとう' }).error, 'bad_pre');
+  assert.deepStrictEqual(snap(), b1, '断ったときは何も書かない');
 });
 t('taskApiShowLink：#t= 付きのリンク（apps 共通の #c= と別）', () => {
   ctx.__logs = [];
