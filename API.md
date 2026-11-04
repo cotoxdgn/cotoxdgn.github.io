@@ -114,12 +114,13 @@ Apps.call(app, action, params) // → Promise<レスポンス>（ok:false は Er
 | `imageData` | `id` | `mime`, `base64` |
 | `imageDelete` | `id` | — |
 | `yoteiCal` | `from`, `to`（YYYY-MM-DD、15日まで） | `busy: [{ s, e }]`（予定の始まり・終わりの ISO だけ。件名などは返さない。終日・欠席の予定は除く） |
+| `calMonth` | `from`, `to`（YYYY-MM-DD、42日まで） | `events: [{ title, start, end, allDay, color }]`（ルーティンの月カレンダー用。普段使いのカレンダー1つ。件名・時刻・終日かどうか・色番号 `'1'`〜`'11'`（なし＝`''`）だけ。終日は日付で end は次の日。欠席の予定は除く。スプシには書かない） |
 | `yoteiResults` | `id?` | `answers: { 予定合わせID: [{ name, cells, createdAt, updatedAt, edits }] }`（端末IDは返さない） |
 | `yoteiCreateEvent` | `id`, `start`, `end`（ISO） | `record`（決定済みにした予定合わせ）, `calendarEventId`。既定のカレンダーに1件だけ作る（招待なし）。決定済みなら `already` |
 | `sleepPut` | `samples: [{ s, e, v }]`（300件まで。s・e は ISO、v はヘルスケアの値） | `date`, `id`, `count`。`app=routine` に `sleep-YYYYMMDD` で上書き。読める件が無ければ `no_samples`（保存しない） |
 | `sleepKey` | `renew?: true` | `sleepKey`（睡眠用の合言葉。「設定」B5。空なら作る） |
 
-睡眠用の合言葉（B5）では `sleepPut` だけ使える。ほかの action はすべて `bad_key`。形は `gas/Code.gs` の「睡眠」と `routine/sleep.js` の先頭を参照。
+睡眠用の合言葉（B5）では `sleepPut` だけ使える（`calMonth` も断る）。ほかの action はすべて `bad_key`。形は `gas/Code.gs` の「睡眠」と `routine/sleep.js` の先頭を参照。
 
 予定合わせの相手用の窓口（**合言葉なし**。`key` は見ない。合言葉の確認より前に分かれ、ほかの action には進めない）：
 
@@ -179,5 +180,8 @@ node test/yotei.test.js    # 予定合わせの窓口（Code.gs・モック）
 node yotei/test/e2e.js     # 予定合わせの画面（Playwright）
 node test/sleep.test.js    # 睡眠の窓口 sleepPut / sleepKey（Code.gs・モック）
 node routine/test/sleep.test.js  # 就寝・起床の決め方・目標の履歴
+node test/calmonth.test.js # ルーティンの月カレンダーの窓口 calMonth（Code.gs・モック）
+node routine/test/period.test.js # 生理の記録・次の予定日の決め方
 node routine/test/e2e.js   # ルーティン（睡眠）の画面（Playwright）
+node routine/test/e2e-v2.js # ルーティン2版目（月カレンダー・生理・コレクション、1版目のデータとの比べ）の画面（Playwright）
 ```

@@ -1,8 +1,13 @@
-/* ルーティン：習慣の達成記録＋起床・就寝記録
- * レコード（同じシート app=routine）。睡眠のレコードは sleep.js の先頭を参照
+/* ルーティン：習慣の達成記録＋月カレンダー（予定・生理・コレクション）＋起床・就寝記録
+ * レコード（同じシート app=routine）。睡眠のレコードは sleep.js、生理は period.js の先頭を参照
  *   習慣：id = h-xxxx            data = { kind:'habit', name, time, color, order, since, archivedOn }
  *   記録：id = log-YYYYMMDD-<習慣id> data = { kind:'log', date:'YYYY-MM-DD', habit, at }
  *   記録は「日付＋習慣」で id が決まるので、同じ日に二重にはならない。取り消しは削除。
+ *   生理：id = period-YYYYMMDD   data = { kind:'period', start, end（空＝記録中）, at }
+ *   種類：id = ctype-xxxx（料理は ctype-food で固定）  data = { kind:'ctype', name, icon, color, order, archivedOn }
+ *   1件 ：id = item-xxxx         data = { kind:'item', type, date, name, memo（60文字まで）, image:{ id, thumb }|null, at }
+ * Googleカレンダーの予定はスプシに保存しない（GAS の calMonth で読む。端末には最後に読んだ月の分だけ置く）。
+ * 「表示」の切り替え・睡眠の表示オンオフは端末ごと（localStorage）。
  * 1日の区切りは深夜3時（3時までは前の日として扱う）。
  */
 (function () {
@@ -21,17 +26,20 @@
   ];
   var WD = ['日', '月', '火', '水', '木', '金', '土'];
   var CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
-  var FLOWER = '<svg class="flower" viewBox="0 0 20 20" aria-hidden="true"><g fill="var(--rose)"><circle cx="10" cy="5" r="4"/><circle cx="15" cy="10" r="4"/><circle cx="10" cy="15" r="4"/><circle cx="5" cy="10" r="4"/></g><circle cx="10" cy="10" r="3" fill="var(--mustard)"/></svg>';
+  var FLOWER = '<svg class="flower" viewBox="0 0 20 20" aria-hidden="true"><g fill="var(--rose)"><circle cx="10" cy="5.2" r="3.3"/><circle cx="14.6" cy="8.6" r="3.3"/><circle cx="12.8" cy="14" r="3.3"/><circle cx="7.2" cy="14" r="3.3"/><circle cx="5.4" cy="8.6" r="3.3"/></g><circle cx="10" cy="10" r="2.6" fill="var(--mustard)"/></svg>';
 
   var MOON = '<svg class="moon" viewBox="0 0 12 12" aria-hidden="true"><path d="M10.2 7.6A4.6 4.6 0 0 1 4.4 1.8a4.6 4.6 0 1 0 5.8 5.8z" fill="var(--blue)"/></svg>';
   var SL = window.RoutineSleep;
+  var P = window.RoutinePeriod;
+  var ST = window.RoutineStickers;
   var SHORTCUT = '睡眠を送る';
   var SHORTCUT_URL = 'shortcuts://run-shortcut?name=' + encodeURIComponent(SHORTCUT);
   var SHORTCUT_FORCE = SHORTCUT_URL + '&input=text&text=' + encodeURIComponent('いま');
 
   var db = Apps.collection(APP);
   var $ = function (id) { return document.getElementById(id); };
-  var state = { habits: [], allHabits: [], logs: {}, today: '', month: null, editing: null, color: 'sage' };
+  var state = { habits: [], allHabits: [], logs: {}, today: '', month: null, editing: null, color: 'sage',
+    per: [], types: [], allTypes: [], items: [], sel: '', view: 'today' };
   var sl = { days: {}, goalData: null, hist: SL.history(null), hol: {}, range: 'w', kind: 'wake', sel: null, editDate: null, key: '', keyShown: false };
 
   // ---------- 日付 ----------
@@ -52,6 +60,7 @@
       if (d.kind === 'habit') hs.push({ id: r.id, name: d.name, time: d.time || '', color: d.color || 'sage', order: +d.order || 0, since: d.since || '', archivedOn: d.archivedOn || '' });
       else if (d.kind === 'log' && d.date && d.habit) logs[d.date + '|' + d.habit] = d;
     });
+    loadV2(list);
     // まだ習慣が1つも無いとき（初回・未接続）は初期の2つを表示する（保存は同期のあと）
     DEFAULTS.forEach(function (x) {
       if (!hs.some(function (h) { return h.id === x.id; }) && !list.some(function (r) { return r.data && r.data.kind === 'habit'; })) {
@@ -115,6 +124,7 @@
     var all = fullDay(state.today);
     $('alldone').hidden = !all;
     if (all) $('alldone').innerHTML = FLOWER + '<span>今日は全部できました。カレンダーに花のスタンプを押しました。</span>';
+    renderPerCard();
   }
   function toggle(hid) {
     var date = state.today, id = logId(date, hid);
@@ -123,49 +133,608 @@
     else db.put({ kind: 'log', date: date, habit: hid, at: new Date().toISOString() }, id);
   }
 
+  // ---------- 端末ごとの設定（localStorage。使えない時は既定のまま） ----------
+  var LS = 'routine.';
+  function lsGet(k, def) { try { var v = localStorage.getItem(LS + k); return v == null ? def : JSON.parse(v); } catch (e) { return def; } }
+  function lsSet(k, v) { try { localStorage.setItem(LS + k, JSON.stringify(v)); } catch (e) { /* 保存できなくても動く */ } }
+  function sleepOn() { return lsGet('sleepOn', false) === true; }
+  var LAYERS = (function () {
+    var d = { ev: true, hb: true, per: true, ph: true }, v = lsGet('layers', null);
+    if (v && typeof v === 'object') Object.keys(d).forEach(function (k) { if (typeof v[k] === 'boolean') d[k] = v[k]; });
+    return d;
+  })();
+  var wideMq = window.matchMedia ? window.matchMedia('(min-width: 768px)') : { matches: false };
+  function isWide() { return !!wideMq.matches; }
+
+  // ---------- 2版目のデータ（生理・種類・1件） ----------
+  var FOOD = { id: 'ctype-food', data: { kind: 'ctype', name: '料理', icon: 'bowl', color: 'mustard', order: 10, archivedOn: '' } };
+  var COLS = ['sage', 'blue', 'rose', 'mustard', 'lilac'];
+  function loadV2(list) {
+    state.per = P.build(list);
+    var ts = [], items = [];
+    list.forEach(function (r) {
+      var d = r.data || {};
+      if (d.kind === 'ctype') ts.push({ id: r.id, name: d.name || '', icon: d.icon || 'dot', color: COLS.indexOf(d.color) >= 0 ? d.color : 'blue', order: +d.order || 0, archivedOn: d.archivedOn || '' });
+      else if (d.kind === 'item' && d.date) items.push({ id: r.id, type: d.type || FOOD.id, date: d.date, name: d.name || '', memo: d.memo || '', image: d.image && d.image.id ? d.image : null, at: d.at || r.createdAt || '' });
+    });
+    if (!ts.some(function (t) { return t.id === FOOD.id; })) { var f = FOOD.data; ts.push({ id: FOOD.id, name: f.name, icon: f.icon, color: f.color, order: f.order, archivedOn: '', virtual: true }); }
+    ts.sort(function (a, b) { return a.order - b.order || (a.id < b.id ? -1 : 1); });
+    state.allTypes = ts;
+    state.types = ts.filter(function (t) { return !t.archivedOn; });
+    items.sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : (a.at < b.at ? 1 : a.at > b.at ? -1 : 0); });
+    state.items = items;
+  }
+  function typeOf(id) {
+    for (var i = 0; i < state.allTypes.length; i++) if (state.allTypes[i].id === id) return state.allTypes[i];
+    return { id: id, name: '（種類なし）', icon: 'dot', color: 'blue', archivedOn: '' };
+  }
+  function itemsOn(ds) { return state.items.filter(function (it) { return it.date === ds; }).reverse(); }   // その日の古い順
+  function pc() { return P.calc(state.per, state.today); }
+
+  // ---------- 表示の小物 ----------
+  function diff(a, b) { return P.diff(a, b); }
+  function mdw(ds) { var d = parse(ds); return (d.getMonth() + 1) + '/' + d.getDate() + '（' + WD[d.getDay()] + '）'; }
+  function jp(ds) { var d = parse(ds); return (d.getMonth() + 1) + '月' + d.getDate() + '日（' + WD[d.getDay()] + '）'; }
+  function sticker(color, ic, extra) { return '<span class="sticker' + (extra ? ' ' + extra : '') + '" style="--lc:var(--' + color + ')">' + ST.icon(ic) + '</span>'; }
+  function picOf(it, size, inCell) {
+    var t = typeOf(it.type);
+    if (it.image && it.image.id) return '<img alt="" loading="lazy" src="' + esc(Apps.imageUrl(it.image.id, size || 400)) + '">';
+    if (inCell) return '<span class="noimg" style="--lc:var(--' + t.color + ')">' + ST.icon(t.icon) + '</span>';   // 写真なし：種類の絵
+    return '<span class="noimg" style="--lc:var(--' + t.color + ');--lc-soft:var(--' + t.color + '-soft)">' + sticker(t.color, t.icon) + '</span>';
+  }
+  function thumbHTML(it) {
+    var t = typeOf(it.type);
+    return '<button class="thumb" type="button" data-item="' + esc(it.id) + '"><span class="pic">' + picOf(it, 400) + sticker(t.color, t.icon, 'tg') +
+      '</span><span class="cap">' + esc(it.name || t.name) + '</span><small>' + md(it.date) + '</small></button>';
+  }
+  function untilText(dd) { return dd > 0 ? 'あと' + dd + '日' : dd === 0 ? '今日' : '予定日から' + (-dd) + '日'; }
+
+  // ---------- Googleカレンダーの予定（calMonth） ----------
+  var ev = { mem: {}, err: null, loading: '' };
+  function monthKey(m) { m = m || state.month; return m.y + '-' + pad(m.m + 1); }
+  function monthFrom(m) { return monthKey(m) + '-01'; }
+  function monthTo(m) { return monthKey(m) + '-' + pad(new Date(m.y, m.m + 1, 0).getDate()); }
+  function cachedMonth() { var c = lsGet('calCache', null); return c && c.ym && Array.isArray(c.events) ? c : null; }
+  function eventsFor(k) {
+    if (ev.mem[k]) return ev.mem[k];
+    var c = cachedMonth();
+    return c && c.ym === k ? { events: c.events, at: c.at, cached: true } : null;
+  }
+  function loadEvents(force) {
+    var m = state.month, k = monthKey(m);
+    if (!Apps.isConnected(APP)) { ev.err = { code: 'not_connected' }; renderCalNote(); return Promise.resolve(); }
+    if (!force && ev.mem[k] && !ev.mem[k].cached) return Promise.resolve();
+    if (ev.loading === k) return Promise.resolve();
+    ev.loading = k;
+    renderCalNote();
+    return Apps.call(APP, 'calMonth', { from: monthFrom(m), to: monthTo(m) }).then(function (r) {
+      var v = { events: Array.isArray(r.events) ? r.events : [], at: new Date().toISOString() };
+      ev.mem[k] = v;
+      lsSet('calCache', { ym: k, events: v.events, at: v.at });   // 端末には最後に読んだ月の分だけ
+      if (monthKey() === k) ev.err = null;
+    }, function (e) {
+      if (monthKey() === k) ev.err = e;
+    }).then(function () {
+      if (ev.loading === k) ev.loading = '';
+      if (monthKey() === k) { renderCalendar(); refreshOpen(); }
+    });
+  }
+  function calErrText(e) {
+    var c = e && (e.code || e.message);
+    if (c === 'not_connected') return 'スプシとつながると、Googleカレンダーの予定が出ます（習慣 → スプレッドシートとの接続）';
+    if (c === 'bad_action') return 'スプシのプログラムが古いままです。Code.gs を貼り替えて［デプロイを管理］→新バージョンで更新すると、予定が出ます';
+    if (c === 'calendar') return 'カレンダーを使う許可がまだありません。スプシの Apps Script で関数「authorizeCalendar」を実行して許可し、［デプロイを管理］→新バージョンで更新してください';
+    return '予定を読めませんでした：' + Apps.errorText(e);
+  }
+  function renderCalNote() {
+    var k = monthKey(), v = eventsFor(k), n = $('calNote'), t = '', bad = false;
+    if (ev.loading === k && !v) t = '予定を読んでいます…';
+    else if (ev.err) {
+      var c = ev.err.code || ev.err.message;
+      if ((c === 'offline' || c === 'network' || c === 'timeout') && v) { var d = new Date(v.at); t = 'つながらないので、前に読んだ予定（' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hm(v.at) + '）を出しています'; }
+      else { t = calErrText(ev.err); bad = c !== 'not_connected'; }
+    } else t = '予定は Googleカレンダー（普段使いの1つ）から読みます。スプシには保存しません。下に引っぱると読み直します';
+    n.textContent = t;
+    n.className = 'calnote' + (bad ? ' err' : '');
+  }
+  // 予定 → 日ごとの一覧（終日・何日も続く予定は、その日すべてに）
+  function evDays(list) {
+    var by = {};
+    (list || []).forEach(function (e) {
+      var title = String(e.title || '（件名なし）'), c = ST.color(e.color), ic = ST.evIcon(title);
+      if (e.allDay) {
+        var s = String(e.start || '').slice(0, 10), en = String(e.end || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return;
+        var last = /^\d{4}-\d{2}-\d{2}$/.test(en) && en > s ? addDays(en, -1) : s;
+        for (var d = s, n = 0; d <= last && n < 62; d = addDays(d, 1), n++) (by[d] = by[d] || []).push({ title: title, c: c, ic: ic, all: true, sort: '' });
+        return;
+      }
+      var a = new Date(e.start), b = new Date(e.end);
+      if (isNaN(a)) return;
+      if (isNaN(b) || b < a) b = a;
+      var sd = ymd(a), ed = ymd(new Date(Math.max(+a, +b - 1)));
+      for (var d2 = sd, n2 = 0; d2 <= ed && n2 < 62; d2 = addDays(d2, 1), n2++) {
+        var first = d2 === sd, lastD = d2 === ed;
+        var range = first && lastD ? hm(a) + '〜' + hm(b) : first ? hm(a) + '〜' : lastD ? '〜' + hm(b) : '終日';
+        (by[d2] = by[d2] || []).push({ title: title, c: c, ic: ic, all: false, tm: first ? hm(a) : '', range: range, sort: first ? pad(a.getHours()) + pad(a.getMinutes()) : '00' });
+      }
+    });
+    Object.keys(by).forEach(function (k) { by[k].sort(function (x, y) { return x.all === y.all ? (x.sort < y.sort ? -1 : x.sort > y.sort ? 1 : 0) : x.all ? -1 : 1; }); });
+    return by;
+  }
+  var evBy = {};
+
   // ---------- カレンダー ----------
+  function labHTML(e, i) {
+    return '<span class="lab' + (i === 2 ? ' l3' : '') + '" style="--lc:var(--' + e.c + ');--lc-soft:var(--' + e.c + '-soft)" title="' + esc((e.all ? '終日 ' : e.range + ' ') + e.title) + '"><i>' + ST.icon(e.ic) + '</i>' +
+      (e.tm ? '<em class="tm">' + e.tm + '</em>' : '') + '<span>' + esc(e.title) + '</span></span>';
+  }
   function renderCalendar() {
-    var y = state.month.y, mo = state.month.m;
+    var y = state.month.y, mo = state.month.m, k = monthKey();
     $('monthTitle').textContent = y + '年' + (mo + 1) + '月';
-    var cal = $('cal');
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ly]'), function (b) { b.setAttribute('aria-pressed', String(!!LAYERS[b.getAttribute('data-ly')])); });
+    var v = eventsFor(k);
+    evBy = evDays(v ? v.events : []);
+    var p = pc(), son = sleepOn();
     var html = WD.map(function (w, i) { return '<div class="wd' + (i === 0 ? ' sun' : i === 6 ? ' sat' : '') + '">' + w + '</div>'; }).join('');
     var first = new Date(y, mo, 1), days = new Date(y, mo + 1, 0).getDate();
-    for (var i = 0; i < first.getDay(); i++) html += '<div></div>';
-    var fullN = 0, best = 0, run = 0, per = {}, elapsed = 0, sleepN = 0;
+    for (var i = 0; i < first.getDay(); i++) html += '<div class="day blank" aria-hidden="true"></div>';
+    var fullN = 0, best = 0, run = 0, per = {}, elapsed = 0, sleepN = 0, photoN = 0;
     for (var d = 1; d <= days; d++) {
       var ds = ymd(new Date(y, mo, d));
-      var cls = 'day', inner = '<span>' + d + '</span>';
+      var cls = 'day', inner = '<span class="n">' + d + '</span>', label = jp(ds), title = [];
+      if (ds === state.today) { cls += ' today'; label += '・今日'; }
+      if (ds === state.sel) cls += ' sel';
       if (ds > state.today) { cls += ' future'; run = 0; }
-      else {
+      var pd = P.dayOf(ds, p);
+      if (LAYERS.per && pd) { cls += ' per'; label += '・生理' + pd.n + '日目'; }
+      else if (LAYERS.per && P.predicted(ds, p)) { cls += ' yosoku'; label += '・生理の予定日（予測）'; }
+      var its = itemsOn(ds);
+      photoN += its.length;
+      if (LAYERS.ph && its.length) {
+        inner += '<span class="ph">' + picOf(its[0], 200, true) + (its.length > 1 ? '<b>' + its.length + '</b>' : '') + '</span>';
+        label += '・写真' + its.length + '件';
+      }
+      if (ds <= state.today) {
         elapsed++;
-        if (ds === state.today) cls += ' today';
-        if (sleepGood(ds)) { sleepN++; inner += MOON; }
+        if (son && sleepGood(ds)) { sleepN++; inner += MOON; }
         state.allHabits.forEach(function (h) { if (done(ds, h.id)) per[h.id] = (per[h.id] || 0) + 1; });
-        if (fullDay(ds)) {
-          cls += ' full'; fullN++; run++; best = Math.max(best, run);
-          inner += '<span class="dots" aria-label="全部できた">' + FLOWER + '</span>';
-        } else {
-          if (ds !== state.today) run = 0;
-          inner += '<span class="dots">' + state.allHabits.filter(function (h) { return done(ds, h.id); })
-            .map(function (h) { return '<i class="dot" style="background:var(--' + h.color + ')" title="' + esc(h.name) + '"></i>'; }).join('') + '</span>';
+      }
+      if (LAYERS.ev) {
+        var evs = evBy[ds] || [];
+        inner += evs.slice(0, 3).map(labHTML).join('');
+        if (evs.length > 2) inner += '<span class="more n">+' + (evs.length - 2) + '</span>';
+        if (evs.length > 3) inner += '<span class="more w">+' + (evs.length - 3) + '</span>';
+        if (evs.length) label += '・予定' + evs.length + '件';
+        evs.forEach(function (e) { title.push((e.all ? '終日' : e.range) + ' ' + e.title); });
+      }
+      if (ds <= state.today) {
+        var full = fullDay(ds);
+        if (full) { fullN++; run++; best = Math.max(best, run); } else if (ds !== state.today) run = 0;
+        if (LAYERS.hb) {
+          inner += '<span class="stamps"' + (full ? ' aria-label="全部できた"' : '') + '>' + (full ? FLOWER : state.allHabits.filter(function (h) { return done(ds, h.id); })
+            .map(function (h) { return '<i class="dot" style="background:var(--' + h.color + ')" title="' + esc(h.name) + '"></i>'; }).join('')) + '</span>';
+          if (full) label += '・習慣を全部できた';
         }
       }
-      html += '<div class="' + cls + '">' + inner + '</div>';
+      html += '<button type="button" class="' + cls + '" data-d="' + ds + '" aria-label="' + esc(label) + '"' + (title.length ? ' title="' + esc(title.join('\n')) + '"' : '') + '>' + inner + '</button>';
     }
-    cal.innerHTML = html;
-    $('legend').innerHTML = state.habits.map(function (h) {
-      return '<span><i class="dot" style="background:var(--' + h.color + ')"></i>' + esc(h.name) + '</span>';
-    }).join('') + '<span>' + FLOWER + '全部できた日</span><span>' + MOON + '睡眠が目標内（起床・就寝・長さ）</span>';
+    $('cal').innerHTML = html;
+    var lg = '';
+    if (LAYERS.per) lg += '<span><i class="sq" style="background:var(--per)"></i>生理</span><span><i class="sq" style="background:var(--per-soft);outline:1.5px dashed var(--per);outline-offset:-1.5px"></i>次の予定日（予測）</span>';
+    if (LAYERS.hb) lg += '<span>' + FLOWER + '習慣を全部できた日</span>' + state.habits.map(function (h) { return '<span><i class="dot" style="background:var(--' + h.color + ')"></i>' + esc(h.name) + '</span>'; }).join('');
+    if (LAYERS.ph) lg += '<span><i class="sq" style="border-radius:50%;background:var(--mustard-soft);border:1.5px solid var(--mustard)"></i>写真（コレクション）</span>';
+    if (son) lg += '<span>' + MOON + '睡眠が目標内（起床・就寝・長さ）</span>';
+    $('legend').innerHTML = lg;
     var sum = '<div><b class="num">' + fullN + '日</b><small>全部できた日</small></div>' +
       '<div><b class="num">' + best + '日</b><small>この月の最長連続</small></div>' +
-      '<div><b class="num">' + sleepN + '／' + elapsed + '</b><small>睡眠が目標内の日</small></div>';
+      (son ? '<div><b class="num">' + sleepN + '／' + elapsed + '</b><small>睡眠が目標内の日</small></div>' : '');
     state.allHabits.forEach(function (h) {
       if (h.archivedOn && !per[h.id]) return;
       sum += '<div><b class="num">' + (per[h.id] || 0) + '／' + elapsed + '</b><small>' + esc(h.name) + '</small></div>';
     });
+    sum += '<div><b class="num">' + photoN + '件</b><small>この月の写真</small></div>';
     $('summary').innerHTML = sum;
+    renderCalNote();
+    if (isWide()) $('panel').innerHTML = dayHTML(state.sel || state.today);
+  }
+  function dayHTML(ds) {
+    var p = pc(), pd = P.dayOf(ds, p), h = '<div class="dd"><h3>' + jp(ds) + '</h3>';
+    if (pd) h += '<span class="perline on">生理 ' + pd.n + '日目</span>';
+    else if (P.predicted(ds, p)) h += '<span class="perline pr">生理の予定日（予測）</span>';
+    if (ds <= state.today) {
+      var btn = '';
+      if (pd && !pd.r.e) btn = '<button class="ax-btn btn-per" type="button" data-act="perEndOn" data-d="' + ds + '">生理がこの日に終わった</button>';
+      else if (!pd && p.ongoing && ds > p.last.s) btn = '<button class="ax-btn btn-per" type="button" data-act="perEndOn" data-d="' + ds + '">生理がこの日に終わった</button>';
+      else if (!pd && !p.ongoing) btn = '<button class="ax-btn" type="button" data-act="perStartOn" data-d="' + ds + '">生理がこの日に始まった</button>';
+      if (pd) btn += '<button class="ax-btn ax-btn-ghost" type="button" data-act="perEditOf" data-d="' + esc(pd.r.id) + '">生理の記録を直す ›</button>';
+      if (btn) h += '<div class="btns">' + btn + '</div>';
+    }
+    var evs = evBy[ds] || [];
+    h += '<div class="grp"><span class="lb">予定</span>' + (evs.length ? evs.map(function (e) {
+      return '<div class="ev"><span class="tm">' + (e.all ? '終日' : e.range) + '</span>' + sticker(e.c, e.ic) + '<span class="tt">' + esc(e.title) + '</span></div>';
+    }).join('') : '<span class="small muted">' + (eventsFor(monthKey(state.month)) ? '予定なし' : '予定はまだ読めていません') + '</span>') + '</div>';
+    var hs = habitsOn(ds);
+    h += '<div class="grp"><span class="lb">習慣</span>' + (ds > state.today ? '<span class="small muted">これからの日</span>' : (hs.length ? hs.map(function (x) {
+      var on = done(ds, x.id);
+      return '<div class="hrow"><i class="dot' + (on ? '' : ' off') + '"' + (on ? ' style="background:var(--' + x.color + ')"' : '') + '></i>' + esc(x.name) + '<span class="small muted">' + (on ? 'できた' : 'まだ') + '</span></div>';
+    }).join('') : '<span class="small muted">習慣なし</span>') + '<span class="note">つけ外しは今日の画面で</span>') + '</div>';
+    var its = itemsOn(ds);
+    h += '<div class="grp"><span class="lb">コレクション</span>' + (its.length ? '<div class="thumbs">' + its.map(thumbHTML).join('') + '</div>' : '') +
+      '<div class="btns"><button class="ax-btn" type="button" data-act="addOn" data-d="' + ds + '">＋ この日に追加</button></div></div>';
+    return h + '</div>';
+  }
+  function openDay(ds) {
+    state.sel = ds;
+    renderCalendar();
+    if (isWide()) return;
+    $('sheetBody').innerHTML = dayHTML(ds);
+    $('sheet').hidden = false; $('sheetBg').hidden = false;
+    $('sheet').scrollTop = 0;
+  }
+  function closeSheet() { $('sheet').hidden = true; $('sheetBg').hidden = true; }
+  // データが変わったら、開いている「その日の中身」と1件の画面を作り直す
+  function refreshOpen() {
+    if (!$('sheet').hidden) $('sheetBody').innerHTML = dayHTML(state.sel);
+    if (state.view === 'item-view') fillItemView();
+  }
+  function setMonth(y, m) {
+    state.month = { y: y, m: m };
+    state.sel = monthKey() === state.today.slice(0, 7) ? state.today : monthFrom(state.month);
+    ev.err = null;
+    renderCalendar();
+    loadEvents(false);
+  }
+  function shiftMonth(n) { var m = state.month, d = new Date(m.y, m.m + n, 1); setMonth(d.getFullYear(), d.getMonth()); }
+  $('prevM').onclick = function () { shiftMonth(-1); };
+  $('nextM').onclick = function () { shiftMonth(1); };
+  Array.prototype.forEach.call(document.querySelectorAll('[data-ly]'), function (b) {
+    b.onclick = function () { var k = b.getAttribute('data-ly'); LAYERS[k] = !LAYERS[k]; lsSet('layers', LAYERS); renderCalendar(); refreshOpen(); };
+  });
+  $('cal').addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('button.day[data-d]') : null;
+    if (b) openDay(b.getAttribute('data-d'));
+  });
+  $('sheetX').onclick = closeSheet;
+  $('sheetBg').onclick = closeSheet;
+  document.addEventListener('keydown', function (e) {
+    if (state.view !== 'calendar' || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName || '') || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); shiftMonth(-1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); shiftMonth(1); }
+    else if (e.key === 'Escape') closeSheet();
+  });
+  var onWide = function () { if (isWide()) closeSheet(); if (state.view === 'calendar') renderCalendar(); };
+  if (wideMq.addEventListener) wideMq.addEventListener('change', onWide); else if (wideMq.addListener) wideMq.addListener(onWide);
+  // 下に引っぱって更新（ページのいちばん上で）
+  (function () {
+    var y0 = null, dy = 0, hint = $('pullHint');
+    var cal = $('v-calendar');
+    cal.addEventListener('touchstart', function (e) { y0 = window.scrollY <= 0 && e.touches.length === 1 ? e.touches[0].clientY : null; dy = 0; }, { passive: true });
+    cal.addEventListener('touchmove', function (e) {
+      if (y0 == null) return;
+      dy = e.touches[0].clientY - y0;
+      hint.style.height = dy > 70 ? '22px' : '0';
+    }, { passive: true });
+    cal.addEventListener('touchend', function () {
+      if (y0 != null && dy > 70) { loadEvents(true); if (Apps.isConnected(APP)) db.sync().catch(function () {}); Apps.toast('読み直しています'); }
+      y0 = null; dy = 0; hint.style.height = '0';
+    });
+  })();
+
+  // ---------- 生理 ----------
+  function perPut(s, e) { return db.put({ kind: 'period', start: s, end: e || '', at: new Date().toISOString() }, P.idOf(s)); }
+  function perStart(ds) {
+    var p = pc();
+    if (p.last && ds < p.last.s) { openPerEdit(null, ds); return; }   // 前の記録より前の日は、終わった日も入れる画面で
+    perPut(ds, '');
+    Apps.toast(md(ds) + ' を始まった日として記録しました');
+  }
+  function perEndAt(ds) {
+    var p = pc(), r = p.last;
+    if (!r || r.e) return;
+    if (ds < r.s) { Apps.toast('始まった日より前にはできません', true); return; }
+    db.put({ kind: 'period', start: r.s, end: ds, at: new Date().toISOString() }, r.id);
+    Apps.toast(md(ds) + ' を終わった日として記録しました（' + (diff(r.s, ds) + 1) + '日間）');
+  }
+  function renderPerCard() {
+    var p = pc(), h = '<div class="top"><h2>生理</h2><a class="ax-btn ax-btn-ghost" href="#rec">記録 ›</a></div>';
+    if (p.ongoing) {
+      var n = diff(p.last.s, state.today) + 1;
+      h += '<div class="st"><b>' + n + '日目</b>　' + md(p.last.s) + 'から</div>';
+      if (p.forgot) h += '<div class="warn">始まってから10日たちました。終わった日を入れてください（カレンダーかこの下の「記録」から）。</div>';
+      h += '<button class="ax-btn btn-per" type="button" data-act="perEnd" id="tPerBtn">生理が終わった（' + n + '日目）</button>';
+    } else {
+      if (p.next) h += '<div class="st">次の予定日 <b>' + mdw(p.next) + '</b>ごろ　' + untilText(diff(state.today, p.next)) + '</div>';
+      else h += '<div class="st muted">始まった日を記録すると、次の予定日が出ます</div>';
+      h += '<button class="ax-btn btn-per" type="button" data-act="perStart" id="tPerBtn">生理が始まった</button>';
+    }
+    $('tPer').innerHTML = h;
+  }
+  function renderRec() {
+    var p = pc(), h = '<div class="card statbox" id="perState">';
+    if (p.ongoing) {
+      var n = diff(p.last.s, state.today) + 1;
+      h += '<span class="small muted">いまの状態</span><span class="big">生理 ' + n + '日目</span><span class="small">' + mdw(p.last.s) + 'から（記録中）</span>';
+      if (p.forgot) h += '<div class="warn">始まってから10日たちました。終わった日を入れてください。カレンダーは平均の' + p.len + '日までを塗っています。</div>';
+      h += '<button class="ax-btn btn-per" type="button" data-act="perEnd">生理が終わった（' + n + '日目）</button>';
+    } else {
+      h += '<span class="small muted">いまの状態</span><span class="big">生理ではない日</span>';
+      h += '<button class="ax-btn btn-per" type="button" data-act="perStart">生理が始まった</button>';
+    }
+    h += '<span class="note">押すと今日の日付で記録します（深夜3時までは前の日）。違う日はカレンダーの日を押すか、下の一覧から直せます。</span></div>';
+    if (p.next) {
+      var dd = diff(state.today, p.next);
+      h += '<div class="card pred" id="perPred"><span class="chip">' + md(p.next) + '</span><b>次の予定日 ' + mdw(p.next) + 'ごろ（' + untilText(dd) + '）</b>' +
+        '<small>周期 ' + p.cycle + '日：' + esc(p.basis) + (p.temp ? '。2回目からは記録の平均です' : '（' + p.recent.join('・') + '日）') +
+        '／うすく塗るのは' + p.len + '日間（' + (p.lensN ? 'これまでの平均' : '終わった日の記録がないので5日') + '）</small></div>';
+    } else if (!p.list.length) {
+      h += '<div class="card pred" id="perPred"><span class="chip">?</span><b>まだ予定日は出せません</b><small>始まった日を記録すると予定日が出ます（1回目は仮に28日周期、2回目からは記録の平均）。</small></div>';
+    }
+    h += '<div class="sect">これまでの記録（押すと直す）</div><div class="list" id="perList">';
+    var rev = p.list.slice().reverse();
+    h += rev.map(function (r, i) {
+      var prev = rev[i + 1], c = prev ? diff(prev.s, r.s) : null, out = c != null && (c < P.MIN_CYCLE || c > P.MAX_CYCLE);
+      return '<button class="row" type="button" data-act="perEditOf" data-d="' + esc(r.id) + '"><span class="bar' + (r.e ? '' : ' open') + '"></span><div class="txt"><span>' + mdw(r.s) + ' 〜 ' + (r.e ? mdw(r.e) : '記録中') + '</span><small>' +
+        (r.s.slice(0, 4) !== state.today.slice(0, 4) ? r.s.slice(0, 4) + '年・' : '') + (r.e ? (diff(r.s, r.e) + 1) + '日間' : (diff(r.s, state.today) + 1) + '日目') + '</small></div><span class="r">' +
+        (c != null ? '前回から<br>' + c + '日' + (out ? '（平均に入れない）' : '') : '最初の記録') + '</span></button>';
+    }).join('') || '<div class="row"><span class="small muted">まだ記録がありません</span></div>';
+    h += '</div><div class="btns"><button class="ax-btn" type="button" data-act="perNew">＋ 過去の記録を入れる</button></div>';
+    h += '<p class="note">周期＝前回始まった日から今回始まった日までの日数。直近（最大6回）の平均で次の予定日を出します。15日より短い・60日より長い周期は、押し忘れなどとみて平均に入れません。</p>';
+    $('recPer').innerHTML = h;
+  }
+  var pe = { rec: null, start: '' };
+  function openPerEdit(id, start) {
+    pe.rec = null;
+    state.per.forEach(function (r) { if (r.id === id) pe.rec = r; });
+    pe.start = start || '';
+    if (location.hash === '#per-edit') fillPerEdit(); else location.hash = '#per-edit';
+  }
+  function fillPerEdit() {
+    var r = pe.rec;
+    $('peTitle').textContent = r ? '生理の記録を直す' : '過去の記録を入れる';
+    $('peS').value = r ? r.s : pe.start;
+    $('peE').value = r ? r.e : '';
+    $('peS').max = state.today; $('peE').max = state.today;
+    $('peDel').hidden = !r;
+  }
+  $('peForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var s = $('peS').value, en = $('peE').value, r = pe.rec;
+    if (!s) return;
+    if (s > state.today) { Apps.toast('始まった日は今日までにしてください', true); return; }
+    if (en && en < s) { Apps.toast('終わった日は始まった日と同じか後にしてください', true); return; }
+    if (en && en > state.today) { Apps.toast('終わった日は今日までにしてください', true); return; }
+    var nid = P.idOf(s);
+    if ((!r || r.id !== nid) && db.get(nid)) { Apps.toast(md(s) + ' に始まった記録がもうあります', true); return; }
+    if (r && r.id !== nid) db.remove(r.id);   // 始まった日を変えた：古い id を消して新しい id で作る
+    perPut(s, en);
+    pe.rec = null;
+    location.hash = '#rec';
+    Apps.toast('保存しました');
+  });
+  $('peDel').onclick = function () {
+    var r = pe.rec;
+    if (!r || !confirm(mdw(r.s) + ' からの生理の記録を消しますか？')) return;
+    db.remove(r.id);
+    pe.rec = null;
+    location.hash = '#rec';
+    Apps.toast('消しました');
+  };
+
+  // ---------- コレクション ----------
+  var col = { type: lsGet('colType', 'all') };
+  function renderCollection() {
+    if (col.type !== 'all' && !state.types.some(function (t) { return t.id === col.type; })) col.type = 'all';
+    $('colTypes').innerHTML = '<button type="button" class="plain" data-ct="all" aria-pressed="' + (col.type === 'all') + '">すべて</button>' +
+      state.types.map(function (t) { return '<button type="button" data-ct="' + esc(t.id) + '" aria-pressed="' + (col.type === t.id) + '">' + sticker(t.color, t.icon) + esc(t.name) + '</button>'; }).join('') +
+      '<a class="ax-btn ax-btn-ghost" href="#types" style="min-height:38px">＋ 種類・並べ替え</a>';
+    var list = state.items.filter(function (it) { return col.type === 'all' || it.type === col.type; });
+    $('colCount').textContent = list.length + '件・新しい順';
+    $('gallery').innerHTML = list.length ? '<div class="gallery">' + list.map(thumbHTML).join('') + '</div>'
+      : '<div class="card placeholder">まだありません。「＋ 追加」から写真を入れてみてください。</div>';
+  }
+  $('colTypes').addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-ct]') : null;
+    if (!b) return;
+    col.type = b.getAttribute('data-ct');
+    lsSet('colType', col.type);
+    renderCollection();
+  });
+  $('colAdd').addEventListener('click', function (e) { e.preventDefault(); openItemEdit(state.today, null); });
+
+  // 1件の追加・直し
+  var ie = null;   // { item, file, preview, removePhoto, type, date }
+  function openItemEdit(ds, it) {
+    var t = it ? it.type : (col.type !== 'all' ? col.type : (state.types[0] ? state.types[0].id : FOOD.id));
+    ie = { item: it || null, file: null, preview: null, removePhoto: false, type: t, date: it ? it.date : (ds || state.today) };
+    closeSheet();
+    if (location.hash === '#item-edit') fillItemEdit(); else location.hash = '#item-edit';
+  }
+  function fillItemEdit() {
+    if (!ie) ie = { item: null, file: null, preview: null, removePhoto: false, type: state.types[0] ? state.types[0].id : FOOD.id, date: state.today };
+    var it = ie.item;
+    $('ieTitle').textContent = it ? '直す' : '追加';
+    $('ieName').value = it ? it.name : '';
+    $('ieDate').value = ie.date;
+    $('ieDate').max = '';
+    $('ieMemo').value = it ? it.memo : '';
+    $('ieCount').textContent = $('ieMemo').value.length + '／60';
+    $('ieDel').hidden = !it;
+    $('ieSave').disabled = false; $('ieSave').textContent = '保存';
+    fillPick(); fillIeTypes();
+  }
+  function fillPick() {
+    var it = ie.item, has = !!(ie.preview || (it && it.image && !ie.removePhoto));
+    $('iePick').innerHTML = ie.preview ? '<img alt="選んだ写真" src="' + esc(ie.preview) + '">' : has ? '<img alt="今の写真" src="' + esc(Apps.imageUrl(it.image.id, 900)) + '">' : '写真を選ぶ・撮る';
+    $('iePhBtns').hidden = !has;
+  }
+  function fillIeTypes() {
+    var ts = state.types.slice();
+    if (!ts.some(function (t) { return t.id === ie.type; })) ts.push(typeOf(ie.type));   // しまった種類の記録を直すとき
+    $('ieTypes').innerHTML = ts.map(function (t) { return '<button type="button" data-it="' + esc(t.id) + '" aria-pressed="' + (ie.type === t.id) + '">' + sticker(t.color, t.icon) + esc(t.name) + '</button>'; }).join('');
+  }
+  $('ieTypes').addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-it]') : null;
+    if (!b) return;
+    ie.type = b.getAttribute('data-it'); fillIeTypes();
+  });
+  $('iePick').onclick = function () { $('ieFile').click(); };
+  $('ieFile').onchange = function () {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    if (ie.preview) try { URL.revokeObjectURL(ie.preview); } catch (x) { /* 無視 */ }
+    ie.file = f; ie.preview = URL.createObjectURL(f); ie.removePhoto = false;
+    this.value = '';
+    fillPick();
+  };
+  $('ieNoPh').onclick = function () { ie.file = null; ie.preview = null; ie.removePhoto = true; fillPick(); };
+  $('ieMemo').addEventListener('input', function () { $('ieCount').textContent = $('ieMemo').value.length + '／60'; });
+  $('ieForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = $('ieName').value.trim(), date = $('ieDate').value, memo = $('ieMemo').value.trim().slice(0, 60);
+    if (!name || !date) return;
+    var it = ie.item, old = it && it.image ? it.image : null;
+    var id = it ? it.id : 'item-' + Apps.uuid().replace(/[^a-z0-9]/gi, '').slice(0, 12);
+    var cur = ie;
+    var up = cur.file ? Apps.uploadImage(APP, cur.file, { maxSide: 1600, name: 'item-' + date.replace(/-/g, '') + '.jpg' }).then(function (img) { return { id: img.id, thumb: img.thumb || Apps.imageUrl(img.id, 400) }; })
+      : Promise.resolve(cur.removePhoto ? null : old);
+    $('ieSave').disabled = true; $('ieSave').textContent = cur.file ? '写真を保存中…' : '保存中…';
+    up.then(function (image) {
+      db.put({ kind: 'item', type: cur.type, date: date, name: name, memo: memo, image: image, at: it && it.at ? it.at : new Date().toISOString() }, id);
+      if (old && (!image || image.id !== old.id)) removeImage(old.id);
+      if (cur.preview) try { URL.revokeObjectURL(cur.preview); } catch (x) { /* 無視 */ }
+      ie = null;
+      Apps.toast('保存しました（' + md(date) + 'のカレンダーにも出ます）');
+      location.hash = '#collection';
+    }, function (err) {
+      $('ieSave').disabled = false; $('ieSave').textContent = '保存';
+      Apps.toast('写真を保存できませんでした：' + Apps.errorText(err), true);
+    });
+  });
+  function deleteItem(it) {
+    if (!it || !confirm('「' + (it.name || typeOf(it.type).name) + '」を消しますか？（ドライブの写真も消えます）')) return false;
+    db.remove(it.id);
+    if (it.image && it.image.id) removeImage(it.image.id);
+    Apps.toast('消しました');
+    return true;
+  }
+  $('ieDel').onclick = function () { if (ie && deleteItem(ie.item)) { ie = null; location.hash = '#collection'; } };
+  // ドライブの写真を消す。つながらない時は覚えておき、次に同期できたときに消す
+  function removeImage(imgId) {
+    Apps.deleteImage(APP, imgId).catch(function (e) {
+      if (e && e.code === 'not_found') return;
+      var q = lsGet('imgDel', []); if (q.indexOf(imgId) < 0) q.push(imgId); lsSet('imgDel', q);
+    });
+  }
+  function retryImageDeletes() {
+    var q = lsGet('imgDel', []);
+    if (!q.length) return;
+    lsSet('imgDel', []);
+    q.forEach(removeImage);
   }
 
+  // 1件を見る
+  var viewId = '';
+  function openItemView(id) { viewId = id; closeSheet(); if (location.hash === '#item-view') fillItemView(); else location.hash = '#item-view'; }
+  function curItem() { for (var i = 0; i < state.items.length; i++) if (state.items[i].id === viewId) return state.items[i]; return null; }
+  function fillItemView() {
+    var it = curItem();
+    if (!it) { if (state.view === 'item-view') location.hash = '#collection'; return; }
+    var t = typeOf(it.type);
+    $('ivPh').innerHTML = picOf(it, 1600);
+    $('ivName').textContent = it.name || t.name;
+    $('ivMeta').innerHTML = sticker(t.color, t.icon) + ' ' + esc(t.name) + '・' + it.date.slice(0, 4) + '年' + jp(it.date);
+    $('ivMemo').textContent = it.memo || '（メモなし）';
+  }
+  $('ivEdit').onclick = function () { var it = curItem(); if (it) openItemEdit(it.date, it); };
+  $('ivDel').onclick = function () { if (deleteItem(curItem())) location.hash = '#collection'; };
+  $('ivCal').onclick = function () {
+    var it = curItem(); if (!it) return;
+    var d = parse(it.date);
+    state.month = { y: d.getFullYear(), m: d.getMonth() };
+    state.sel = it.date;
+    state.openAfter = it.date;
+    location.hash = '#calendar';
+  };
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-item]') : null;
+    if (b) openItemView(b.getAttribute('data-item'));
+  });
+
+  // 種類
+  var te = { editing: null, icon: 'cup', color: 'rose' };
+  function typeRecord(t, patch) {
+    var d = { kind: 'ctype', name: t.name, icon: t.icon, color: t.color, order: t.order, archivedOn: t.archivedOn || '' };
+    Object.keys(patch || {}).forEach(function (k) { d[k] = patch[k]; });
+    t.virtual = false;
+    return db.put(d, t.id);
+  }
+  function renderTypes() {
+    var active = state.types;
+    var rows = state.allTypes.map(function (t) {
+      var n = state.items.filter(function (i) { return i.type === t.id; }).length, ai = active.indexOf(t);
+      return '<div class="row">' + sticker(t.color, t.icon) + '<div class="txt"><span>' + esc(t.name) + (t.archivedOn ? '（しまった）' : '') + '</span><small>' + n + '件' + (t.id === FOOD.id ? '・最初からある種類' : '') + '</small></div>' +
+        (t.archivedOn ? '' : '<button type="button" class="mini" data-tmv="-1" data-t="' + esc(t.id) + '" aria-label="上へ"' + (ai === 0 ? ' disabled' : '') + '>↑</button>' +
+          '<button type="button" class="mini" data-tmv="1" data-t="' + esc(t.id) + '" aria-label="下へ"' + (ai === active.length - 1 ? ' disabled' : '') + '>↓</button>' +
+          '<button type="button" class="mini" data-ted="' + esc(t.id) + '" aria-label="' + esc(t.name) + 'の名前・絵・色を変える">✎</button>') +
+        '<button type="button" class="ax-btn" data-toff="' + esc(t.id) + '" style="min-height:40px">' + (t.archivedOn ? '戻す' : 'しまう') + '</button></div>';
+    });
+    $('teList').innerHTML = rows.join('');
+    drawTypeForm();
+  }
+  function drawTypeForm() {
+    $('teIcons').innerHTML = ST.TYPE_ICONS.map(function (k) { return '<button type="button" data-ic="' + k + '" aria-pressed="' + (te.icon === k) + '" aria-label="絵 ' + k + '">' + ST.icon(k) + '</button>'; }).join('');
+    $('teColors').innerHTML = COLORS.map(function (c) { return '<button type="button" data-tc="' + c.k + '" aria-pressed="' + (te.color === c.k) + '" style="background:var(--' + c.k + ')" aria-label="' + c.label + '"></button>'; }).join('');
+  }
+  $('teList').addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('button') : null;
+    if (!b) return;
+    var t = typeOf(b.getAttribute('data-t') || b.getAttribute('data-ted') || b.getAttribute('data-toff'));
+    if (b.hasAttribute('data-tmv')) {
+      var arr = state.types.slice(), i = arr.indexOf(t), j = i + +b.getAttribute('data-tmv');
+      if (i < 0 || j < 0 || j >= arr.length) return;
+      var x = arr[i]; arr[i] = arr[j]; arr[j] = x;
+      arr.forEach(function (y, k) { var o = (k + 1) * 10; if (y.order !== o || y.virtual) typeRecord(y, { order: o }); });
+    } else if (b.hasAttribute('data-ted')) {
+      te.editing = t; te.icon = t.icon; te.color = t.color;
+      $('teName').value = t.name; $('teTitle').textContent = '変える：' + t.name; $('teSave').textContent = '保存'; $('teCancel').hidden = false;
+      drawTypeForm(); $('teName').focus();
+    } else if (b.hasAttribute('data-toff')) {
+      if (t.archivedOn) { typeRecord(t, { archivedOn: '', order: nextTypeOrder() }); Apps.toast('「' + t.name + '」を戻しました'); }
+      else { typeRecord(t, { archivedOn: state.today }); Apps.toast('「' + t.name + '」をしまいました（中の記録は残ります）'); }
+    }
+  });
+  function nextTypeOrder() { return state.allTypes.reduce(function (m, t) { return Math.max(m, t.order); }, 0) + 10; }
+  function resetTypeForm() { te.editing = null; $('teName').value = ''; $('teTitle').textContent = '種類を追加'; $('teSave').textContent = '追加'; $('teCancel').hidden = true; drawTypeForm(); }
+  $('teIcons').addEventListener('click', function (e) { var b = e.target.closest ? e.target.closest('[data-ic]') : null; if (b) { te.icon = b.getAttribute('data-ic'); drawTypeForm(); } });
+  $('teColors').addEventListener('click', function (e) { var b = e.target.closest ? e.target.closest('[data-tc]') : null; if (b) { te.color = b.getAttribute('data-tc'); drawTypeForm(); } });
+  $('teCancel').onclick = resetTypeForm;
+  $('teForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var n = $('teName').value.trim();
+    if (!n) return;
+    if (te.editing) { typeRecord(te.editing, { name: n, icon: te.icon, color: te.color }); Apps.toast('保存しました'); resetTypeForm(); return; }
+    var id = 'ctype-' + Apps.uuid().replace(/[^a-z0-9]/gi, '').slice(0, 12);
+    db.put({ kind: 'ctype', name: n, icon: te.icon, color: te.color, order: nextTypeOrder(), archivedOn: '' }, id);
+    col.type = id; lsSet('colType', id);
+    resetTypeForm();
+    Apps.toast('「' + n + '」を追加しました');
+    location.hash = '#collection';
+  });
+
+  // 押したときの動き（今日・カレンダー・記録で共通の data-act）
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-act]') : null;
+    if (!b) return;
+    var a = b.getAttribute('data-act'), d = b.getAttribute('data-d');
+    if (a === 'perStart') perStart(state.today);
+    else if (a === 'perEnd') perEndAt(state.today);
+    else if (a === 'perStartOn') perStart(d);
+    else if (a === 'perEndOn') perEndAt(d);
+    else if (a === 'perEditOf') { closeSheet(); openPerEdit(d); }
+    else if (a === 'perNew') openPerEdit(null);
+    else if (a === 'addOn') openItemEdit(d, null);
+  });
   // ---------- 習慣の編集 ----------
   // 初期の習慣（まだ保存していない表示だけのもの）を、どれか1つを変える前にまとめて保存する
   function materialize() {
@@ -284,7 +853,16 @@
     try { navigator.clipboard.writeText(APP_URL).then(done_, fallback); } catch (e) { fallback(); }
   };
   $('connBtn').onclick = function () { Apps.openConnectSheet(APP); };
-  Apps.on('connection', function () { renderHabits(); });
+  Apps.on('connection', function () { renderHabits(); if (state.view === 'calendar') loadEvents(true); });
+  function renderSleepSwitch() { $('swSleep').setAttribute('aria-checked', String(sleepOn())); }
+  $('swSleep').onclick = function () {
+    var on = !sleepOn();
+    lsSet('sleepOn', on);
+    renderSleepSwitch();
+    Apps.toast(on ? '「記録」に睡眠が出ます' : '睡眠を隠しました（データは残ります）');
+    renderCalendar();
+    renderRecHeads();
+  };
 
 
   // ---------- 睡眠 ----------
@@ -551,24 +1129,52 @@
   };
 
   // ---------- 画面の切り替え ----------
-  var VIEWS = ['today', 'calendar', 'sleep', 'habits', 'notify', 'sleep-edit', 'sleep-goal', 'sleep-setup'];
-  var TAB_OF = { notify: 'habits', 'sleep-edit': 'sleep', 'sleep-goal': 'sleep', 'sleep-setup': 'sleep' };
+  var VIEWS = ['today', 'calendar', 'rec', 'collection', 'sleep', 'habits', 'notify', 'sleep-edit', 'sleep-goal', 'sleep-setup', 'per-edit', 'item-edit', 'item-view', 'types'];
+  var TAB_OF = { notify: 'habits', rec: 'rec', collection: 'rec', sleep: 'rec', 'sleep-edit': 'rec', 'sleep-goal': 'rec', 'sleep-setup': 'rec',
+    'per-edit': 'rec', 'item-edit': 'rec', 'item-view': 'rec', types: 'rec' };
+  var REC = [{ v: 'rec', label: '生理' }, { v: 'collection', label: 'コレクション' }, { v: 'sleep', label: '睡眠' }];
+  function renderRecHeads() {
+    var cur = state.view;
+    var html = '<div class="head"><h1>記録</h1></div><nav class="seg" aria-label="記録の種類">' + REC.filter(function (r) {
+      return r.v !== 'sleep' || sleepOn() || cur === 'sleep';
+    }).map(function (r) {
+      return '<a href="#' + r.v + '" data-rv="' + r.v + '"' + (r.v === cur ? ' aria-current="page"' : '') + '>' + r.label + '</a>';
+    }).join('') + '</nav>';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-rechead]'), function (el) { el.innerHTML = html; });
+  }
   function route() {
     var v = (location.hash || '').slice(1);
     if (VIEWS.indexOf(v) < 0) v = 'today';
+    var prev = state.view;
+    state.view = v;
+    closeSheet();
     VIEWS.forEach(function (k) { $('v-' + k).hidden = k !== v; });
+    document.querySelector('main').classList.toggle('wide', v === 'calendar' || v === 'collection');
+    if (v === 'rec' || v === 'collection' || v === 'sleep') lsSet('rec', v);
+    var recTab = document.querySelector('.tabbar a[data-v="rec"]');
+    var last = lsGet('rec', 'rec');
+    recTab.setAttribute('href', '#' + (last === 'collection' || (last === 'sleep' && sleepOn()) ? last : 'rec'));
     Array.prototype.forEach.call(document.querySelectorAll('.tabbar a'), function (a) {
       var cur = a.getAttribute('data-v') === (TAB_OF[v] || v);
       if (cur) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
+    renderRecHeads();
+    if (v === 'calendar') {
+      if (!state.sel) state.sel = state.today;
+      renderCalendar();
+      loadEvents(true);
+      if (state.openAfter) { var oa = state.openAfter; state.openAfter = ''; if (!isWide()) openDay(oa); }
+    }
     if (v === 'sleep-goal') fillGoal();
     if (v === 'sleep-edit') { if (!sl.editDate) sl.editDate = state.today; fillEdit(); }
     if (v === 'sleep-setup') fillSetup();
+    if (v === 'per-edit') fillPerEdit();
+    if (v === 'item-edit') fillItemEdit();
+    if (v === 'item-view') fillItemView();
+    if (v === 'types' && prev !== 'types') resetTypeForm();
     window.scrollTo(0, 0);
   }
   window.addEventListener('hashchange', route);
-  $('prevM').onclick = function () { var m = state.month; state.month = m.m === 0 ? { y: m.y - 1, m: 11 } : { y: m.y, m: m.m - 1 }; renderCalendar(); };
-  $('nextM').onclick = function () { var m = state.month; state.month = m.m === 11 ? { y: m.y + 1, m: 0 } : { y: m.y, m: m.m + 1 }; renderCalendar(); };
 
   // ---------- 全体 ----------
   var last = [];
@@ -578,6 +1184,11 @@
     renderCalendar();
     renderHabits();
     renderSleep();
+    renderSleepSwitch();
+    renderRec();
+    renderCollection();
+    renderTypes();
+    refreshOpen();
     db.pendingCount().then(function (n) { $('syncState').textContent = n ? '送信待ち ' + n + '件' : ''; }, function () {});
   }
   function refreshDay() {
@@ -599,6 +1210,7 @@
 
   // 同期のあと、初期の習慣がスプシに無ければ保存する（固定の id なので2台で同時に作っても重複しない）
   function seed() {
+    if (!db.get(FOOD.id)) db.put(FOOD.data, FOOD.id);   // 最初の種類「料理」（固定の id）
     var hasHabit = db.all().some(function (r) { return r.data && r.data.kind === 'habit'; });
     if (hasHabit) return;
     DEFAULTS.forEach(function (x) { db.put(x.data, x.id); });
@@ -607,6 +1219,7 @@
   Apps.ensureConnected(APP).then(function () { return db.sync(); }).then(function () {
     seed();
     renderAll();
+    retryImageDeletes();
   }).catch(function () { /* 'error' で表示済み・未接続のまま使える */ });
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});

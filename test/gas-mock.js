@@ -67,10 +67,11 @@ module.exports = function makeGas() {
     static now() { return clockBox.t; }
   }
   const ss = new SS();
-  // カレンダー（予定合わせ用）：events に { s, e（ミリ秒）, title, allDay, status } を入れておく。作った予定は created に
+  // カレンダー（予定合わせ・月カレンダー用）：events に { s, e（ミリ秒）, title, allDay, status, color } を入れておく。作った予定は created に
   const cal = { events: [], created: [], fail: '', reads: 0 };
   const calEvent = ev => ({ getStartTime: () => new RealDate(ev.s), getEndTime: () => new RealDate(ev.e), isAllDayEvent: () => !!ev.allDay,
-    getMyStatus: () => ev.status || 'OWNER', getTitle: () => ev.title || '' });
+    getMyStatus: () => ev.status || 'OWNER', getTitle: () => ev.title || '', getColor: () => ev.color || '',
+    getLocation: () => ev.location || '', getDescription: () => ev.description || '' });
   const CalendarApp = {
     GuestStatus: { NO: 'NO', YES: 'YES', OWNER: 'OWNER' },
     getDefaultCalendar() {
