@@ -1128,9 +1128,38 @@
     getKey(true).then(function () { sl.keyShown = true; fillSetup(); Apps.toast('作り直しました。ショートカットの合言葉も貼り替えてください'); }, function (e) { Apps.toast(keyError(e), true); });
   };
 
+  // ホーム画面のウィジェット（見るだけ用の合言葉。GAS の viewKey）
+  var wv = { key: '', shown: false };
+  function fillWidget() {
+    var c = Apps.getConnection(APP);
+    $('wvUrl').textContent = c && c.url ? c.url : 'まだスプシとつながっていません（習慣 → スプレッドシートとの接続）';
+    $('wv').textContent = wv.shown && wv.key ? wv.key : '••••••••••••••••';
+    $('wvShow').textContent = wv.shown ? '隠す' : '表示';
+  }
+  function getViewKey(renew) {
+    if (wv.key && !renew) return Promise.resolve(wv.key);
+    return Apps.call(APP, 'viewKey', renew ? { renew: true } : {}).then(function (r) { wv.key = r.viewKey; return wv.key; });
+  }
+  $('wvShow').onclick = function () {
+    if (wv.shown) { wv.shown = false; fillWidget(); return; }
+    getViewKey(false).then(function () { wv.shown = true; fillWidget(); }, function (e) { Apps.toast(keyError(e), true); });
+  };
+  $('wvCopy').onclick = function () {
+    getViewKey(false).then(function (k) { copyText(k, '見るだけ用の合言葉'); }, function (e) { Apps.toast(keyError(e), true); });
+  };
+  $('wvUrlCopy').onclick = function () {
+    var c = Apps.getConnection(APP);
+    if (!c) { Apps.toast('まだスプシとつながっていません', true); return; }
+    copyText(c.url, '送り先URL');
+  };
+  $('wvNew').onclick = function () {
+    if (!confirm('見るだけ用の合言葉を作り直しますか？\n今のウィジェットは読めなくなるので、新しい合言葉に貼り替えてください。')) return;
+    getViewKey(true).then(function () { wv.shown = true; fillWidget(); Apps.toast('作り直しました。ウィジェットの合言葉も貼り替えてください'); }, function (e) { Apps.toast(keyError(e), true); });
+  };
+
   // ---------- 画面の切り替え ----------
-  var VIEWS = ['today', 'calendar', 'rec', 'collection', 'sleep', 'habits', 'notify', 'sleep-edit', 'sleep-goal', 'sleep-setup', 'per-edit', 'item-edit', 'item-view', 'types'];
-  var TAB_OF = { notify: 'habits', rec: 'rec', collection: 'rec', sleep: 'rec', 'sleep-edit': 'rec', 'sleep-goal': 'rec', 'sleep-setup': 'rec',
+  var VIEWS = ['today', 'calendar', 'rec', 'collection', 'sleep', 'habits', 'notify', 'widget', 'sleep-edit', 'sleep-goal', 'sleep-setup', 'per-edit', 'item-edit', 'item-view', 'types'];
+  var TAB_OF = { notify: 'habits', widget: 'habits', rec: 'rec', collection: 'rec', sleep: 'rec', 'sleep-edit': 'rec', 'sleep-goal': 'rec', 'sleep-setup': 'rec',
     'per-edit': 'rec', 'item-edit': 'rec', 'item-view': 'rec', types: 'rec' };
   var REC = [{ v: 'rec', label: '生理' }, { v: 'collection', label: 'コレクション' }, { v: 'sleep', label: '睡眠' }];
   function renderRecHeads() {
@@ -1168,6 +1197,7 @@
     if (v === 'sleep-goal') fillGoal();
     if (v === 'sleep-edit') { if (!sl.editDate) sl.editDate = state.today; fillEdit(); }
     if (v === 'sleep-setup') fillSetup();
+    if (v === 'widget') fillWidget();
     if (v === 'per-edit') fillPerEdit();
     if (v === 'item-edit') fillItemEdit();
     if (v === 'item-view') fillItemView();

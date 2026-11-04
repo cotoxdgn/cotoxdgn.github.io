@@ -475,6 +475,7 @@ button.row { width: 100%; background: transparent; border-left: 0; border-right:
     <div class="sect">設定</div>
     <div class="list">
       <div class="row"><div class="txt"><span id="swSleepLb">睡眠を表示する</span><small>オンにすると「記録」に睡眠が出ます（データはオフでも残ります）</small></div><button class="sw" type="button" role="switch" aria-checked="false" id="swSleep" aria-labelledby="swSleepLb"></button></div>
+      <a class="row" href="#widget" style="color:inherit;text-decoration:none"><div class="txt"><span>ホーム画面のウィジェット</span><small>iPhone の Scriptable で、今日の習慣・生理の予定日を出す</small></div><span aria-hidden="true">›</span></a>
       <div class="row"><div class="txt"><span>予定を読むカレンダー</span><small>普段使いのGoogleカレンダー（1つ）。スプシには保存しません</small></div></div>
       <a class="row" href="#notify" style="color:inherit;text-decoration:none"><div class="txt"><span>通知の設定</span><small>iPhoneのショートカットで毎日お知らせ</small></div><span aria-hidden="true">›</span></a>
       <button class="row" type="button" id="connBtn"><div class="txt"><span>スプレッドシートとの接続</span><small id="connState"></small></div><span aria-hidden="true">›</span></button>
@@ -500,6 +501,18 @@ button.row { width: 100%; background: transparent; border-left: 0; border-right:
   </section>
 
   <!-- 睡眠 -->
+  <section class="view" id="v-widget" hidden>
+    <a class="ax-btn ax-btn-ghost back" href="#habits">‹ 習慣へ戻る</a>
+    <div class="head"><h1>ホーム画面のウィジェット</h1></div>
+    <p class="small" style="margin:0">iPhone の「Scriptable」アプリのウィジェットに、今日の習慣の○×・連続日数・生理の予定日を出します。下の2つ（送り先URLと見るだけ用の合言葉）を、ウィジェットのスクリプトの上の方に貼ってください。手順はスクリプトと一緒に置いてある説明（widget/README.md）を見てください。</p>
+    <div class="sect">送り先URL（スプシのプログラム）</div>
+    <div class="card keybox"><code id="wvUrl">—</code><button class="ax-btn" type="button" id="wvUrlCopy">コピー</button></div>
+    <div class="sect">見るだけ用の合言葉</div>
+    <div class="card keybox"><code id="wv">••••••••••••••••</code><button class="ax-btn" type="button" id="wvShow">表示</button><button class="ax-btn" type="button" id="wvCopy">コピー</button></div>
+    <div class="warn">この合言葉で出来るのは「今日の習慣・連続日数・生理の予定日を見る」ことだけです。記録を書いたり消したり、睡眠・コレクション・他のアプリのデータを読んだりはできません。漏れたかもと思ったら作り直して、スクリプトに貼り替えてください（いつもの合言葉や他の端末のつなぎ直しは不要です）。</div>
+    <button class="ax-btn ax-btn-danger" type="button" id="wvNew" style="align-self:flex-start">見るだけ用の合言葉を作り直す</button>
+  </section>
+
   <section class="view" id="v-sleep" hidden>
     <div class="rechead" data-rechead></div>
     <div class="head sl-head"><div><span class="sub" id="slSub"></span></div>
