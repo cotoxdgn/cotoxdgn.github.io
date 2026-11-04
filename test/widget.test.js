@@ -24,6 +24,9 @@ function fresh() {
   return { g, conf, call, key, at, put, view: () => String(conf.getRange('B6').getValue()), sleep: () => String(conf.getRange('B5').getValue()) };
 }
 
+const VIEW_REFUSED = ['ping', 'list', 'put', 'delete', 'batch', 'image', 'imageData', 'imageDelete', 'names', 'geocode', 'mapLink',
+  'yoteiCal', 'yoteiResults', 'yoteiCreateEvent', 'calMonth', 'sleepPut', 'sleepKey', 'viewKey', 'zzz', undefined];
+
 // ---------- 見るだけ用の合言葉 ----------
 const A = fresh();
 const VKEY = A.view();
@@ -62,7 +65,8 @@ t('widget：見るだけ用の合言葉で、今日の習慣（並び順・や�
   assert.deepStrictEqual(r.habits, [{ name: 'サプリを飲んだ', done: true }, { name: 'ストレッチ', done: false }]);
   assert.strictEqual(r.streak, 3, '今日はまだなので昨日から数える（11/1〜11/3）');
   assert.deepStrictEqual(r.period, { ongoing: false, start: '', day: 0, next: '2026-11-05', until: 1, late: 0 });
-  assert.deepStrictEqual(Object.keys(r).sort(), ['habits', 'now', 'ok', 'period', 'streak', 'today']);
+  assert.deepStrictEqual(Object.keys(r).sort(), ['brain', 'events', 'habits', 'now', 'ok', 'period', 'streak', 'today']);
+  assert.deepStrictEqual(r.events, []); assert.deepStrictEqual(r.brain, { latest: [], count: 0 });
 });
 
 t('widget：ほかのデータ（睡眠・コレクション・メモ・ほかのアプリ・id）は入れない', () => {
@@ -97,8 +101,7 @@ t('widget：全部できたら今日から数える。深夜3時までは前の�
 });
 
 t('見るだけ用の合言葉では widget 以外はすべて断る（合言葉違いと同じ答え）', () => {
-  for (const action of ['ping', 'list', 'put', 'delete', 'batch', 'image', 'imageData', 'imageDelete', 'names', 'geocode', 'mapLink',
-    'yoteiCal', 'yoteiResults', 'yoteiCreateEvent', 'calMonth', 'sleepPut', 'sleepKey', 'viewKey', 'zzz', undefined]) {
+  for (const action of VIEW_REFUSED) {
     const r = A.call({ key: VKEY, action, app: 'routine', id: 'x', data: {}, ops: [], renew: true, q: '大阪', from: '2026-11-01', to: '2026-11-02',
       samples: [{ s: '2026-11-01T00:00:00+09:00', e: '2026-11-01T06:00:00+09:00', v: 'コア' }] });
     assert.deepStrictEqual(r, { ok: false, error: 'bad_key' }, String(action));
@@ -164,6 +167,142 @@ t('連続日数：始めた日より前・やめた日から後の習慣は、�
   const r = B.call({ key: B.view(), action: 'widget' });
   assert.strictEqual(r.streak, 4);
   assert.deepStrictEqual(r.habits.map(h => h.name), ['A', '新しい']);
+});
+
+// ---------- 予定（今日と明日） ----------
+const jst = s => Date.parse(s + '+09:00');
+t('widget：今日と明日（日本時間の0時区切り）の予定。件名・開始・終了・終日・色だけ。欠席は除く', () => {
+  const B = fresh();
+  B.g.cal.events.push(
+    { s: jst('2026-11-04T23:00:00'), e: jst('2026-11-05T00:00:00'), title: '昨日の夜' },
+    { s: jst('2026-11-05T10:00:00'), e: jst('2026-11-05T11:00:00'), title: '現場 引渡し', color: '2', location: '大阪市ひみつ', description: 'ひみつのメモ' },
+    { s: jst('2026-11-05T00:00:00'), e: jst('2026-11-06T00:00:00'), title: '母の誕生日', allDay: true, color: '4' },
+    { s: jst('2026-11-05T15:00:00'), e: jst('2026-11-05T16:00:00'), title: '欠席した会', status: 'NO' },
+    { s: jst('2026-11-06T09:30:00'), e: jst('2026-11-06T10:30:00'), title: '歯医者', color: '11' },
+    { s: jst('2026-11-07T00:00:00'), e: jst('2026-11-07T01:00:00'), title: 'あさって' });
+  B.at('2026-11-05T01:00:00+09:00');   // 深夜1時：習慣はまだ前の日だが、予定は暦の今日（11/5）から
+  const r = B.call({ key: B.view(), action: 'widget' });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.strictEqual(r.today, '2026-11-04');
+  assert.deepStrictEqual(r.events, [
+    { title: '現場 引渡し', start: '2026-11-05T01:00:00.000Z', end: '2026-11-05T02:00:00.000Z', allDay: false, color: '2' },
+    { title: '母の誕生日', start: '2026-11-05', end: '2026-11-06', allDay: true, color: '4' },
+    { title: '歯医者', start: '2026-11-06T00:30:00.000Z', end: '2026-11-06T01:30:00.000Z', allDay: false, color: '11' }
+  ]);
+  const s = JSON.stringify(r);
+  ['ひみつ', '欠席', '昨日の夜', 'あさって', 'location', 'description'].forEach(w => assert.ok(!s.includes(w), w));
+});
+
+t('widget：カレンダーが読めない（許可がない等）ときは events:null。ほかはそのまま返す（理由は出さない）', () => {
+  const B = fresh();
+  B.at('2026-11-05T12:00:00+09:00');
+  B.g.cal.fail = 'You do not have permission to call CalendarApp.getDefaultCalendar';
+  const r = B.call({ key: B.view(), action: 'widget' });
+  assert.ok(r.ok); assert.strictEqual(r.events, null); assert.ok(Array.isArray(r.habits));
+  assert.ok(!JSON.stringify(r).includes('permission'));
+});
+
+// ---------- 脳みそ ----------
+t('widget：脳みその新しい2枚（作った日時順）と全部の枚数。題が空なら本文の1行目。本文・タグ・id は返さない', () => {
+  const B = fresh();
+  B.at('2026-11-05T08:00:00+09:00');
+  const bput = (id, data, extra) => { B.g.clockBox.t += 60000; const r = B.call(Object.assign({ key: B.key, action: 'put', app: 'brain', id, data }, extra || {})); assert.ok(r.ok, JSON.stringify(r)); };
+  bput('k1', { t: 'k', kind: 'D', no: 1, title: 'いちばん古い', body: 'ひみつの本文1', tags: ['ひみつタグ'] });
+  bput('k2', { t: 'k', kind: 'H', no: 34, title: '造作収納は使う場所の50cm以内', body: 'ひみつの本文2', tags: [] });
+  bput('kinds', { t: 'kinds', list: [{ c: 'P', name: 'プレゼン' }] });
+  bput('w1', { t: 'w', title: 'ひみつの実績' });
+  bput('k3', { t: 'k', kind: 'M', no: null, title: '', body: '\n  ラワン合板の小口は\n2行目ひみつ', tags: [] });
+  bput('k4', { t: 'k', kind: 'T', no: 2, title: '消したカード' });
+  assert.ok(B.call({ key: B.key, action: 'delete', app: 'brain', id: 'k4' }).ok);
+  // あとから k1 を直しても（更新日時が新しくなっても）、並びは作った日時のまま
+  bput('k1', { t: 'k', kind: 'D', no: 1, title: 'いちばん古い（直した）', body: 'ひみつの本文1', tags: [] });
+  const r = B.call({ key: B.view(), action: 'widget' });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.strictEqual(r.brain.count, 3);
+  assert.deepStrictEqual(r.brain.latest.map(x => [x.kind, x.no, x.title]), [['M', null, 'ラワン合板の小口は'], ['H', 34, '造作収納は使う場所の50cm以内']]);
+  r.brain.latest.forEach(x => { assert.deepStrictEqual(Object.keys(x).sort(), ['at', 'kind', 'no', 'title']); assert.ok(!isNaN(Date.parse(x.at))); });
+  const s = JSON.stringify(r.brain);
+  ['ひみつ', 'k1', 'k2', 'k3', 'tags', 'body', 'プレゼン', '消した'].forEach(w => assert.ok(!s.includes(w), w));
+});
+
+// ---------- B3（対象アプリ）があるスプシ：家族用（wanko） ----------
+function family(dogs) {
+  const B = fresh();
+  B.conf.getRange('B3').setValue('wanko');
+  B.g.ctx.setup();   // 名前表を作る
+  (dogs || []).forEach((n, i) => B.conf.getRange('B' + (9 + i)).setValue(n));
+  B.conf.getRange('B11').setValue('ひみつの家族');
+  let calCalls = 0;
+  const orig = B.g.ctx.CalendarApp.getDefaultCalendar;
+  B.g.ctx.CalendarApp.getDefaultCalendar = function () { calCalls++; return orig.apply(this, arguments); };
+  B.g.cal.events.push({ s: jst('2026-11-05T10:00:00'), e: jst('2026-11-05T11:00:00'), title: 'ひみつの予定' });
+  const wput = (k, dog) => { B.g.clockBox.t += 1000; const r = B.call({ key: B.key, action: 'put', app: 'wanko', id: k + '_' + dog, data: { date: k, dog, by: 'm1', byName: 'ひみつの家族', at: 'x' } }); assert.ok(r.ok, JSON.stringify(r)); };
+  return Object.assign(B, { wput, calls: () => calCalls });
+}
+
+t('B3=wanko：wanko の分だけ（今日の2頭の○と名前）。予定・習慣・脳みそは返さず、CalendarApp も呼ばない', () => {
+  const F = family(['ポチ', 'タマ']);
+  F.at('2026-11-05T08:00:00+09:00');
+  F.put('h-a', { kind: 'habit', name: 'ひみつの習慣', order: 10 });
+  assert.ok(F.call({ key: F.key, action: 'put', app: 'brain', id: 'k1', data: { t: 'k', kind: 'H', no: 1, title: 'ひみつの脳みそ' } }).ok);
+  F.wput('2026-11-04', 'b');   // 昨日の分は数えない
+  F.wput('2026-11-05', 'a');
+  const r = F.call({ key: F.view(), action: 'widget' });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.deepStrictEqual(Object.keys(r).sort(), ['now', 'ok', 'wanko']);
+  assert.deepStrictEqual(r.wanko, { today: '2026-11-05', dogs: [{ name: 'ポチ', done: true }, { name: 'タマ', done: false }] });
+  assert.strictEqual(F.calls(), 0, 'カレンダーには触れない（新しい許可が要らない）');
+  assert.strictEqual(F.g.cal.reads, 0);
+  const s = JSON.stringify(r);
+  ['ひみつ', 'm1', 'byName', '_a', 'members'].forEach(w => assert.ok(!s.includes(w), w));
+  // いつもの合言葉でも同じ（カレンダーは呼ばない）
+  const n = F.call({ key: F.key, action: 'widget' });
+  assert.deepStrictEqual(n.wanko, r.wanko); assert.strictEqual(F.calls(), 0);
+});
+
+t('B3=wanko：日の区切りは0時（wanko/app.js の dayKey と同じ）。消した記録は数えない。名前が空なら ""', () => {
+  const F = family([]);
+  F.at('2026-11-05T23:59:00+09:00');
+  F.wput('2026-11-05', 'a'); F.wput('2026-11-05', 'b');
+  let r = F.call({ key: F.view(), action: 'widget' });
+  assert.deepStrictEqual(r.wanko, { today: '2026-11-05', dogs: [{ name: '', done: true }, { name: '', done: true }] });
+  F.at('2026-11-06T00:00:00+09:00');
+  r = F.call({ key: F.view(), action: 'widget' });
+  assert.deepStrictEqual(r.wanko.dogs.map(d => d.done), [false, false]); assert.strictEqual(r.wanko.today, '2026-11-06');
+  F.wput('2026-11-06', 'b');
+  assert.ok(F.call({ key: F.key, action: 'delete', app: 'wanko', id: '2026-11-06_b' }).ok);
+  r = F.call({ key: F.view(), action: 'widget' });
+  assert.deepStrictEqual(r.wanko.dogs.map(d => d.done), [false, false]);
+});
+
+t('B3=wanko：見るだけ用の合言葉では widget 以外はすべて断る（names・list も）', () => {
+  const F = family(['ポチ', 'タマ']);
+  for (const action of VIEW_REFUSED) {
+    const r = F.call({ key: F.view(), action, app: 'wanko', id: '2026-11-05_a', data: {}, ops: [], renew: true, from: '2026-11-01', to: '2026-11-02' });
+    assert.deepStrictEqual(r, { ok: false, error: 'bad_key' }, String(action));
+  }
+  assert.strictEqual(F.calls(), 0);
+  assert.ok(!F.g.ss.getSheetByName('app=wanko'), '何も書いていない');
+});
+
+t('B3 がほかのアプリ：routine → 習慣だけ、brain → 脳みそだけ、知らない名前 → 何も入れない。どれもカレンダーは呼ばない', () => {
+  const keysOf = target => {
+    const F = family([]);
+    F.conf.getRange('B3').setValue(target);
+    F.at('2026-11-05T12:00:00+09:00');
+    const r = F.call({ key: F.view(), action: 'widget' });
+    assert.ok(r.ok); assert.strictEqual(F.calls(), 0, target);
+    return Object.keys(r).sort();
+  };
+  assert.deepStrictEqual(keysOf('routine'), ['habits', 'now', 'ok', 'period', 'streak', 'today']);
+  assert.deepStrictEqual(keysOf('brain'), ['brain', 'now', 'ok']);
+  assert.deepStrictEqual(keysOf('diary'), ['now', 'ok']);
+});
+
+t('B3 が空（自分用）：wanko は返さない', () => {
+  const B = fresh();
+  B.at('2026-11-05T12:00:00+09:00');
+  assert.ok(!('wanko' in B.call({ key: B.view(), action: 'widget' })));
 });
 
 // ---------- 生理：routine/period.js と同じ答えか（period.test.js と同じ場面） ----------

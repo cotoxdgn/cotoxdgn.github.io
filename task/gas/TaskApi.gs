@@ -30,7 +30,7 @@
  * 通信の形：POST（Content-Type: text/plain）で JSON → JSON。text/plain なので CORS の事前確認が起きない。
  *  { key, action, ... } → { ok: true, ... } / { ok: false, error }
  *  action: ping / list / add / done / undone / actual / setWait（📅・⏰・👤・前提を書く）
- *          widget（iPhone のホーム画面のウィジェット用。今日の未完了タスクだけ。見るだけ用の合言葉でも使える）
+ *          widget（iPhone のホーム画面のウィジェット用。今日と明日の未完了タスクだけ。見るだけ用の合言葉でも使える）
  *
  * 見るだけ用の合言葉（ウィジェット用）
  *  関数「taskApiShowViewKey」を実行 → 実行ログに出る合言葉を Scriptable のスクリプトに貼る（スクリプトのプロパティ TASK_VIEW_KEY に保存）。
@@ -369,20 +369,21 @@ function taskApi_markPreWait(all, tasks) {
   });
 }
 
-// widget：今日の未完了（📅が今日以前＝持ち越し含む）だけ。返すのは todo・pj・date・slot（朝・昼・夕・空）・wait（👤が入っているか）・preWait・done
+// widget：今日の未完了（📅が今日以前＝持ち越し含む）と、明日（日本時間の次の日・taskApi_list の tomorrow と同じ）の未完了だけ。
+//  返すのは todo・pj・date・slot（朝・昼・夕・空）・wait（👤が入っているか）・preWait・done
 //  （詳細・前提の中身・👤の名前・No・行番号・候補の一覧は返さない）
 function taskApi_widget(sh) {
   var c = taskApi_cols(sh);
   var all = taskApi_readAll(sh, c);
   var today = taskApi_ymd(new Date());
+  var tomorrowDate = taskApi_ymd(new Date(new Date().getTime() + 24 * 3600 * 1000));
   var tasks = all.filter(function (t) { return !t.done && t.date && t.date <= today; });
-  taskApi_markPreWait(all, tasks);
-  return {
-    today: today,
-    tasks: tasks.map(function (t) {
-      return { todo: t.todo.slice(0, 100), pj: t.pj.slice(0, 40), date: t.date, slot: t.slot, wait: !!t.wait, preWait: t.preWait, done: false };
-    })
+  var tomorrow = all.filter(function (t) { return !t.done && t.date === tomorrowDate; });
+  taskApi_markPreWait(all, tasks.concat(tomorrow));
+  var slim = function (t) {
+    return { todo: t.todo.slice(0, 100), pj: t.pj.slice(0, 40), date: t.date, slot: t.slot, wait: !!t.wait, preWait: t.preWait, done: false };
   };
+  return { today: today, tasks: tasks.map(slim), tomorrowDate: tomorrowDate, tomorrow: tomorrow.map(slim) };
 }
 
 // No と ToDo の両方が一致する行を探す（行番号は追加のたびにずれるため）

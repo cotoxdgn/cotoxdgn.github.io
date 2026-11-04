@@ -42,7 +42,8 @@ t('widget：見るだけ用の合言葉で、今日の未完了（持ち越し�
     { todo: '見積書の確認 | 設備項目', pj: '例）案件A', date: '2026-10-28', slot: '朝', wait: false, preWait: false, done: false },
     { todo: 'プレゼン構成 | 目次を作る', pj: '例）案件B', date: '2026-10-30', slot: '朝', wait: true, preWait: true, done: false }
   ]);
-  assert.deepStrictEqual(Object.keys(r).sort(), ['ok', 'tasks', 'today']);
+  assert.deepStrictEqual(Object.keys(r).sort(), ['ok', 'tasks', 'today', 'tomorrow', 'tomorrowDate']);
+  assert.strictEqual(r.tomorrowDate, '2026-10-31'); assert.deepStrictEqual(r.tomorrow, []);
   assert.strictEqual(snap(), before); assert.strictEqual(sh.writes.length, 0, '読むだけ');
 });
 
@@ -77,6 +78,28 @@ t('widget：完了にしたら消える。前提が完了したら preWait が�
   const w = call({ key: VKEY, action: 'widget' });
   assert.deepStrictEqual(w.tasks.map(x => [x.todo, x.preWait]), [['プレゼン構成 | 目次を作る', false]]);
   assert.ok(call({ key: KEY, action: 'undone', no: 12, todo: '見積書の確認 | 設備項目' }).ok);
+});
+
+t('widget：明日（次の日）の未完了も同じ項目だけで返す。完了・あさって・今日の一覧には入れない', () => {
+  const all = ctx.taskApi_readAll(sh, ctx.taskApi_cols(sh));
+  const t8 = all.find(x => x.no === 8), t9 = all.find(x => x.no === 9);
+  const keep = [sh.peek(t8.row, 2).v, sh.peek(t8.row, 6).v, sh.peek(t9.row, 6).v, sh.peek(t9.row, 10).v];
+  sh.peek(t8.row, 2).v = false; sh.peek(t8.row, 6).v = new Date(2026, 9, 31);    // 明日の未完了
+  sh.peek(t9.row, 6).v = new Date(2026, 9, 31); sh.peek(t9.row, 10).v = '11.プレゼン構成';   // 明日・前提待ち
+  const before = snap(); sh.writes.length = 0;
+  const r = call({ key: VKEY, action: 'widget' });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.strictEqual(r.tomorrowDate, '2026-10-31');
+  assert.deepStrictEqual(r.tomorrow, [
+    { todo: '現場写真の整理', pj: '例）案件A', date: '2026-10-31', slot: '夕', wait: false, preWait: true, done: false },
+    { todo: '古い完了タスク', pj: '例）案件A', date: '2026-10-31', slot: '朝', wait: false, preWait: false, done: false }
+  ]);
+  assert.strictEqual(r.tasks.length, 2, '今日の一覧はそのまま');
+  r.tomorrow.forEach(x => assert.deepStrictEqual(Object.keys(x).sort(), ['date', 'done', 'pj', 'preWait', 'slot', 'todo', 'wait']));
+  assert.strictEqual(snap(), before); assert.strictEqual(sh.writes.length, 0, '読むだけ');
+  sh.peek(t8.row, 6).v = new Date(2026, 10, 1);   // あさっては入れない
+  assert.ok(!call({ key: VKEY, action: 'widget' }).tomorrow.some(x => x.todo === '古い完了タスク'));
+  sh.peek(t8.row, 2).v = keep[0]; sh.peek(t8.row, 6).v = keep[1]; sh.peek(t9.row, 6).v = keep[2]; sh.peek(t9.row, 10).v = keep[3];
 });
 
 t('taskApiRenewViewKey：作り直すと古い合言葉は使えない', () => {
