@@ -153,6 +153,19 @@ t('add（実働列あり）：実働列は空のまま、ほかの行は不変',
   assert.deepStrictEqual(after.slice(4), before.slice(3));
   assert.deepStrictEqual(after.slice(0, 3), before.slice(0, 3));
 });
+t('list：明日（次の日）の未完了を tomorrow で返す。今日の一覧には入れない', () => {
+  // No.8（古い完了タスク）の行を、明日の未完了に一時的に変えて確かめる
+  const all = ctx.taskApi_readAll(sh, ctx.taskApi_cols(sh));
+  const t8 = all.find(x => x.no === 8);
+  const keep = [sh.peek(t8.row, 2).v, sh.peek(t8.row, 6).v];
+  sh.peek(t8.row, 2).v = false; sh.peek(t8.row, 6).v = new Date(2026, 9, 31);
+  const r = call({ key: KEY, action: 'list' });
+  assert.strictEqual(r.tomorrowDate, '2026-10-31');
+  assert.ok(r.tomorrow.some(x => x.no === 8));
+  assert.ok(r.tomorrow.every(x => x.date === '2026-10-31' && !x.done));
+  assert.ok(!r.tasks.some(x => x.no === 8));
+  sh.peek(t8.row, 2).v = keep[0]; sh.peek(t8.row, 6).v = keep[1];
+});
 t('list：前提の選択肢（未完了の「No.ToDo」）と👤の候補', () => {
   const r = call({ key: KEY, action: 'list' });
   assert.ok(r.preOptions.some(o => o.label === '11.プレゼン構成 | 目次を作る'));

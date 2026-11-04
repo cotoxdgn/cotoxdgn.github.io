@@ -342,7 +342,10 @@ function taskApi_list(sh) {
     if (!t.date) return false;
     return t.done ? t.date === today : t.date <= today;
   });
-  taskApi_markPreWait(all, tasks);
+  // 明日（日本時間の次の日）の未完了：アプリで「明日」として見るだけ
+  var tomorrowDate = taskApi_ymd(new Date(new Date().getTime() + 24 * 3600 * 1000));
+  var tomorrow = all.filter(function (t) { return !t.done && t.date === tomorrowDate; });
+  taskApi_markPreWait(all, tasks.concat(tomorrow));
   var seen = {}, pjs = [];
   all.forEach(function (t) { if (t.pj && !seen[t.pj]) { seen[t.pj] = true; pjs.push(t.pj); } });
   // 前提の選択肢：未完了で No と ToDo があるタスク（スプシのプルダウンと同じ「12.ToDo」の形）
@@ -351,7 +354,7 @@ function taskApi_list(sh) {
   // 👤の候補：これまでに入れたことのある名前
   var pseen = {}, people = [];
   all.forEach(function (t) { if (t.wait && !pseen[t.wait]) { pseen[t.wait] = true; people.push(t.wait); } });
-  return { tasks: tasks, projects: pjs, actualColumn: !!c.actual, preOptions: preOptions, people: people.slice(0, 30),
+  return { tasks: tasks, tomorrow: tomorrow, tomorrowDate: tomorrowDate, projects: pjs, actualColumn: !!c.actual, preOptions: preOptions, people: people.slice(0, 30),
     waitColumn: !!c.wait, preColumn: !!c.pre };
 }
 
