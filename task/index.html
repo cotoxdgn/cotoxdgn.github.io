@@ -150,6 +150,28 @@
   <p class="note" id="shNote"></p>
 </div>
 
+<!-- 待ちの設定（タスクのチェック以外を押したとき） -->
+<div class="sheet" id="wsheet" role="dialog" aria-modal="true" aria-labelledby="wsTitle" hidden>
+  <span class="grab"></span>
+  <div>
+    <h3 id="wsTitle"></h3>
+    <div class="meta" id="wsMeta"></div>
+  </div>
+  <div class="f">
+    <label for="wsWho">👤 待ち相手（J列）</label>
+    <input id="wsWho" maxlength="40" placeholder="例）山田さん（空なら待ちなし）" autocomplete="off">
+    <div class="pick" id="wsPeople"></div>
+  </div>
+  <div class="f">
+    <label for="wsPreQ">前提のタスク（K列）</label>
+    <div class="precur" id="wsPreCur"></div>
+    <input id="wsPreQ" type="search" placeholder="番号・名前で探す（未完了のタスク）" autocomplete="off">
+    <div class="prelist" id="wsPreList"></div>
+  </div>
+  <button type="button" class="btn" id="wsSave">保存</button>
+  <button type="button" class="btn ghost" id="wsClose">閉じる</button>
+</div>
+
 <!-- 接続の設定 -->
 <div class="sheet" id="conf" role="dialog" aria-modal="true" aria-labelledby="confTitle" hidden>
   <span class="grab"></span>

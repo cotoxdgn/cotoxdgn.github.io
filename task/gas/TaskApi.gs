@@ -13,11 +13,12 @@
  * ・既存スプシ「_タスク管理2026.09.15~」に付いている Apps Script とは別のプロジェクトです。
  *   既存の Apps Script・トリガー・カレンダー連携には一切触りません。
  *   名前の衝突を避けるため、設定は TASKAPI の1つにまとめ、内部の関数は taskApi_ で始めています。
- * ・スプシへの書き込みは次の3つだけです。
+ * ・スプシへの書き込みは次の4つだけです。
  *   1) タスク追加：「_日次ガントチャート」の4行目に1行挿入して入力（下の行は1行ずつ下がるだけで中身は変えない）
  *   2) 完了チェック：その行の「完了」(B列) を TRUE / FALSE にする
  *   3) 実働時間：見出し「実働」の列があれば、その行のセルに時間(h)を書く
  *      「実働」列は自動では作りません。コトさんの承認後に関数「taskApiAddActualColumn」を1回だけ実行して追加します。
+ *   4) 待ちの設定：その行の「👤」「前提」のセルだけを書く（setWait）
  *
  * 準備（約5分）
  *  1) script.google.com を直接開いて［新しいプロジェクト］→ このコードを貼り付けて保存
@@ -28,7 +29,7 @@
  *
  * 通信の形：POST（Content-Type: text/plain）で JSON → JSON。text/plain なので CORS の事前確認が起きない。
  *  { key, action, ... } → { ok: true, ... } / { ok: false, error }
- *  action: ping / list / add / done / undone / actual
+ *  action: ping / list / add / done / undone / actual / setWait（👤と前提を書く）
  */
 
 var TASKAPI = {
@@ -151,6 +152,7 @@ function taskApi_handle(req) {
       case 'done': res = taskApi_setDone(sh, req, true); break;
       case 'undone': res = taskApi_setDone(sh, req, false); break;
       case 'actual': res = taskApi_actual(sh, req); break;
+      case 'setWait': res = taskApi_setWait(sh, req); break;
       default: res = { error: 'bad_action' };
     }
     if (res.error) return { ok: false, error: res.error };
@@ -295,12 +297,19 @@ function taskApi_list(sh) {
   // 前提：「No.タイトル」の No が完了済みなら待ちではない。番号が読めない・見つからないときは待ちとして扱う
   tasks.forEach(function (t) {
     if (!t.pre) return;
-    var m = /^\s*(\d+)/.exec(t.pre);
+    var m = /^\s*(?:No)?(\d+)/.exec(t.pre);
     t.preWait = !(m && doneByNo[Number(m[1])] === true);
   });
   var seen = {}, pjs = [];
   all.forEach(function (t) { if (t.pj && !seen[t.pj]) { seen[t.pj] = true; pjs.push(t.pj); } });
-  return { tasks: tasks, projects: pjs, actualColumn: !!c.actual };
+  // 前提の選択肢：未完了で No と ToDo があるタスク（スプシのプルダウンと同じ「12.ToDo」の形）
+  var preOptions = all.filter(function (t) { return !t.done && t.no !== null && t.todo; })
+    .slice(0, 400).map(function (t) { return { no: t.no, label: t.no + '.' + t.todo, pj: t.pj, date: t.date }; });
+  // 👤の候補：これまでに入れたことのある名前
+  var pseen = {}, people = [];
+  all.forEach(function (t) { if (t.wait && !pseen[t.wait]) { pseen[t.wait] = true; people.push(t.wait); } });
+  return { tasks: tasks, projects: pjs, actualColumn: !!c.actual, preOptions: preOptions, people: people.slice(0, 30),
+    waitColumn: !!c.wait, preColumn: !!c.pre };
 }
 
 // No と ToDo の両方が一致する行を探す（行番号は追加のたびにずれるため）
@@ -400,6 +409,27 @@ function taskApi_setDone(sh, req, done) {
   }
   res.task = taskApi_rowToTask(t.row, sh.getRange(t.row, 1, 1, c.width).getValues()[0], c, taskApi_ymd(new Date()));
   return res;
+}
+
+// 👤（待ち相手）と 前提 を書く。その行の2つのセルだけ。undefined の項目は書かない
+function taskApi_setWait(sh, req) {
+  var c = taskApi_cols(sh);
+  var t = taskApi_findTask(sh, c, req);
+  if (!t) return { error: 'not_found' };
+  if (req.wait !== undefined) {
+    if (!c.wait) return { error: 'no_wait_column' };
+    var w = taskApi_text(req.wait);
+    if (w.length > 40) return { error: 'bad_wait' };
+    sh.getRange(t.row, c.wait).setValue(w);
+  }
+  if (req.pre !== undefined) {
+    if (!c.pre) return { error: 'no_pre_column' };
+    var p = taskApi_text(req.pre);
+    if (p && !/^\d+\./.test(p)) return { error: 'bad_pre' };
+    if (p && Number(/^(\d+)/.exec(p)[1]) === t.no) return { error: 'bad_pre' };   // 自分自身は前提にできない
+    sh.getRange(t.row, c.pre).setValue(p);
+  }
+  return { task: taskApi_rowToTask(t.row, sh.getRange(t.row, 1, 1, c.width).getValues()[0], c, taskApi_ymd(new Date())) };
 }
 
 function taskApi_actual(sh, req) {

@@ -153,6 +153,29 @@ t('add（実働列あり）：実働列は空のまま、ほかの行は不変',
   assert.deepStrictEqual(after.slice(4), before.slice(3));
   assert.deepStrictEqual(after.slice(0, 3), before.slice(0, 3));
 });
+t('list：前提の選択肢（未完了の「No.ToDo」）と👤の候補', () => {
+  const r = call({ key: KEY, action: 'list' });
+  assert.ok(r.preOptions.some(o => o.label === '11.プレゼン構成 | 目次を作る'));
+  assert.ok(!r.preOptions.some(o => o.no === 10), '完了済みは出ない');
+  assert.ok(r.people.includes('山田さん'));
+  assert.strictEqual(r.waitColumn, true); assert.strictEqual(r.preColumn, true);
+});
+t('setWait：👤と前提のセルだけを書く。自分自身・形の違う前提は断る', () => {
+  const no = 9, todo = '現場写真の整理';
+  const row = ctx.taskApi_findTask(sh, ctx.taskApi_cols(sh), { no, todo }).row;
+  const before = snap(); sh.writes.length = 0;
+  const r = call({ key: KEY, action: 'setWait', no, todo, wait: '佐藤さん', pre: '11.プレゼン構成 | 目次を作る' });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.strictEqual(r.task.wait, '佐藤さん'); assert.strictEqual(r.task.pre, '11.プレゼン構成 | 目次を作る');
+  const after = snap();
+  after.forEach((x, i) => { if (i !== row - 1) assert.strictEqual(x, before[i]); });
+  assert.deepStrictEqual(sh.writes.map(w => w[1]), [row, row]);
+  assert.strictEqual(call({ key: KEY, action: 'setWait', no, todo, pre: '9.自分' }).error, 'bad_pre');
+  assert.strictEqual(call({ key: KEY, action: 'setWait', no, todo, pre: 'てきとう' }).error, 'bad_pre');
+  const r2 = call({ key: KEY, action: 'setWait', no, todo, wait: '', pre: '' });
+  assert.ok(r2.ok); assert.strictEqual(r2.task.wait, ''); assert.strictEqual(r2.task.pre, '');
+  assert.strictEqual(call({ key: KEY, action: 'setWait', no: 999, todo: 'x', wait: 'a' }).error, 'not_found');
+});
 t('taskApiShowLink：#t= 付きのリンク（apps 共通の #c= と別）', () => {
   ctx.__logs = [];
   ctx.taskApiShowLink();

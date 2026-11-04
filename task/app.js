@@ -15,10 +15,13 @@
     bad_key: '合言葉が違います。接続をやり直してください', no_setup: 'スクリプトの準備（setup）がまだです',
     busy: 'スプシが混み合っています。もう一度', not_found: 'このタスクがシートで見つかりません（PCで書き換えた？）。読み込み直します',
     no_todo: 'タスク名を入れてください', bad_ko: '工は 0〜24 の数字で', bad_date: '作業日を選んでください',
-    bad_actual: '実働は 0〜24 の数字で', server: 'スプシ側でエラーが起きました'
+    bad_actual: '実働は 0〜24 の数字で', server: 'スプシ側でエラーが起きました',
+    bad_wait: '待ち相手は40文字までで', bad_pre: '前提は一覧から選んでください（自分自身は選べません）',
+    no_wait_column: 'スプシに「👤」の列が見つかりません', no_pre_column: 'スプシに「前提」の列が見つかりません',
+    bad_action: 'スクリプトが古いままです。デプロイを新しい版にしてください'
   };
   var $ = function (id) { return document.getElementById(id); };
-  var state = { tasks: [], projects: [], today: '', actualColumn: false, loaded: false };
+  var state = { tasks: [], projects: [], today: '', actualColumn: false, loaded: false, preOptions: [], people: [], waitColumn: true, preColumn: true };
 
   // ---------- 端末内の保存（失敗しても動く） ----------
   function lsGet(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
@@ -145,6 +148,9 @@
         if (t.done) undone(t, row); else openSheet(t);
       });
       var body = el('div', 'body');
+      if (!t.done) { body.setAttribute('role', 'button'); body.tabIndex = 0; body.setAttribute('aria-label', '待ちの設定：' + t.todo);
+        body.addEventListener('click', function () { openWait(t); });
+        body.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openWait(t); } }); }
       body.appendChild(el('div', 'tt', t.todo));
       var meta = el('div', 'meta');
       if (t.pj) meta.appendChild(el('span', 'pj', t.pj));
@@ -169,7 +175,10 @@
     if (!quiet) $('status').textContent = '読み込み中…';
     return api('list').then(function (d) {
       state.tasks = d.tasks || []; state.projects = d.projects || []; state.actualColumn = !!d.actualColumn; state.loaded = true;
-      lsSet(CACHE_KEY, { tasks: state.tasks, projects: state.projects, today: state.today, actualColumn: state.actualColumn, at: Date.now() });
+      state.preOptions = d.preOptions || []; state.people = d.people || [];
+      state.waitColumn = d.waitColumn !== false; state.preColumn = d.preColumn !== false;
+      lsSet(CACHE_KEY, { tasks: state.tasks, projects: state.projects, today: state.today, actualColumn: state.actualColumn,
+        preOptions: state.preOptions, people: state.people, at: Date.now() });
       $('status').textContent = '';
       render();
     }, function (e) {
@@ -249,7 +258,64 @@
     clearInterval(tick); tick = setInterval(drawTimer, 500);
     $('shDone').focus();
   }
-  function closeSheet() { clearInterval(tick); $('dim').hidden = true; $('sheet').hidden = true; $('conf').hidden = true; stopScan(); cur = null; render(); }
+  function closeSheet() { clearInterval(tick); $('dim').hidden = true; $('sheet').hidden = true; $('conf').hidden = true; $('wsheet').hidden = true; stopScan(); cur = null; wcur = null; render(); }
+
+  // ---------- 待ちの設定（👤・前提） ----------
+  var wcur = null, wpre = '';
+  function openWait(t) {
+    wcur = t; wpre = t.pre || '';
+    $('wsTitle').textContent = t.todo;
+    var m = $('wsMeta'); m.innerHTML = '';
+    if (t.no != null) m.appendChild(el('span', '', 'No.' + t.no));
+    if (t.pj) m.appendChild(el('span', 'pj', t.pj));
+    if (t.date) m.appendChild(el('span', '', '📅 ' + md(t.date)));
+    $('wsWho').value = t.wait || ''; $('wsWho').disabled = !state.waitColumn;
+    var pp = $('wsPeople'); pp.innerHTML = '';
+    state.people.forEach(function (n) {
+      var b = el('button', '', n); b.type = 'button';
+      b.addEventListener('click', function () { $('wsWho').value = n; });
+      pp.appendChild(b);
+    });
+    $('wsPreQ').value = ''; $('wsPreQ').disabled = !state.preColumn;
+    drawPre();
+    $('dim').hidden = false; $('wsheet').hidden = false;
+  }
+  function drawPre() {
+    var cur = $('wsPreCur'); cur.innerHTML = '';
+    if (wpre) {
+      var hit = state.preOptions.filter(function (o) { return o.label === wpre; })[0];
+      cur.appendChild(el('span', '', '選択中：' + wpre + (hit ? '' : '（完了済み、または一覧にない）')));
+      var x = el('button', '', '外す'); x.type = 'button';
+      x.addEventListener('click', function () { wpre = ''; drawPre(); });
+      cur.appendChild(x);
+    } else cur.appendChild(el('span', 'none', '前提なし'));
+    var q = $('wsPreQ').value.trim().toLowerCase();
+    var list = state.preOptions.filter(function (o) {
+      return wcur && o.no !== wcur.no && (!q || o.label.toLowerCase().indexOf(q) !== -1 || (o.pj || '').toLowerCase().indexOf(q) !== -1);
+    }).slice(0, 40);
+    var box = $('wsPreList'); box.innerHTML = '';
+    list.forEach(function (o) {
+      var b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(o.label === wpre));
+      b.appendChild(document.createTextNode(o.label));
+      b.appendChild(el('small', '', [o.pj, o.date ? '📅 ' + md(o.date) : ''].filter(Boolean).join('　')));
+      b.addEventListener('click', function () { wpre = o.label; drawPre(); });
+      box.appendChild(b);
+    });
+    if (!list.length) box.appendChild(el('p', 'note', q ? '見つかりません' : '未完了のタスクがありません'));
+  }
+  function saveWait() {
+    var t = wcur; if (!t) return;
+    var params = { no: t.no, todo: t.todo };
+    var who = $('wsWho').value.trim();
+    if (state.waitColumn && who !== (t.wait || '')) params.wait = who;
+    if (state.preColumn && wpre !== (t.pre || '')) params.pre = wpre;
+    if (params.wait === undefined && params.pre === undefined) { closeSheet(); return; }
+    var btn = $('wsSave'); btn.disabled = true; btn.textContent = '保存中…';
+    api('setWait', params).then(function () {
+      toast('保存しました'); closeSheet(); return load(true);
+    }, function (e) { toast(errText(e), true); if (e.code === 'not_found') { closeSheet(); load(true); } })
+      .then(function () { btn.disabled = false; btn.textContent = '保存'; });
+  }
   function drawTimer() {
     if (!cur) return;
     var k = tkey(cur), sec = timerSec(k), run = timerRunning(k);
@@ -356,6 +422,7 @@
     var cache = lsGet(CACHE_KEY);
     if (cache && cache.tasks) {
       state.tasks = cache.tasks; state.projects = cache.projects || []; state.actualColumn = !!cache.actualColumn;
+      state.preOptions = cache.preOptions || []; state.people = cache.people || [];
       state.today = cache.today === localYmd() ? cache.today : localYmd();
     }
     if (!$('aDate').value) $('aDate').value = state.today || localYmd();
@@ -380,6 +447,9 @@
   $('shDone').addEventListener('click', doDone);
   $('shLater').addEventListener('click', closeSheet);
   $('dim').addEventListener('click', closeSheet);
+  $('wsSave').addEventListener('click', saveWait);
+  $('wsClose').addEventListener('click', closeSheet);
+  $('wsPreQ').addEventListener('input', drawPre);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('dim').hidden) closeSheet(); });
   $('reload').addEventListener('click', function () { if (conn()) load(); });
   $('settings').addEventListener('click', function () { if (conn()) openConf(); else $('scanBtn').focus(); });
