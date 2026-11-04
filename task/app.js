@@ -122,6 +122,13 @@
     fill($('carry'), carry, today); $('carryBox').hidden = !carry.length;
     fill($('todayList'), todays, today); $('todayEmpty').hidden = !!todays.length;
     fill($('doneList'), done, today); $('doneBox').hidden = !done.length;
+    // 明日：見るだけ（押して設定・チェックで完了もできる）。開いた／閉じたは端末ごとに覚える
+    var tmr = (state.tomorrow || []).slice().sort(function (a, b) { return rank(a) - rank(b) || order[a.slot] - order[b.slot]; });
+    $('tmrBox').hidden = !state.tomorrowDate;
+    if (state.tomorrowDate) {
+      $('tmrLbl').textContent = '明日（📅 ' + md(state.tomorrowDate) + '）' + tmr.length + '件';
+      fill($('tmrList'), tmr, today); $('tmrEmpty').hidden = !!tmr.length;
+    }
     $('sOpen').textContent = open.length + '件';
     $('sKo').textContent = h(open.concat(done).reduce(function (s, t) { return s + (t.ko || 0); }, 0));
     var acts = done.filter(function (t) { return t.actual != null; });
@@ -176,9 +183,10 @@
     return api('list').then(function (d) {
       state.tasks = d.tasks || []; state.projects = d.projects || []; state.actualColumn = !!d.actualColumn; state.loaded = true;
       state.preOptions = d.preOptions || []; state.people = d.people || [];
+      state.tomorrow = d.tomorrow || []; state.tomorrowDate = d.tomorrowDate || '';
       state.waitColumn = d.waitColumn !== false; state.preColumn = d.preColumn !== false;
       lsSet(CACHE_KEY, { tasks: state.tasks, projects: state.projects, today: state.today, actualColumn: state.actualColumn,
-        preOptions: state.preOptions, people: state.people, at: Date.now() });
+        preOptions: state.preOptions, people: state.people, tomorrow: state.tomorrow, tomorrowDate: state.tomorrowDate, at: Date.now() });
       $('status').textContent = '';
       render();
     }, function (e) {
@@ -447,6 +455,9 @@
     if (cache && cache.tasks) {
       state.tasks = cache.tasks; state.projects = cache.projects || []; state.actualColumn = !!cache.actualColumn;
       state.preOptions = cache.preOptions || []; state.people = cache.people || [];
+      // 前回の「明日」が今日になっていたら出さない（古い控え）
+      state.tomorrowDate = cache.tomorrowDate && cache.tomorrowDate > localYmd() ? cache.tomorrowDate : '';
+      state.tomorrow = state.tomorrowDate ? (cache.tomorrow || []) : [];
       state.today = cache.today === localYmd() ? cache.today : localYmd();
     }
     if (!$('aDate').value) $('aDate').value = state.today || localYmd();
@@ -472,6 +483,8 @@
   $('shLater').addEventListener('click', closeSheet);
   $('dim').addEventListener('click', closeSheet);
   $('wsSave').addEventListener('click', saveWait);
+  try { $('tmrDet').open = localStorage.getItem('task.tmrOpen') === '1'; } catch (e) { /* 覚えられない端末でも使える */ }
+  $('tmrDet').addEventListener('toggle', function () { try { localStorage.setItem('task.tmrOpen', this.open ? '1' : '0'); } catch (e) { /* なし */ } });
   $('wsClose').addEventListener('click', closeSheet);
   $('wsPreQ').addEventListener('input', drawPre);
   $('wsPreAll').addEventListener('click', function () { preOpen = true; drawPre(); });

@@ -145,3 +145,8 @@ html.noscroll, html.noscroll body { overflow: hidden; }
 .prelist button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .timepick { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .timepick input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); min-height: 44px; }
+.tmrsum { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; }
+.tmrsum::-webkit-details-marker { display: none; }
+.tmrsum::after { content: '▸'; font-size: 12px; transition: transform .15s; }
+#tmrDet[open] .tmrsum::after { transform: rotate(90deg); }
+#tmrDet[open] .tmrsum { margin-bottom: 8px; }
