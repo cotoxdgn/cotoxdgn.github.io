@@ -22,6 +22,8 @@
   --ax-bg: var(--bg); --ax-surface: var(--card); --ax-text: var(--ink); --ax-muted: var(--muted);
   --ax-line: var(--line); --ax-accent: #6F8A73; --ax-accent-text: #FFFFFF;
   --wk: #3C7DB4; --hol: #C2674F; --band: #E4EBE1; --grid: #E9E4DA; --danger: #9B2C1C;
+  --blue-soft: #DEE5EA; --mustard-soft: #F2E7CF; --lilac-soft: #E7E1EC;
+  --per: #AE5B57; --on-per: #FFFFFF; --per-soft: #F3DDDA; --shade: rgba(30, 32, 34, .35);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -29,6 +31,8 @@
     --sage: #8FA38F; --sage-soft: #3A453B; --rose: #C29790; --rose-soft: #4A3B39; --mustard: #C8A865; --blue: #8EA2B2; --lilac: #A597AF;
     --ax-accent: #9CB39F; --ax-accent-text: #1C2420;
     --wk: #4F8CC6; --hol: #CF6E54; --band: #384238; --grid: #3B4246; --danger: #F08A78;
+    --blue-soft: #364149; --mustard-soft: #4A4232; --lilac-soft: #403A47;
+    --per: #C0706B; --on-per: #1B1E21; --per-soft: #4A3332; --shade: rgba(0, 0, 0, .5);
   }
 }
 :root[data-theme="dark"] {
@@ -36,9 +40,12 @@
   --sage: #8FA38F; --sage-soft: #3A453B; --rose: #C29790; --rose-soft: #4A3B39; --mustard: #C8A865; --blue: #8EA2B2; --lilac: #A597AF;
   --ax-accent: #9CB39F; --ax-accent-text: #1C2420;
   --wk: #4F8CC6; --hol: #CF6E54; --band: #384238; --grid: #3B4246; --danger: #F08A78;
+  --blue-soft: #364149; --mustard-soft: #4A4232; --lilac-soft: #403A47;
+  --per: #C0706B; --on-per: #1B1E21; --per-soft: #4A3332; --shade: rgba(0, 0, 0, .5);
 }
 [hidden] { display: none !important; }
 html, body { min-height: 100%; }
+body { overflow-x: hidden; }
 main { max-width: 560px; margin: 0 auto; padding: 12px 16px calc(96px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 16px; }
 h1, h2, .num { font-family: var(--display); }
 .head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
@@ -72,28 +79,163 @@ h1, h2, .num { font-family: var(--display); }
 .hint { font-size: 12px; color: var(--muted); text-align: center; margin: 0; }
 .empty { padding: 20px; text-align: center; color: var(--muted); }
 
-/* カレンダー */
-.monthnav { display: flex; justify-content: space-between; align-items: center; }
+/* カレンダー（iPhone は1列。768px 以上は左に月のマス目、右にその日の中身） */
+main.wide { max-width: 1120px; }
+.monthnav { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .monthnav h2 { font-size: 20px; margin: 0; }
-.navbtn { width: 44px; height: 44px; border-radius: 50%; border: none; background: var(--card); color: var(--ink); font-size: 20px; cursor: pointer; }
-.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; text-align: center; }
-.cal .wd { font-size: 12px; color: var(--muted); padding-bottom: 2px; }
+.navbtn { width: 44px; height: 44px; border-radius: 50%; border: none; background: var(--card); color: var(--ink); font-size: 20px; cursor: pointer; flex: none; }
+.layers { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.layers button { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 2px 10px; min-height: 32px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.layers button[aria-pressed="true"] { background: var(--card); color: var(--ink); border-color: var(--ink); }
+.calwrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.calcol { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.cal .wd { font-size: 12px; color: var(--muted); text-align: center; }
 .cal .wd.sun { color: var(--rose); } .cal .wd.sat { color: var(--blue); }
-.day { position: relative; min-height: 52px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; padding-top: 4px; gap: 3px; font-size: 13px; font-variant-numeric: tabular-nums; }
-.day.today { box-shadow: inset 0 0 0 2px var(--ink); }
-.day.future { color: var(--line); }
-.day.full { background: var(--rose-soft); }
-.dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; min-height: 18px; align-items: center; max-width: 100%; }
-.dot { width: 8px; height: 8px; border-radius: 50%; display: block; }
-.flower { width: 18px; height: 18px; display: block; flex: none; }
+.day { position: relative; min-height: 78px; min-width: 0; border: 0; border-radius: 10px; background: var(--card); padding: 3px 2px; margin: 0;
+  display: flex; flex-direction: column; gap: 2px; text-align: left; overflow: hidden; color: var(--ink); cursor: pointer; font-size: 12px; line-height: 1.3; -webkit-tap-highlight-color: transparent; }
+.day.blank { background: transparent; cursor: default; }
+.day .n { font-size: 12px; line-height: 18px; padding-left: 3px; font-variant-numeric: tabular-nums; font-weight: 700; }
+.day.future .n { color: var(--muted); font-weight: 500; }
+.day.today .n { display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0; margin-left: 1px; border-radius: 50%; background: var(--ink); color: var(--card); }
+.day.sel { box-shadow: inset 0 0 0 2px var(--ax-accent); }
+.day.per { background: var(--per); color: var(--on-per); }
+.day.per .n { color: var(--on-per); }
+.day.per.today .n { background: var(--on-per); color: var(--per); }
+.day.yosoku { background: var(--per-soft); outline: 1.5px dashed var(--per); outline-offset: -2px; }
+.lab { display: flex; align-items: center; gap: 2px; min-width: 0; font-size: 9.5px; line-height: 15px; border-radius: 999px; padding: 0 2px; background: var(--lc-soft); color: var(--ink); white-space: nowrap; overflow: hidden; }
+.lab span { overflow: hidden; text-overflow: clip; }
+.lab .tm { display: none; color: var(--muted); flex: none; font-style: normal; }
+.lab i { flex: none; width: 11px; height: 11px; border-radius: 50%; background: var(--lc); display: grid; place-items: center; color: var(--card); }
+.lab i svg { width: 8px; height: 8px; }
+.lab.l3 { display: none; }
+.more { font-size: 9.5px; color: var(--muted); padding-left: 4px; line-height: 13px; }
+.day.per .more { color: var(--on-per); }
+.more.w { display: none; }
+.ph { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; overflow: hidden; border: 1.5px solid var(--card); background: var(--card); }
+.ph img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.ph .noimg { width: 100%; height: 100%; display: grid; place-items: center; background: var(--lc); color: var(--card); }
+.ph .noimg svg { width: 70%; height: 70%; }
+.ph b { position: absolute; right: -1px; bottom: -1px; font-size: 8px; line-height: 10px; min-width: 10px; text-align: center; background: var(--ink); color: var(--card); border-radius: 5px; }
+.stamps { margin-top: auto; display: flex; gap: 2px; justify-content: center; align-items: center; min-height: 14px; flex-wrap: wrap; }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: block; flex: none; }
+.flower { width: 15px; height: 15px; display: block; flex: none; }
 .moon { width: 11px; height: 11px; display: block; flex: none; }
-.day .moon { position: absolute; top: 3px; right: 3px; }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
-.legend span { display: flex; align-items: center; gap: 5px; }
-.summary { padding: 14px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+.day .moon { position: absolute; left: 22px; top: 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i.sq { display: inline-block; width: 12px; height: 12px; border-radius: 4px; }
+.summary { padding: 14px 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px 14px; }
 .summary div { display: flex; flex-direction: column; min-width: 0; }
 .summary b { font-size: 20px; font-variant-numeric: tabular-nums; }
 .summary small { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.calnote { font-size: 12px; color: var(--muted); margin: 0; }
+.calnote.err { color: var(--danger); }
+.panel { display: none; padding: 16px; position: sticky; top: 12px; }
+.pullhint { text-align: center; font-size: 12px; color: var(--muted); height: 0; overflow: hidden; transition: height .15s; }
+
+/* その日の中身（スマホは下から出る画面、広い幅は右の欄） */
+.dd { display: flex; flex-direction: column; gap: 12px; }
+.dd h3 { margin: 0; font-size: 18px; font-family: var(--display); }
+.dd .grp { display: flex; flex-direction: column; gap: 6px; }
+.dd .lb { font-size: 12px; color: var(--muted); letter-spacing: .06em; }
+.ev { display: flex; align-items: center; gap: 8px; font-size: 14px; min-width: 0; }
+.ev .tm { width: 92px; flex: none; white-space: nowrap; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.ev .tt { min-width: 0; overflow-wrap: anywhere; }
+.sticker { width: 22px; height: 22px; border-radius: 50%; background: var(--lc); color: var(--card); display: inline-grid; place-items: center; flex: none; box-shadow: 0 0 0 2px var(--card), 0 1px 3px rgba(0,0,0,.18); }
+.sticker svg { width: 13px; height: 13px; }
+.perline { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; padding: 4px 12px; border-radius: 999px; width: fit-content; }
+.perline.on { background: var(--per); color: var(--on-per); }
+.perline.pr { background: var(--per-soft); border: 1.5px dashed var(--per); }
+.hrow { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.hrow .dot { width: 12px; height: 12px; }
+.hrow .dot.off { background: transparent; border: 2px solid var(--line); }
+.thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+.thumb { border: 0; padding: 0; background: transparent; text-align: left; display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 12px; color: var(--ink); cursor: pointer; }
+.thumb .pic { aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--line); position: relative; display: block; }
+.thumb .pic img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.thumb .pic .noimg { width: 100%; height: 100%; display: grid; place-items: center; background: var(--lc-soft); }
+.thumb .pic .noimg .sticker { width: 34%; height: 34%; box-shadow: none; } .thumb .pic .noimg .sticker svg { width: 56%; height: 56%; }
+.thumb .cap { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.thumb small { color: var(--muted); font-size: 11px; }
+.thumb .tg { position: absolute; left: 6px; top: 6px; width: 20px; height: 20px; }
+.thumb .tg svg { width: 12px; height: 12px; }
+.sheet-bg { position: fixed; inset: 0; background: var(--shade); z-index: 60; }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; max-height: 80vh; overflow-y: auto; background: var(--bg); border-radius: 22px 22px 0 0;
+  padding: 10px 16px calc(24px + env(safe-area-inset-bottom)); z-index: 61; max-width: 560px; margin: 0 auto; }
+.sheet .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 8px; }
+.sheet .close { position: absolute; right: 10px; top: 8px; min-height: 36px; }
+
+/* 生理 */
+.btn-per { background: var(--per) !important; border-color: var(--per) !important; color: var(--on-per) !important; }
+.percard { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; border-left: 6px solid var(--per); }
+.percard .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.percard h2 { margin: 0; font-size: 16px; }
+.percard .st { font-size: 14px; }
+.percard .st b { font-family: var(--display); font-size: 20px; }
+.statbox { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.statbox .big { font-family: var(--display); font-size: 26px; line-height: 1.3; }
+.pred { padding: 14px 16px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; align-items: center; }
+.pred .chip { width: 52px; height: 52px; border-radius: 16px; background: var(--per-soft); border: 1.5px dashed var(--per); display: grid; place-items: center; font-family: var(--display); font-size: 15px; grid-row: span 2; }
+.pred b { font-size: 16px; }
+.pred small { font-size: 12px; color: var(--muted); }
+.row .bar { width: 8px; height: 30px; border-radius: 4px; background: var(--per); flex: none; }
+.row .bar.open { background: repeating-linear-gradient(180deg, var(--per) 0 5px, transparent 5px 8px); }
+.row .r { font-size: 12px; color: var(--muted); text-align: right; flex: none; }
+.narrow { max-width: 560px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+/* コレクション */
+.typechips { display: flex; gap: 6px; flex-wrap: wrap; }
+.typechips button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 3px 12px 3px 4px; min-height: 38px; font-size: 14px; color: var(--ink); cursor: pointer; }
+.typechips button.plain { padding-left: 12px; }
+.typechips button[aria-pressed="true"] { background: var(--card); border-color: var(--ink); font-weight: 700; }
+.typechips .sticker { width: 26px; height: 26px; box-shadow: none; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; }
+.photo-pick { border: 2px dashed var(--line); border-radius: 18px; background: var(--bg); aspect-ratio: 4 / 3; display: grid; place-items: center; overflow: hidden; padding: 0; margin: 2px 0 8px; width: 100%; color: var(--muted); font-size: 15px; cursor: pointer; }
+.photo-pick img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bigphoto { border-radius: 20px; overflow: hidden; aspect-ratio: 1; background: var(--line); max-width: 420px; width: 100%; align-self: center; }
+.bigphoto img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.bigphoto .noimg { width: 100%; height: 100%; display: grid; place-items: center; background: var(--lc-soft); }
+.bigphoto .noimg .sticker { width: 72px; height: 72px; } .bigphoto .noimg .sticker svg { width: 40px; height: 40px; }
+.iconpick, .colorpick { display: flex; gap: 8px; flex-wrap: wrap; margin: 2px 0 10px; }
+.iconpick button { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: transparent; color: var(--ink); display: grid; place-items: center; padding: 0; cursor: pointer; }
+.iconpick button svg { width: 20px; height: 20px; }
+.iconpick button[aria-pressed="true"] { background: var(--ink); color: var(--card); border-color: var(--ink); }
+.colorpick button { width: 36px; height: 36px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; }
+.colorpick button[aria-pressed="true"] { outline: 3px solid var(--ink); outline-offset: 2px; }
+textarea.ax-input { min-height: 72px; resize: vertical; }
+.counter { font-size: 12px; color: var(--muted); text-align: right; margin-top: -8px; }
+.sw { width: 48px; height: 28px; border-radius: 999px; background: var(--line); position: relative; flex: none; border: 0; padding: 0; cursor: pointer; }
+.sw::after { content: ""; position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--card); transition: left .15s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.sw[aria-checked="true"] { background: var(--ax-accent); }
+.sw[aria-checked="true"]::after { left: 23px; }
+.placeholder { padding: 28px 20px; text-align: center; color: var(--muted); }
+.rechead { display: flex; flex-direction: column; gap: 10px; }
+.rechead .seg a { display: inline-flex; align-items: center; padding: 4px 14px; min-height: 40px; font-size: 15px; color: var(--ink); text-decoration: none; }
+.rechead .seg a + a { border-left: 1px solid var(--line); }
+.rechead .seg a[aria-current="page"] { background: var(--ink); color: var(--card); }
+
+@media (min-width: 768px) {
+  .calwrap { grid-template-columns: minmax(0, 1fr) 320px; }
+  .panel { display: block; }
+  .cal { gap: 5px; }
+  .day { min-height: 112px; padding: 5px 4px; border-radius: 12px; gap: 3px; }
+  .day .n { font-size: 14px; }
+  .day.today .n { width: 24px; height: 24px; }
+  .day .moon { left: 30px; top: 7px; }
+  .lab { font-size: 11.5px; line-height: 19px; padding: 0 6px 0 3px; gap: 4px; }
+  .lab i { width: 15px; height: 15px; } .lab i svg { width: 10px; height: 10px; }
+  .lab .tm { display: inline; }
+  .lab span { text-overflow: ellipsis; }
+  .lab.l3 { display: flex; }
+  .more.n { display: none; } .more.w { display: block; font-size: 11px; }
+  .ph { width: 34px; height: 34px; top: 4px; right: 4px; border-radius: 10px; }
+  .dot { width: 9px; height: 9px; }
+  .flower { width: 20px; height: 20px; }
+  .gallery { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
+  .thumb .cap { font-size: 14px; }
+  .sheet, .sheet-bg { display: none !important; }
+}
 
 /* 習慣・設定 */
 .list { background: var(--card); border-radius: 20px; overflow: hidden; }
@@ -198,19 +340,114 @@ button.row { width: 100%; background: transparent; border-left: 0; border-right:
     </div>
     <div class="habits" id="habits"></div>
     <div class="alldone" id="alldone" hidden></div>
+    <div class="card percard" id="tPer"></div>
     <p class="hint">丸をタップで記録／もう一度タップで取り消し。深夜3時までは前の日として記録します</p>
   </section>
 
   <!-- カレンダー -->
   <section class="view" id="v-calendar" hidden>
-    <div class="monthnav">
-      <button class="navbtn" type="button" id="prevM" aria-label="前の月">‹</button>
-      <h2 id="monthTitle"></h2>
-      <button class="navbtn" type="button" id="nextM" aria-label="次の月">›</button>
+    <div class="pullhint" id="pullHint">はなすと予定を読み直します</div>
+    <div class="calwrap">
+      <div class="calcol">
+        <div class="monthnav">
+          <button class="navbtn" type="button" id="prevM" aria-label="前の月">‹</button>
+          <h2 id="monthTitle"></h2>
+          <button class="navbtn" type="button" id="nextM" aria-label="次の月">›</button>
+        </div>
+        <div class="layers" role="group" aria-label="カレンダーに出すもの">表示
+          <button type="button" data-ly="ev" aria-pressed="true">予定</button>
+          <button type="button" data-ly="hb" aria-pressed="true">習慣</button>
+          <button type="button" data-ly="per" aria-pressed="true">生理</button>
+          <button type="button" data-ly="ph" aria-pressed="true">写真</button>
+        </div>
+        <div class="cal" id="cal"></div>
+        <p class="calnote" id="calNote" role="status"></p>
+        <div class="legend" id="legend"></div>
+        <div class="card summary" id="summary"></div>
+      </div>
+      <div class="card panel" id="panel" aria-live="polite"></div>
     </div>
-    <div class="cal" id="cal"></div>
-    <div class="legend" id="legend"></div>
-    <div class="card summary" id="summary"></div>
+  </section>
+
+  <!-- 記録：生理 -->
+  <section class="view" id="v-rec" hidden>
+    <div class="narrow">
+      <div class="rechead" data-rechead></div>
+      <div id="recPer" style="display:flex;flex-direction:column;gap:16px"></div>
+    </div>
+  </section>
+
+  <!-- 記録：コレクション -->
+  <section class="view" id="v-collection" hidden>
+    <div class="rechead" data-rechead></div>
+    <div class="typechips" role="group" aria-label="種類で絞り込み" id="colTypes"></div>
+    <div class="btns"><a class="ax-btn ax-btn-primary" href="#item-edit" id="colAdd">＋ 追加</a><span class="small muted" style="align-self:center" id="colCount"></span></div>
+    <div id="gallery"></div>
+  </section>
+
+  <!-- 生理：日付を直す・過去の記録を入れる -->
+  <section class="view" id="v-per-edit" hidden>
+    <a class="ax-btn ax-btn-ghost back" href="#rec">‹ 記録へ戻る</a>
+    <div class="head"><h1 id="peTitle">生理の記録を直す</h1></div>
+    <form class="card form" id="peForm">
+      <div class="two">
+        <div><label for="peS">始まった日</label><input class="ax-input" type="date" id="peS" required></div>
+        <div><label for="peE">終わった日</label><input class="ax-input" type="date" id="peE"></div>
+      </div>
+      <p class="note" style="margin-bottom:10px">終わった日を空にすると「記録中（まだ続いている）」になります。</p>
+      <div class="btns"><button class="ax-btn ax-btn-primary" type="submit">保存</button><button class="ax-btn ax-btn-danger" type="button" id="peDel">この記録を消す</button></div>
+    </form>
+  </section>
+
+  <!-- コレクション：1件を追加・直す -->
+  <section class="view" id="v-item-edit" hidden>
+    <a class="ax-btn ax-btn-ghost back" href="#collection">‹ コレクションへ戻る</a>
+    <div class="head"><h1 id="ieTitle">追加</h1></div>
+    <form class="card form" id="ieForm">
+      <span class="small muted">写真（1枚）</span>
+      <button class="photo-pick" type="button" id="iePick">写真を選ぶ・撮る</button>
+      <input type="file" accept="image/*" id="ieFile" hidden>
+      <div class="btns" style="margin:-2px 0 10px" id="iePhBtns"><button class="ax-btn ax-btn-ghost" type="button" id="ieNoPh">写真を外す</button></div>
+      <span class="small muted">種類</span>
+      <div class="typechips" id="ieTypes" style="margin:2px 0 10px"></div>
+      <label for="ieName">名前</label>
+      <input class="ax-input" id="ieName" maxlength="30" required placeholder="例：かぼちゃのポタージュ">
+      <label for="ieDate">日付</label>
+      <input class="ax-input" type="date" id="ieDate" required>
+      <label for="ieMemo">ひとことメモ（60文字まで）</label>
+      <textarea class="ax-input" id="ieMemo" maxlength="60" placeholder="例：牛乳多めでなめらか"></textarea>
+      <div class="counter" id="ieCount">0／60</div>
+      <div class="btns"><button class="ax-btn ax-btn-primary" type="submit" id="ieSave">保存</button><button class="ax-btn ax-btn-danger" type="button" id="ieDel" hidden>この記録を消す</button></div>
+      <p class="note" style="margin-top:8px">写真はアプリの中で小さくしてから、ドライブのアプリ用フォルダに保存します。写真を保存するときはネットにつながっている必要があります。</p>
+    </form>
+  </section>
+
+  <!-- コレクション：1件を見る -->
+  <section class="view" id="v-item-view" hidden>
+    <a class="ax-btn ax-btn-ghost back" href="#collection">‹ コレクションへ戻る</a>
+    <div class="bigphoto" id="ivPh"></div>
+    <div class="head"><h1 id="ivName"></h1></div>
+    <div class="sub" id="ivMeta"></div>
+    <p id="ivMemo" style="margin:0;overflow-wrap:anywhere"></p>
+    <div class="btns"><button class="ax-btn" type="button" id="ivEdit">直す</button><button class="ax-btn" type="button" id="ivCal">カレンダーで見る</button><button class="ax-btn ax-btn-danger" type="button" id="ivDel">消す</button></div>
+  </section>
+
+  <!-- コレクション：種類 -->
+  <section class="view" id="v-types" hidden>
+    <a class="ax-btn ax-btn-ghost back" href="#collection">‹ コレクションへ戻る</a>
+    <div class="head"><h1>種類</h1><span class="sub">名前を変える・並べ替え・しまう</span></div>
+    <div class="list" id="teList"></div>
+    <form class="card form" id="teForm">
+      <h2 id="teTitle">種類を追加</h2>
+      <label for="teName">名前</label>
+      <input class="ax-input" id="teName" maxlength="12" required placeholder="例：カフェ・器・本屋">
+      <span class="small muted">シールの絵</span>
+      <div class="iconpick" id="teIcons"></div>
+      <span class="small muted">色</span>
+      <div class="colorpick" id="teColors"></div>
+      <div class="btns"><button class="ax-btn ax-btn-primary" type="submit" id="teSave">追加</button><button class="ax-btn ax-btn-ghost" type="button" id="teCancel" hidden>やめる</button></div>
+    </form>
+    <p class="note">しまった種類は、追加するときの選択肢とギャラリーの絞り込みから消えます。中の記録とカレンダーの写真は残ります。</p>
   </section>
 
   <!-- 習慣の編集・設定 -->
@@ -237,6 +474,8 @@ button.row { width: 100%; background: transparent; border-left: 0; border-right:
     <div class="list" id="archivedList"></div>
     <div class="sect">設定</div>
     <div class="list">
+      <div class="row"><div class="txt"><span id="swSleepLb">睡眠を表示する</span><small>オンにすると「記録」に睡眠が出ます（データはオフでも残ります）</small></div><button class="sw" type="button" role="switch" aria-checked="false" id="swSleep" aria-labelledby="swSleepLb"></button></div>
+      <div class="row"><div class="txt"><span>予定を読むカレンダー</span><small>普段使いのGoogleカレンダー（1つ）。スプシには保存しません</small></div></div>
       <a class="row" href="#notify" style="color:inherit;text-decoration:none"><div class="txt"><span>通知の設定</span><small>iPhoneのショートカットで毎日お知らせ</small></div><span aria-hidden="true">›</span></a>
       <button class="row" type="button" id="connBtn"><div class="txt"><span>スプレッドシートとの接続</span><small id="connState"></small></div><span aria-hidden="true">›</span></button>
       <div class="row"><div class="txt"><span>1日の区切り</span><small>この時刻までは前の日として記録</small></div><span>午前3時</span></div>
@@ -262,7 +501,8 @@ button.row { width: 100%; background: transparent; border-left: 0; border-right:
 
   <!-- 睡眠 -->
   <section class="view" id="v-sleep" hidden>
-    <div class="head sl-head"><div><h1>睡眠</h1><span class="sub" id="slSub"></span></div>
+    <div class="rechead" data-rechead></div>
+    <div class="head sl-head"><div><span class="sub" id="slSub"></span></div>
       <a class="gear" href="#sleep-goal" aria-label="睡眠の目標"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></svg></a></div>
     <div id="slToday"></div>
     <div class="stats three">
@@ -376,12 +616,16 @@ button.row { width: 100%; background: transparent; border-left: 0; border-right:
 <nav class="tabbar" aria-label="画面の切り替え"><div class="in">
   <a href="#today" data-v="today"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>今日</a>
   <a href="#calendar" data-v="calendar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 10h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>カレンダー</a>
-  <a href="#sleep" data-v="sleep"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/></svg>睡眠</a>
+  <a href="#rec" data-v="rec"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 4h10l3 3v13H6z"/><path d="M12.5 15.5s-3-1.8-3-3.6a1.6 1.6 0 0 1 3-.8 1.6 1.6 0 0 1 3 .8c0 1.8-3 3.6-3 3.6z" stroke-width="1.6"/></svg>記録</a>
   <a href="#habits" data-v="habits"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>習慣</a>
 </div></nav>
+<div class="sheet-bg" id="sheetBg" hidden></div>
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="その日の中身"><div class="grab"></div><button class="ax-btn ax-btn-ghost close" type="button" id="sheetX">閉じる</button><div id="sheetBody"></div></div>
 
 <script src="../shared/apps.js"></script>
 <script src="sleep.js"></script>
+<script src="period.js"></script>
+<script src="stickers.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

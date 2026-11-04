@@ -92,7 +92,7 @@ t('sleepPut：読める件が無ければ保存しない（前に届いた分を
 
 t('睡眠用の合言葉では sleepPut 以外はすべて断る', () => {
   for (const action of ['ping', 'list', 'put', 'delete', 'batch', 'image', 'imageData', 'imageDelete', 'names', 'geocode', 'mapLink',
-    'yoteiCal', 'yoteiResults', 'yoteiCreateEvent', 'sleepKey', 'zzz']) {
+    'yoteiCal', 'yoteiResults', 'yoteiCreateEvent', 'calMonth', 'sleepKey', 'zzz']) {
     const r = call({ key: SKEY, action, app: 'routine', id: 'x', data: {}, ops: [], renew: true, q: '大阪', from: '2026-11-01', to: '2026-11-02' });
     assert.deepStrictEqual(r, { ok: false, error: 'bad_key' }, action);
   }

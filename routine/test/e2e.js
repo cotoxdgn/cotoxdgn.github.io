@@ -1,4 +1,5 @@
 // ルーティン（起床・就寝記録）の画面試験（Playwright の Chromium）
+// 2版目から睡眠は「記録」の中（習慣の設定「睡眠を表示する」でオン）。#sleep のリンクはそのまま 記録＞睡眠 を開く
 // 実行：node routine/test/e2e.js [スクショの保存先]
 // スプシ（Apps Script）は test/gas-mock.js の Code.gs につなぐ。iPhone のショートカットの送信は sleepPut を直接呼んで再現する。
 'use strict';
@@ -71,6 +72,12 @@ async function settled(page) {
 }
 const sync = page => page.evaluate(() => Apps.collection('routine').sync());
 const text = (page, sel) => page.locator(sel).innerText();
+// 記録＞睡眠 を開く（切り替えの「睡眠」を押す）
+async function openSleep(page) {
+  await page.click('.tabbar a[data-v="rec"]');
+  await page.click('#v-' + (await page.evaluate(() => location.hash.slice(1) || 'rec')) + ' [data-rv="sleep"]');
+  await page.waitForSelector('#v-sleep:not([hidden])');
+}
 const row = (page, ds) => page.locator(`#slRecent [data-ed="${ds}"]`);
 async function noHScroll(page, label) {
   const o = await page.evaluate(() => {
@@ -104,7 +111,14 @@ async function noHScroll(page, label) {
     await page.waitForFunction(() => Apps.isConnected('routine'));
     await sync(page);
     assert.strictEqual(await page.locator('.tabbar a').count(), 4);
-    await page.click('.tabbar a[data-v="sleep"]');
+    // 睡眠は最初は隠れている。習慣の設定でオンにすると「記録」に出る
+    await page.click('.tabbar a[data-v="rec"]');
+    assert.strictEqual(await page.locator('#v-rec [data-rv="sleep"]').count(), 0);
+    await page.click('.tabbar a[data-v="habits"]');
+    assert.strictEqual(await page.getAttribute('#swSleep', 'aria-checked'), 'false');
+    await page.click('#swSleep');
+    assert.strictEqual(await page.getAttribute('#swSleep', 'aria-checked'), 'true');
+    await openSleep(page);
     await page.waitForSelector('#slCard');
     assert.strictEqual(await text(page, '#slBed'), '0:12');
     assert.strictEqual(await text(page, '#slWake'), '7:26');
@@ -119,7 +133,8 @@ async function noHScroll(page, label) {
     assert.strictEqual(await text(page, '#stWake'), '4');
     assert.strictEqual(await text(page, '#stBed'), '4');
     assert.strictEqual(await text(page, '#stLen'), '2');
-    assert.strictEqual(await page.locator('.tabbar a[data-v="sleep"]').getAttribute('aria-current'), 'page');
+    assert.strictEqual(await page.locator('.tabbar a[data-v="rec"]').getAttribute('aria-current'), 'page');
+    assert.strictEqual(await page.locator('#v-sleep [data-rv="sleep"]').getAttribute('aria-current'), 'page');
     await page.screenshot({ path: path.join(SHOT, 'phone-1-sleep.png'), fullPage: true });
     await noHScroll(page, 'sleep');
   });
@@ -212,7 +227,7 @@ async function noHScroll(page, label) {
   });
 
   await t('目標の変更：今日からの記録に新しい目標。前の日はその時の目標のまま', async () => {
-    await page.click('.tabbar a[data-v="sleep"]');
+    await openSleep(page);
     await page.click('a.gear');
     await page.waitForSelector('#v-sleep-goal:not([hidden])');
     assert.strictEqual(await page.inputValue('#gWake'), '07:15');
@@ -259,7 +274,7 @@ async function noHScroll(page, label) {
   });
 
   await t('合言葉：送り先URLと睡眠用の合言葉を表示・コピー・作り直し', async () => {
-    await page.click('.tabbar a[data-v="sleep"]');
+    await openSleep(page);
     await page.click('a[href="#sleep-setup"]');
     await page.waitForSelector('#v-sleep-setup:not([hidden])');
     assert.ok(/\/exec$/.test(await text(page, '#skUrl')));
@@ -293,7 +308,7 @@ async function noHScroll(page, label) {
     await p2.goto(BASE + '/routine/' + hash);
     await p2.waitForFunction(() => Apps.isConnected('routine'));
     await sync(p2);
-    await p2.click('.tabbar a[data-v="sleep"]');
+    await p2.evaluate(() => { location.hash = '#sleep'; });
     await p2.waitForSelector('#slMissing');
     assert.ok((await text(p2, '#slMissing')).includes('今朝の記録がまだ届いていません'));
     assert.strictEqual(await p2.getAttribute('#slRun', 'href'), 'shortcuts://run-shortcut?name=' + encodeURIComponent('睡眠を送る'));
@@ -324,7 +339,7 @@ async function noHScroll(page, label) {
     await p3.goto(BASE + '/routine/' + hash);
     await p3.waitForFunction(() => Apps.isConnected('routine'));
     await sync(p3);
-    await p3.click('.tabbar a[data-v="sleep"]');
+    await p3.evaluate(() => { location.hash = '#sleep'; });
     await p3.waitForSelector('#slCard');
     await p3.screenshot({ path: path.join(SHOT, 'phone-11-dark.png'), fullPage: true });
     await noHScroll(p3, 'dark');

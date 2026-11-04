@@ -14,6 +14,7 @@
  *          yoteiCal / yoteiResults / yoteiCreateEvent（予定合わせ・合言葉が要る）
  *          yoteiGet / yoteiAnswer（予定合わせの相手用・合言葉なし。下の「予定合わせ」を参照）
  *          sleepPut（睡眠の記録。睡眠用の合言葉でも使える）／ sleepKey（睡眠用の合言葉を見る・作り直す。下の「睡眠」を参照）
+ *          calMonth（ルーティンの月カレンダー用。普段使いのカレンダーの予定の件名・時刻・色。いつもの合言葉だけ。下の「月カレンダー」を参照）
  */
 
 var CONNECT_URL = 'https://cotoxdgn.github.io/connect/';
@@ -217,8 +218,8 @@ function handle_(req) {
     g.ok = true; g.now = now_();
     return g;
   }
-  if (req.action === 'yoteiCal') {   // カレンダーを読むだけ（スプシに書かない）ので、ロックなし
-    var yc = yoteiCal_(req);
+  if (req.action === 'yoteiCal' || req.action === 'calMonth') {   // カレンダーを読むだけ（スプシに書かない）ので、ロックなし
+    var yc = req.action === 'yoteiCal' ? yoteiCal_(req) : calMonth_(req);
     if (yc.error) return yc.detail ? { ok: false, error: yc.error, detail: yc.detail } : { ok: false, error: yc.error };
     yc.ok = true; yc.now = now_();
     return yc;
@@ -511,6 +512,40 @@ function authorizeCalendar() {
   var cal = CalendarApp.getDefaultCalendar();
   var t = new Date();
   Logger.log('ok ' + cal.getEvents(t, new Date(t.getTime() + 86400000)).length);
+}
+
+// ---------- 月カレンダー（ルーティン） ----------
+// calMonth：{ from, to }（YYYY-MM-DD・42日まで）→ events:[{ title, start, end, allDay, color }]
+//  ・普段使いのカレンダー1つだけ（予定合わせと同じ許可。authorizeCalendar を参照）。スプシには書かない
+//  ・返すのは件名・開始・終了・終日かどうか・色（Googleカレンダーの色番号 '1'〜'11'、なし＝''）だけ。場所・メモ・参加者は返さない
+//  ・欠席にした予定は除く。終日の予定は start・end を日付（YYYY-MM-DD、end は最後の日の次の日）で返す
+//  ・いつもの合言葉の本人だけ（睡眠用の合言葉・合言葉なしの窓口からは呼べない。handle_ を参照）
+var CAL_MONTH_MAX_DAYS = 42;
+function calDate_(d) { return new Date(d.getTime() + 9 * 3600000).toISOString().slice(0, 10); }   // 日本時間の日付
+function calMonth_(req) {
+  var s = yoteiDay_(req.from), e = yoteiDay_(req.to);
+  if (isNaN(s) || isNaN(e) || e < s) return { error: 'bad_request' };
+  if ((e - s) / DAY_MS + 1 > CAL_MONTH_MAX_DAYS) return { error: 'too_long' };
+  var evs;
+  try {
+    evs = CalendarApp.getDefaultCalendar().getEvents(new Date(s), new Date(e + DAY_MS));
+  } catch (err) {
+    return { error: 'calendar', detail: String((err && err.message) || err).slice(0, 200) };
+  }
+  var out = [];
+  evs.forEach(function (ev) {
+    try { if (ev.getMyStatus() === CalendarApp.GuestStatus.NO) return; } catch (x) { /* 自分の予定など */ }
+    var all = !!ev.isAllDayEvent(), st = ev.getStartTime(), en = ev.getEndTime(), color = '';
+    try { color = String(ev.getColor() || ''); } catch (x2) { color = ''; }
+    out.push({
+      title: String(ev.getTitle() || '').slice(0, 200),
+      start: all ? calDate_(st) : st.toISOString(),
+      end: all ? calDate_(en) : en.toISOString(),
+      allDay: all,
+      color: /^\d{1,2}$/.test(color) ? color : ''
+    });
+  });
+  return { events: out };
 }
 
 // ---------- 予定合わせ（yotei） ----------
