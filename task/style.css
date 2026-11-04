@@ -124,12 +124,21 @@ video { width: 100%; max-height: 50vh; border-radius: 12px; background: #000; ob
 
 /* 待ちの設定 */
 .task .body { cursor: pointer; }
-.pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.pick { display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 2px; }
+.pick::-webkit-scrollbar { display: none; }
+.pick button { flex: 0 0 auto; white-space: nowrap; }
 .pick button { border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 4px 10px; font-size: 13px; min-height: 32px; }
 .precur { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
 .precur .none { color: var(--muted); }
 .precur button { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 2px 10px; font-size: 13px; min-height: 32px; }
-.prelist { display: grid; gap: 4px; max-height: 34vh; overflow: auto; }
+.prelist { display: flex; flex-direction: column; gap: 6px; }
+.prelist button { flex: 0 0 auto; }
+.prelist .note { margin: 0; }
+.btn.sm { min-height: 40px; padding: 6px 12px; font-size: 14px; }
+#wsheet { overscroll-behavior: contain; padding-bottom: 0; }
+.sheetfoot { position: sticky; bottom: 0; display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin: 0 -16px; padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
+  background: var(--paper); border-top: 1px solid var(--line); }
+html.noscroll, html.noscroll body { overflow: hidden; }
 .prelist button { text-align: left; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 8px 10px; font-size: 14px; min-height: 44px; overflow-wrap: anywhere; }
 .prelist button small { display: block; color: var(--muted); font-size: 12px; }
 .prelist button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }

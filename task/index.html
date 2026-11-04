@@ -180,10 +180,13 @@
     <label for="wsPreQ">前提のタスク（K列）</label>
     <div class="precur" id="wsPreCur"></div>
     <input id="wsPreQ" type="search" placeholder="番号・名前で探す（未完了のタスク）" autocomplete="off">
+    <button type="button" class="btn ghost sm" id="wsPreAll">一覧から選ぶ</button>
     <div class="prelist" id="wsPreList"></div>
   </div>
-  <button type="button" class="btn" id="wsSave">保存</button>
-  <button type="button" class="btn ghost" id="wsClose">閉じる</button>
+  <div class="sheetfoot">
+    <button type="button" class="btn ghost" id="wsClose">閉じる</button>
+    <button type="button" class="btn" id="wsSave">保存</button>
+  </div>
 </div>
 
 <!-- 接続の設定 -->
