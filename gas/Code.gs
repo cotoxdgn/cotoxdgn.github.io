@@ -876,11 +876,30 @@ function sleepKey_(conf, req) {
 
 function sleepTime_(v) {
   if (typeof v !== 'string' || v.length > 40) return NaN;
-  return Date.parse(v);
+  v = v.trim();
+  var t = Date.parse(v);
+  if (!isNaN(t) && /[T ]\d{1,2}:\d{2}.*(Z|[+-]\d{2}:?\d{2})$/.test(v)) return t;   // ISO 8601（時差つき）
+  // 「2026/11/04 1:23」「2026-11-04 01:23:45」「2026年11月4日 1:23」など時差なしは日本時間として読む
+  var m = /^(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})日?[ T]*(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(v);
+  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)) - SLEEP_JST_MS;
+  return t;
+}
+
+// かんたん版ショートカット：s・e・v を「1行に1つ」のテキストで受け取り、samples の形にそろえる
+//   （ショートカットでは、ヘルスケアのサンプルの「開始日」「終了日」「値」をそのまま入れると改行区切りになる）
+function sleepLines_(req) {
+  var lines = function (x) {
+    if (Array.isArray(x)) return x.map(String);
+    return String(x == null ? '' : x).split(/\r?\n/).map(function (y) { return y.trim(); }).filter(function (y) { return y !== ''; });
+  };
+  var s = lines(req.s), e = lines(req.e), v = lines(req.v);
+  if (!s.length || s.length !== e.length) return null;
+  return s.map(function (x, i) { return { s: x, e: e[i], v: v.length === s.length ? v[i] : '' }; });
 }
 
 function sleepPut_(ss, req) {
   var list = req.samples;
+  if (!Array.isArray(list) && req.s !== undefined) list = sleepLines_(req);
   if (!Array.isArray(list)) return { error: 'bad_request' };
   if (list.length > SLEEP_MAX_SAMPLES) return { error: 'too_many' };
   var samples = [], last = -Infinity;

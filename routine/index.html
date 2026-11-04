@@ -571,39 +571,27 @@ button.row { width: 100%; background: transparent; border-left: 0; border-right:
   <section class="view" id="v-sleep-setup" hidden>
     <a class="ax-btn ax-btn-ghost back" href="#sleep">‹ 睡眠へ戻る</a>
     <div class="head"><h1>自動で送る設定</h1></div>
-    <p class="small" style="margin:0">iPhone の「ショートカット」で、ヘルスケアの昨夜の睡眠をスプレッドシートへ送ります。最初に1回だけ作れば、あとは毎朝自動です。同じ日に何回送っても上書きされるだけで、二重にはなりません。</p>
-    <div class="sect">① ショートカット「睡眠を送る」を作る</div>
+    <p class="small" style="margin:0">iPhone の「ショートカット」で、ヘルスケアの昨夜の睡眠をスプレッドシートへ送ります。アクションは2つだけ。同じ日に何回送っても上書きされるだけで、二重にはなりません。<b>先に下の「送り先URL」と「睡眠用の合言葉」をコピーできるようにしておくと楽です</b>（端末間コピペに貼っておくなど）。</p>
+    <div class="sect">① ショートカット「睡眠を送る」を作る（アクション2つ）</div>
     <ol class="card steps tight">
-      <li>「ショートカット」アプリ →「＋」→ 名前を <span class="kv">睡眠を送る</span> にする（ⓘ の詳細で「入力を受け取る」を <span class="kv">テキスト</span> に）</li>
-      <li><b>今日すでに送ったかを確かめる</b>（2回目からはすぐ終わる）
-        <br>・<b>日付を書式設定</b>：<span class="kv">現在の日付</span>、書式 <span class="kv">カスタム yyyy-MM-dd</span>（名前を「今日」に）
-        <br>・<b>ファイルを取得</b>：<span class="kv">Shortcuts/睡眠を送った日.txt</span>、「見つからない場合にエラー」をオフ
-        <br>・<b>もし</b> <span class="kv">ショートカットの入力</span> が <span class="kv">いま</span> を含まない：
-        <br>　　<b>もし</b> <span class="kv">ファイル</span> が <span class="kv">今日</span> である →「<b>ショートカットを停止</b>」
-        <br>　　<b>日付を書式設定</b> <span class="kv">現在の日付・カスタム H</span> →「<b>数値</b>」→ <b>もし</b> <span class="kv">数値</span> が <span class="kv">5</span> より小さい →「<b>ショートカットを停止</b>」（夜中に開いたときは送らない）</li>
-      <li><b>ヘルスケアのサンプルを検索</b>：種類 <span class="kv">睡眠分析</span>、条件 <span class="kv">開始日が過去18時間</span>、並び順 <span class="kv">開始日・古い順</span>、上限なし</li>
-      <li><b>各項目を反復</b> の中に <b>辞書</b>：<span class="kv">s＝開始日</span> <span class="kv">e＝終了日</span> <span class="kv">v＝値</span>（日付の書式は ISO 8601・時刻あり）</li>
-      <li>反復の後に <b>辞書</b>：<span class="kv">key＝下の睡眠用の合言葉</span> <span class="kv">action＝sleepPut</span> <span class="kv">samples＝反復の結果</span></li>
-      <li><b>URLの内容を取得</b>：URL <span class="kv">下の送り先URL</span>、方法 <span class="kv">POST</span>、ヘッダ <span class="kv">Content-Type：text/plain</span>、本文 <span class="kv">ファイル＝5の辞書</span></li>
-      <li><b>辞書の値を取得</b> <span class="kv">ok</span> → <b>もし</b> 値 が「はい」：<b>テキスト</b> <span class="kv">今日</span> →「<b>ファイルを保存</b>」<span class="kv">Shortcuts/睡眠を送った日.txt</span>（保存先を尋ねる：オフ、上書き：オン）
-        <br>そうでなければ：<b>通知を表示</b>「睡眠の記録を送れませんでした」</li>
-      <li>一度実行して、ヘルスケアの「睡眠」の読み取りを許可</li>
+      <li>「ショートカット」アプリ → 右上の「＋」→ 上の名前を <span class="kv">睡眠を送る</span> にする</li>
+      <li>「アクションを検索」で <b>ヘルスケアのサンプルを検索</b> を追加 →「サンプルの種類」を <span class="kv">睡眠分析</span> → 「フィルタを追加」で <span class="kv">開始日</span> が <span class="kv">過去 18 時間</span> にする</li>
+      <li>「アクションを検索」で <b>URLの内容を取得</b> を追加 → 「URL」に下の<b>送り先URL</b>を貼る → 「＞」を開いて <span class="kv">方法：POST</span>、<span class="kv">要求本文：JSON</span></li>
+      <li>「新規フィールドを追加」→「テキスト」で次の5つを作る（左がキー、右が値）
+        <br>・<span class="kv">key</span> ＝ 下の<b>睡眠用の合言葉</b>を貼る
+        <br>・<span class="kv">action</span> ＝ <span class="kv">sleepPut</span>
+        <br>・<span class="kv">s</span> ＝ 値の欄で「変数を選択」→ <b>ヘルスケアのサンプル</b> → 青くなった「ヘルスケアのサンプル」をもう一度押して <span class="kv">開始日</span>、日付の書式を <span class="kv">ISO 8601</span>（時刻を含める：オン）
+        <br>・<span class="kv">e</span> ＝ 同じように <span class="kv">終了日</span>（日付の書式 ISO 8601・時刻あり）
+        <br>・<span class="kv">v</span> ＝ 同じように <span class="kv">値</span></li>
+      <li>右下の ▶ で一度実行 → ヘルスケアの「睡眠」の読み取りを許可 → 最後に <span class="kv">"ok":true</span> と出れば完成（このアプリの睡眠にも昨夜の分が出ます）</li>
     </ol>
-    <div class="sect">② 毎朝 9:00 に動かす</div>
+    <div class="sect">② 朝に自動で動かす（オートメーション1つ）</div>
     <ol class="card steps tight">
-      <li>「オートメーション」→ 右上の「＋」→「時刻」</li>
-      <li>9:00・毎日 を選ぶ</li>
-      <li>「すぐに実行」を選び、「実行時に通知」をオフ</li>
-      <li>「睡眠を送る」を選んで完了</li>
+      <li>ショートカットアプリの下の「オートメーション」→「＋」→「App」</li>
+      <li>朝いちばんに開くアプリを選ぶ（例：LINE・おこしてME）。「開いている」にチェック</li>
+      <li>「すぐに実行」を選び、「実行時に通知」をオフ →「睡眠を送る」を選んで完了</li>
     </ol>
-    <div class="sect">③ 起きたら必ず開くアプリを開いたときにも動かす</div>
-    <ol class="card steps tight">
-      <li>「オートメーション」→「＋」→「App」</li>
-      <li>「App」で、朝いちばんに開くアプリを選ぶ（例：LINE・おこしてME・カレンダー）。「開いている」にチェック</li>
-      <li>「すぐに実行」を選び、「実行時に通知」をオフ</li>
-      <li>「睡眠を送る」を選んで完了</li>
-    </ol>
-    <p class="note" style="margin:0">ロックがかかったまま 9:00 になるとヘルスケアが読めず送れないことがあるので、③でロックを外してアプリを開いたときにも送ります。今日すでに送っていれば、①の2ですぐ終わるので、何度動いても負担になりません。確認なしで動くのは iOS 17 以降、通知を消せるのは iOS 18 以降です（iOS の版で呼び名が少し違うことがあります）。</p>
+    <p class="note" style="margin:0">ロックを外してアプリを開いたときに送るので、ヘルスケアを確実に読めます。1日に何回動いても上書きだけです。余裕があれば同じ手順で「時刻 9:00・毎日」のオートメーションも足すと、送り忘れがさらに減ります。確認なしで動くのは iOS 17 以降、通知を消せるのは iOS 18 以降です（iOS の版で呼び名が少し違うことがあります）。<br>できあがったショートカットは、「共有」→「iCloudリンクをコピー」で自分用に控えておくと、機種変更のときに1タップで戻せます（合言葉が入っているので人には渡さないでください）。</p>
     <div class="sect">送り先URL（スプシのプログラム）</div>
     <div class="card keybox"><code id="skUrl">—</code><button class="ax-btn" type="button" id="skUrlCopy">コピー</button></div>
     <div class="sect">睡眠用の合言葉</div>
