@@ -18,7 +18,7 @@
  *   2) 完了チェック：その行の「完了」(B列) を TRUE / FALSE にする
  *   3) 実働時間：見出し「実働」の列があれば、その行のセルに時間(h)を書く
  *      「実働」列は自動では作りません。コトさんの承認後に関数「taskApiAddActualColumn」を1回だけ実行して追加します。
- *   4) 待ちの設定：その行の「👤」「前提」のセルだけを書く（setWait）
+ *   4) タスクの設定：その行の「📅」「⏰」「👤」「前提」のセルだけを書く（setWait）
  *
  * 準備（約5分）
  *  1) script.google.com を直接開いて［新しいプロジェクト］→ このコードを貼り付けて保存
@@ -29,7 +29,7 @@
  *
  * 通信の形：POST（Content-Type: text/plain）で JSON → JSON。text/plain なので CORS の事前確認が起きない。
  *  { key, action, ... } → { ok: true, ... } / { ok: false, error }
- *  action: ping / list / add / done / undone / actual / setWait（👤と前提を書く）
+ *  action: ping / list / add / done / undone / actual / setWait（📅・⏰・👤・前提を書く）
  */
 
 var TASKAPI = {
@@ -411,24 +411,41 @@ function taskApi_setDone(sh, req, done) {
   return res;
 }
 
-// 👤（待ち相手）と 前提 を書く。その行の2つのセルだけ。undefined の項目は書かない
+// 📅・⏰・👤（待ち相手）・前提 を書く。その行のそのセルだけ。undefined の項目は書かない
 function taskApi_setWait(sh, req) {
   var c = taskApi_cols(sh);
   var t = taskApi_findTask(sh, c, req);
   if (!t) return { error: 'not_found' };
-  if (req.wait !== undefined) {
-    if (!c.wait) return { error: 'no_wait_column' };
-    var w = taskApi_text(req.wait);
-    if (w.length > 40) return { error: 'bad_wait' };
-    sh.getRange(t.row, c.wait).setValue(w);
+  // 先に全部チェックしてから書く（途中で断って半分だけ書かれるのを防ぐ）
+  var date = null, slotVal = null;
+  if (req.date !== undefined) {
+    var dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(req.date || ''));
+    if (!dm) return { error: 'bad_date' };
+    date = new Date(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3]));
   }
+  if (req.slot !== undefined) {
+    var sl = String(req.slot || '');
+    var tm = /^(\d{1,2}):(\d{2})$/.exec(sl);
+    if (tm) {   // 時刻（13:30 → 13.5。既存GASと同じ「数値の時刻」）
+      var hh = Number(tm[1]), mm = Number(tm[2]);
+      if (hh > 23 || mm > 59) return { error: 'bad_slot' };
+      slotVal = hh + mm / 60;
+    } else if (!sl) slotVal = '';
+    else if (TASKAPI.SLOTS[sl]) slotVal = TASKAPI.SLOTS[sl];
+    else return { error: 'bad_slot' };
+  }
+  if (req.wait !== undefined && !c.wait) return { error: 'no_wait_column' };
+  if (req.pre !== undefined && !c.pre) return { error: 'no_pre_column' };
+  if (req.wait !== undefined && taskApi_text(req.wait).length > 40) return { error: 'bad_wait' };
   if (req.pre !== undefined) {
-    if (!c.pre) return { error: 'no_pre_column' };
-    var p = taskApi_text(req.pre);
-    if (p && !/^\d+\./.test(p)) return { error: 'bad_pre' };
-    if (p && Number(/^(\d+)/.exec(p)[1]) === t.no) return { error: 'bad_pre' };   // 自分自身は前提にできない
-    sh.getRange(t.row, c.pre).setValue(p);
+    var p0 = taskApi_text(req.pre);
+    if (p0 && !/^\d+\./.test(p0)) return { error: 'bad_pre' };
+    if (p0 && Number(/^(\d+)/.exec(p0)[1]) === t.no) return { error: 'bad_pre' };
   }
+  if (date) sh.getRange(t.row, c.date).setValue(date);
+  if (slotVal !== null) sh.getRange(t.row, c.slot).setValue(slotVal);
+  if (req.wait !== undefined) sh.getRange(t.row, c.wait).setValue(taskApi_text(req.wait));
+  if (req.pre !== undefined) sh.getRange(t.row, c.pre).setValue(taskApi_text(req.pre));   // 自分自身・形の違う前提は上で断り済み
   return { task: taskApi_rowToTask(t.row, sh.getRange(t.row, 1, 1, c.width).getValues()[0], c, taskApi_ymd(new Date())) };
 }
 

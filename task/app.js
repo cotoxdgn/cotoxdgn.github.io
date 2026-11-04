@@ -16,7 +16,7 @@
     busy: 'スプシが混み合っています。もう一度', not_found: 'このタスクがシートで見つかりません（PCで書き換えた？）。読み込み直します',
     no_todo: 'タスク名を入れてください', bad_ko: '工は 0〜24 の数字で', bad_date: '作業日を選んでください',
     bad_actual: '実働は 0〜24 の数字で', server: 'スプシ側でエラーが起きました',
-    bad_wait: '待ち相手は40文字までで', bad_pre: '前提は一覧から選んでください（自分自身は選べません）',
+    bad_wait: '待ち相手は40文字までで', bad_slot: '時間帯は朝・昼・夕・なし、または時刻で', bad_pre: '前提は一覧から選んでください（自分自身は選べません）',
     no_wait_column: 'スプシに「👤」の列が見つかりません', no_pre_column: 'スプシに「前提」の列が見つかりません',
     bad_action: 'スクリプトが古いままです。デプロイを新しい版にしてください'
   };
@@ -148,7 +148,7 @@
         if (t.done) undone(t, row); else openSheet(t);
       });
       var body = el('div', 'body');
-      if (!t.done) { body.setAttribute('role', 'button'); body.tabIndex = 0; body.setAttribute('aria-label', '待ちの設定：' + t.todo);
+      if (!t.done) { body.setAttribute('role', 'button'); body.tabIndex = 0; body.setAttribute('aria-label', 'タスクの設定：' + t.todo);
         body.addEventListener('click', function () { openWait(t); });
         body.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openWait(t); } }); }
       body.appendChild(el('div', 'tt', t.todo));
@@ -158,7 +158,7 @@
       if (!t.done && t.preWait) meta.appendChild(el('span', 'chip wait', '⏳ 前提 ' + t.pre.slice(0, 20) + ' 待ち'));
       if (!t.done && t.date < today) meta.appendChild(el('span', 'chip', md(t.date) + 'から'));
       if (t.slot) meta.appendChild(el('span', '', SLOT_EMOJI[t.slot] + ' ' + t.slot));
-      else if (t.slotRaw) meta.appendChild(el('span', '', t.slotRaw));
+      else if (t.slotRaw) meta.appendChild(el('span', '', slotTime(t.slotRaw) ? '⏰ ' + slotTime(t.slotRaw) : t.slotRaw));
       if (!t.done && timerRunning(tkey(t))) meta.appendChild(el('span', 'chip run', '⏱ 計測中'));
       if (t.done && t.actual != null) meta.appendChild(el('span', '', '実働 ' + h(t.actual) + ' / 工 ' + h(t.ko)));
       body.appendChild(meta);
@@ -261,9 +261,23 @@
   function closeSheet() { clearInterval(tick); $('dim').hidden = true; $('sheet').hidden = true; $('conf').hidden = true; $('wsheet').hidden = true; stopScan(); cur = null; wcur = null; render(); }
 
   // ---------- 待ちの設定（👤・前提） ----------
-  var wcur = null, wpre = '';
+  var wcur = null, wpre = '', wslot0 = '', wslot = '';
+  // ⏰が数値の時刻（13.5 など）なら "13:30" にする
+  function slotTime(raw) {
+    var n = parseFloat(raw); if (!isFinite(n) || n < 0 || n >= 24 || String(raw).trim() === '') return '';
+    var hh = Math.floor(n), mm = Math.round((n - hh) * 60); if (mm === 60) { hh++; mm = 0; }
+    return ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2);
+  }
+  function drawSlot() {
+    Array.prototype.forEach.call($('wsSlot').querySelectorAll('button'), function (b) {
+      var on = b.getAttribute('data-s') === wslot; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); b.setAttribute('role', 'radio');
+    });
+    $('wsTime').value = /^\d{2}:\d{2}$/.test(wslot) ? wslot : '';
+  }
   function openWait(t) {
     wcur = t; wpre = t.pre || '';
+    wslot0 = t.slot || slotTime(t.slotRaw) || ''; wslot = wslot0;
+    $('wsDate').value = t.date || ''; drawSlot();
     $('wsTitle').textContent = t.todo;
     var m = $('wsMeta'); m.innerHTML = '';
     if (t.no != null) m.appendChild(el('span', '', 'No.' + t.no));
@@ -306,10 +320,13 @@
   function saveWait() {
     var t = wcur; if (!t) return;
     var params = { no: t.no, todo: t.todo };
+    var dt = $('wsDate').value;
+    if (dt && dt !== (t.date || '')) params.date = dt;
+    if (wslot !== wslot0) params.slot = wslot;
     var who = $('wsWho').value.trim();
     if (state.waitColumn && who !== (t.wait || '')) params.wait = who;
     if (state.preColumn && wpre !== (t.pre || '')) params.pre = wpre;
-    if (params.wait === undefined && params.pre === undefined) { closeSheet(); return; }
+    if (params.wait === undefined && params.pre === undefined && params.date === undefined && params.slot === undefined) { closeSheet(); return; }
     var btn = $('wsSave'); btn.disabled = true; btn.textContent = '保存中…';
     api('setWait', params).then(function () {
       toast('保存しました'); closeSheet(); return load(true);
@@ -450,6 +467,8 @@
   $('wsSave').addEventListener('click', saveWait);
   $('wsClose').addEventListener('click', closeSheet);
   $('wsPreQ').addEventListener('input', drawPre);
+  $('wsSlot').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; wslot = b.getAttribute('data-s'); drawSlot(); });
+  $('wsTime').addEventListener('change', function () { if (this.value) { wslot = this.value; drawSlot(); } });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('dim').hidden) closeSheet(); });
   $('reload').addEventListener('click', function () { if (conn()) load(); });
   $('settings').addEventListener('click', function () { if (conn()) openConf(); else $('scanBtn').focus(); });

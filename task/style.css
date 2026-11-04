@@ -133,3 +133,5 @@ video { width: 100%; max-height: 50vh; border-radius: 12px; background: #000; ob
 .prelist button { text-align: left; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 8px 10px; font-size: 14px; min-height: 44px; overflow-wrap: anywhere; }
 .prelist button small { display: block; color: var(--muted); font-size: 12px; }
 .prelist button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.timepick { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.timepick input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); min-height: 44px; }

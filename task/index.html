@@ -150,12 +150,26 @@
   <p class="note" id="shNote"></p>
 </div>
 
-<!-- 待ちの設定（タスクのチェック以外を押したとき） -->
+<!-- タスクの設定（タスクのチェック以外を押したとき）：📅・⏰・👤・前提 -->
 <div class="sheet" id="wsheet" role="dialog" aria-modal="true" aria-labelledby="wsTitle" hidden>
   <span class="grab"></span>
   <div>
     <h3 id="wsTitle"></h3>
     <div class="meta" id="wsMeta"></div>
+  </div>
+  <div class="f">
+    <label for="wsDate">📅 作業日（G列）</label>
+    <input id="wsDate" type="date">
+  </div>
+  <div class="f">
+    <span class="flabel">⏰ 時間帯（I列）</span>
+    <div class="seg" id="wsSlot" role="radiogroup" aria-label="時間帯">
+      <button type="button" data-s="朝">🌅 朝</button>
+      <button type="button" data-s="昼">☀️ 昼</button>
+      <button type="button" data-s="夕">🌙 夕</button>
+      <button type="button" data-s="">なし</button>
+    </div>
+    <div class="timepick"><label for="wsTime">時刻で指定</label><input id="wsTime" type="time" step="900"></div>
   </div>
   <div class="f">
     <label for="wsWho">👤 待ち相手（J列）</label>

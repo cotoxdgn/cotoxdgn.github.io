@@ -99,6 +99,8 @@ try:
         pg.locator('#carry .task', has_text='見積書の確認').locator('.body').click()
         check('チェック以外を押すと待ちの設定が開く', pg.locator('#wsheet').is_visible() and not pg.locator('#sheet').is_visible())
         check('👤の候補に今までの名前', pg.locator('#wsPeople button', has_text='山田さん').count() == 1)
+        check('📅・⏰も表示（今の値）', pg.input_value('#wsDate') != '' and pg.locator('#wsSlot button.on').count() == 1)
+        pg.locator('#wsSlot button', has_text='夕').click()
         pg.fill('#wsWho', '佐藤さん')
         pg.fill('#wsPreQ', '目次')
         check('前提の候補は検索で絞れる・自分は出ない', pg.locator('#wsPreList button').count() == 1)
@@ -107,7 +109,7 @@ try:
         pg.click('#wsSave')
         pg.wait_for_selector('#toast:has-text("保存しました")')
         row = [r for r in sheet() if r[3] == '見積書の確認 | 設備項目'][0]
-        check('シートの👤・前提に書かれる', row[8] == '佐藤さん' and str(row[9]).startswith('11.'))
+        check('シートの👤・前提・⏰に書かれる', row[8] == '佐藤さん' and str(row[9]).startswith('11.') and row[7] == '🌙')
         pg.wait_for_selector('#carry .task.locked')
         check('前提が未完了になったのでロック表示', pg.locator('#carry .task.locked', has_text='見積書の確認').count() == 1)
         check('横スクロールなし', pg.evaluate('document.documentElement.scrollWidth <= innerWidth'))
