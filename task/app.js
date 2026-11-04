@@ -258,10 +258,11 @@
     clearInterval(tick); tick = setInterval(drawTimer, 500);
     $('shDone').focus();
   }
-  function closeSheet() { clearInterval(tick); $('dim').hidden = true; $('sheet').hidden = true; $('conf').hidden = true; $('wsheet').hidden = true; stopScan(); cur = null; wcur = null; render(); }
+  function closeSheet() { clearInterval(tick); $('dim').hidden = true; $('sheet').hidden = true; $('conf').hidden = true; $('wsheet').hidden = true; document.documentElement.classList.remove('noscroll'); stopScan(); cur = null; wcur = null; render(); }
 
   // ---------- 待ちの設定（👤・前提） ----------
-  var wcur = null, wpre = '', wslot0 = '', wslot = '';
+  var wcur = null, wpre = '', wslot0 = '', wslot = '', preOpen = false;
+  var PRE_MAX = 8;   // 一度に出す前提の候補（多いと画面が長くなって動かしにくいため。残りは検索で）
   // ⏰が数値の時刻（13.5 など）なら "13:30" にする
   function slotTime(raw) {
     var n = parseFloat(raw); if (!isFinite(n) || n < 0 || n >= 24 || String(raw).trim() === '') return '';
@@ -290,9 +291,10 @@
       b.addEventListener('click', function () { $('wsWho').value = n; });
       pp.appendChild(b);
     });
-    $('wsPreQ').value = ''; $('wsPreQ').disabled = !state.preColumn;
+    $('wsPreQ').value = ''; $('wsPreQ').disabled = !state.preColumn; preOpen = false;
     drawPre();
-    $('dim').hidden = false; $('wsheet').hidden = false;
+    $('dim').hidden = false; $('wsheet').hidden = false; $('wsheet').scrollTop = 0;
+    document.documentElement.classList.add('noscroll');
   }
   function drawPre() {
     var cur = $('wsPreCur'); cur.innerHTML = '';
@@ -304,17 +306,22 @@
       cur.appendChild(x);
     } else cur.appendChild(el('span', 'none', '前提なし'));
     var q = $('wsPreQ').value.trim().toLowerCase();
-    var list = state.preOptions.filter(function (o) {
-      return wcur && o.no !== wcur.no && (!q || o.label.toLowerCase().indexOf(q) !== -1 || (o.pj || '').toLowerCase().indexOf(q) !== -1);
-    }).slice(0, 40);
     var box = $('wsPreList'); box.innerHTML = '';
+    var show = preOpen || !!q;
+    $('wsPreAll').hidden = show; box.hidden = !show;
+    if (!show) return;
+    var all = state.preOptions.filter(function (o) {
+      return wcur && o.no !== wcur.no && (!q || o.label.toLowerCase().indexOf(q) !== -1 || (o.pj || '').toLowerCase().indexOf(q) !== -1);
+    });
+    var list = all.slice(0, PRE_MAX);
     list.forEach(function (o) {
       var b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(o.label === wpre));
       b.appendChild(document.createTextNode(o.label));
       b.appendChild(el('small', '', [o.pj, o.date ? '📅 ' + md(o.date) : ''].filter(Boolean).join('　')));
-      b.addEventListener('click', function () { wpre = o.label; drawPre(); });
+      b.addEventListener('click', function () { wpre = o.label; preOpen = false; $('wsPreQ').value = ''; drawPre(); });
       box.appendChild(b);
     });
+    if (all.length > list.length) box.appendChild(el('p', 'note', 'ほか ' + (all.length - list.length) + ' 件。上の欄に番号や名前を入れると絞り込めます'));
     if (!list.length) box.appendChild(el('p', 'note', q ? '見つかりません' : '未完了のタスクがありません'));
   }
   function saveWait() {
@@ -467,6 +474,7 @@
   $('wsSave').addEventListener('click', saveWait);
   $('wsClose').addEventListener('click', closeSheet);
   $('wsPreQ').addEventListener('input', drawPre);
+  $('wsPreAll').addEventListener('click', function () { preOpen = true; drawPre(); });
   $('wsSlot').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; wslot = b.getAttribute('data-s'); drawSlot(); });
   $('wsTime').addEventListener('change', function () { if (this.value) { wslot = this.value; drawSlot(); } });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('dim').hidden) closeSheet(); });
