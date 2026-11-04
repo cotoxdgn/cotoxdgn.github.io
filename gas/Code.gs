@@ -15,6 +15,8 @@
  *          yoteiGet / yoteiAnswer（予定合わせの相手用・合言葉なし。下の「予定合わせ」を参照）
  *          sleepPut（睡眠の記録。睡眠用の合言葉でも使える）／ sleepKey（睡眠用の合言葉を見る・作り直す。下の「睡眠」を参照）
  *          calMonth（ルーティンの月カレンダー用。普段使いのカレンダーの予定の件名・時刻・色。いつもの合言葉だけ。下の「月カレンダー」を参照）
+ *          widget（iPhone のホーム画面のウィジェット用。今日の習慣・連続日数・生理の予定日だけ。見るだけ用の合言葉でも使える）
+ *          viewKey（見るだけ用の合言葉を見る・作り直す。いつもの合言葉だけ。下の「ウィジェット」を参照）
  */
 
 var CONNECT_URL = 'https://cotoxdgn.github.io/connect/';
@@ -34,6 +36,7 @@ var CELL_URL = 'B2';     // 接続URL（自動）
 var CELL_TARGET = 'B3';  // 対象アプリ（空＝全アプリ共通、例：wanko）
 var CELL_FOLDER = 'B4';  // 画像フォルダID（自動）
 var CELL_SLEEP_KEY = 'B5'; // 睡眠用の合言葉（自動）。iPhone のショートカットに書き込む。これで出来るのは sleepPut だけ
+var CELL_VIEW_KEY = 'B6';  // 見るだけ用の合言葉（自動）。iPhone のウィジェット（Scriptable）に書き込む。これで出来るのは widget だけ
 // 名前表（家族用＝B3 が wanko のスプシだけ作る）。A列＝見出し、B列＝名前を手で入力
 var NAMES_TITLE_ROW = 8;
 var NAMES_LABELS = ['わんこ1', 'わんこ2', '家族1', '家族2', '家族3', '家族4'];
@@ -57,15 +60,17 @@ function conf_() {
   conf.getRange('A3').setValue('対象アプリ（空欄＝全アプリ共通）');
   conf.getRange('A4').setValue('画像フォルダID（自動）');
   conf.getRange('A5').setValue('睡眠用の合言葉（自動）');
-  conf.getRange('A1:A5').setFontWeight('bold');
-  conf.getRange('B1:B5').setNumberFormat('@');
-  conf.getRange('A6').setValue('入力は不要です（家族用のスプシだけ、B3 にアプリ名 wanko を入れます）。端末の設定は、メニュー「アプリ設定」→「この端末をつなぐ」から行います。B1・B2 は人に見せないでください。');
+  conf.getRange('A6').setValue('見るだけ用の合言葉（自動）');
+  conf.getRange('A1:A6').setFontWeight('bold');
+  conf.getRange('B1:B6').setNumberFormat('@');
+  conf.getRange('A7').setValue('入力は不要です（家族用のスプシだけ、B3 にアプリ名 wanko を入れます）。端末の設定は、メニュー「アプリ設定」→「この端末をつなぐ」から行います。B1・B2 は人に見せないでください。');
   var key = String(conf.getRange(CELL_KEY).getValue()).trim();
   if (!key) {
     key = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
     conf.getRange(CELL_KEY).setValue(key);
   }
   sleepKeyOf_(conf, false);
+  viewKeyOf_(conf, false);
   if (String(conf.getRange(CELL_TARGET).getValue()).trim() === 'wanko') namesTable_(conf);
   return conf;
 }
@@ -211,7 +216,16 @@ function handle_(req) {
   var sleepPass = String(conf.getRange(CELL_SLEEP_KEY).getValue()).trim();
   var sleepOnly = !!sleepPass && sleepPass !== pass && String(req.key || '') === sleepPass;
   if (sleepOnly && req.action !== 'sleepPut') return { ok: false, error: 'bad_key' };
-  if (!sleepOnly && String(req.key || '') !== pass) return { ok: false, error: 'bad_key' };
+  // 見るだけ用の合言葉（ウィジェット）は widget だけ。ほかの action は合言葉違いと同じ答えで断る
+  var viewPass = String(conf.getRange(CELL_VIEW_KEY).getValue()).trim();
+  var viewOnly = !sleepOnly && !!viewPass && viewPass !== pass && viewPass !== sleepPass && String(req.key || '') === viewPass;
+  if (viewOnly && req.action !== 'widget') return { ok: false, error: 'bad_key' };
+  if (!sleepOnly && !viewOnly && String(req.key || '') !== pass) return { ok: false, error: 'bad_key' };
+  if (req.action === 'widget') {   // スプシを読むだけ（書かない）ので、ロックなし
+    var wg = widget_(ss);
+    wg.ok = true; wg.now = now_();
+    return wg;
+  }
   if (req.action === 'geocode' || req.action === 'mapLink') {   // 場所の検索はスプシに書かないので、順番待ち（ロック）なしで返す
     var g = req.action === 'geocode' ? geocode_(req) : mapLink_(req);
     if (g.error) return { ok: false, error: g.error };
@@ -247,6 +261,7 @@ function handle_(req) {
       case 'yoteiCreateEvent': res = yoteiCreateEvent_(ss, req); break;
       case 'sleepPut': res = sleepPut_(ss, req); break;
       case 'sleepKey': res = sleepKey_(conf, req); break;
+      case 'viewKey': res = viewKey_(conf, req); break;
       default: res = { error: 'bad_action' };
     }
     if (res.error) return res.detail ? { ok: false, error: res.error, detail: res.detail } : { ok: false, error: res.error };
@@ -918,4 +933,115 @@ function sleepPut_(ss, req) {
   var r = put_(ss, { app: SLEEP_APP, id: id, data: { kind: 'sleep', date: date, samples: samples, receivedAt: now_() } });
   if (r.error) return r;
   return { date: date, id: id, count: samples.length };
+}
+
+// ---------- ウィジェット（iPhone のホーム画面・Scriptable） ----------
+/*
+ * widget：{ key: 見るだけ用またはいつもの合言葉, action:'widget' }
+ *   → { today, habits:[{ name, done }], streak, period:{ ongoing, start, day, next, until, late } | null }
+ *   ・シート app=routine を読むだけ（書かない・ロックなし）。返すのは上のものだけ
+ *     （睡眠・コレクション・メモ・予定・ほかのアプリのデータは返さない）
+ *   ・計算は routine/app.js（習慣・記録・連続日数・深夜3時の区切り）と routine/period.js（次の予定日）と同じ決め方
+ *     today＝今日（日本時間・深夜3時まで前の日）、habits＝今の習慣（やめた習慣は除く・並び順どおり）と今日できたか、
+ *     streak＝全部できた日の連続日数（今日がまだなら昨日から数える）
+ *     period：ongoing＝記録中（day＝今日が何日目、start＝始まった日）／そうでなければ next＝次の予定日、until＝あと何日（0＝今日、マイナス＝予定日から過ぎた日数）
+ *     記録が無い・予定日から14日より過ぎた＝ next は null
+ *  viewKey：いつもの合言葉の端末からだけ。{ renew:true } で作り直す。→ { viewKey }
+ */
+var WIDGET_APP = 'routine';
+var WIDGET_DAY_START_HOUR = 3;   // 1日の区切り（routine/app.js の DAY_START_HOUR と同じ）
+var WIDGET_DEFAULT_HABITS = [    // 習慣が1つも無いときに出す初期の2つ（routine/app.js の DEFAULTS と同じ）
+  { id: 'h-supple', name: 'サプリを飲んだ', order: 10 },
+  { id: 'h-bath', name: '22:30お風呂', order: 20 }
+];
+
+function newViewKey_() { return 'vw' + Utilities.getUuid().replace(/-/g, ''); }
+
+// 見るだけ用の合言葉（空なら作る。renew=true なら作り直す）。いつもの・睡眠用の合言葉と同じにはしない
+function viewKeyOf_(conf, renew) {
+  var k = String(conf.getRange(CELL_VIEW_KEY).getValue()).trim();
+  var pass = String(conf.getRange(CELL_KEY).getValue()).trim();
+  var sleepPass = String(conf.getRange(CELL_SLEEP_KEY).getValue()).trim();
+  if (!k || renew || k === pass || k === sleepPass) {
+    do { k = newViewKey_(); } while (k === pass || k === sleepPass);
+    conf.getRange(CELL_VIEW_KEY).setValue(k);
+  }
+  return k;
+}
+
+function viewKey_(conf, req) {
+  return { viewKey: viewKeyOf_(conf, req.renew === true) };
+}
+
+// 日付の計算（YYYY-MM-DD の文字列どうし。スクリプトのタイムゾーンに左右されないよう UTC で数える）
+function wgParse_(s) { var p = String(s).split('-'); return Date.UTC(+p[0], +p[1] - 1, +p[2]); }
+function wgYmd_(t) { return new Date(t).toISOString().slice(0, 10); }
+function wgAdd_(s, n) { return wgYmd_(wgParse_(s) + n * DAY_MS); }
+function wgDiff_(a, b) { return Math.round((wgParse_(b) - wgParse_(a)) / DAY_MS); }
+// 今日（日本時間。深夜3時までは前の日）
+function wgToday_() { return wgYmd_(new Date().getTime() + SLEEP_JST_MS - WIDGET_DAY_START_HOUR * 3600000); }
+
+function widget_(ss) {
+  var sh = sheet_(ss, WIDGET_APP, false);
+  var list = sh ? rows_(sh).filter(function (r) { return !r.deleted; }).map(toRecord_) : [];
+  var today = wgToday_();
+  var w = wgHabits_(list, today);
+  return { today: today, habits: w.habits, streak: w.streak, period: wgPeriod_(list, today) };
+}
+
+// 習慣と記録（routine/app.js の load・habitsOn・fullDay・streak と同じ決め方）
+function wgHabits_(list, today) {
+  var hs = [], logs = {}, anyHabit = false;
+  list.forEach(function (r) {
+    var d = r.data || {};
+    if (d.kind === 'habit') {
+      anyHabit = true;
+      hs.push({ id: r.id, name: String(d.name == null ? '' : d.name), order: +d.order || 0, since: d.since || '', archivedOn: d.archivedOn || '' });
+    } else if (d.kind === 'log' && d.date && d.habit) logs[d.date + '|' + d.habit] = true;
+  });
+  if (!anyHabit) WIDGET_DEFAULT_HABITS.forEach(function (x) { hs.push({ id: x.id, name: x.name, order: x.order, since: '', archivedOn: '' }); });
+  hs.sort(function (a, b) { return a.order - b.order || (a.id < b.id ? -1 : 1); });
+  var done = function (date, hid) { return !!logs[date + '|' + hid]; };
+  var fullDay = function (date) {
+    var on = hs.filter(function (h) { return (!h.since || h.since <= date) && (!h.archivedOn || date < h.archivedOn); });
+    return on.length > 0 && on.every(function (h) { return done(date, h.id); });
+  };
+  var d = today, n = 0;
+  if (!fullDay(d)) d = wgAdd_(d, -1);
+  while (fullDay(d) && n < 3700) { n++; d = wgAdd_(d, -1); }
+  var active = hs.filter(function (h) { return !h.archivedOn; });
+  return { habits: active.map(function (h) { return { name: h.name.slice(0, 30), done: done(today, h.id) }; }), streak: n };
+}
+
+// 生理（routine/period.js の build・calc と同じ決め方）
+function wgPeriod_(list, today) {
+  var YMD = /^\d{4}-\d{2}-\d{2}$/;
+  var p = [];
+  list.forEach(function (r) {
+    var d = r && r.data;
+    if (!d || d.kind !== 'period' || !YMD.test(d.start || '')) return;
+    p.push({ s: d.start, e: YMD.test(d.end || '') && d.end >= d.start ? d.end : '' });
+  });
+  if (!p.length) return null;
+  p.sort(function (a, b) { return a.s < b.s ? -1 : a.s > b.s ? 1 : 0; });
+  var used = [];
+  for (var i = 1; i < p.length; i++) {
+    var c = wgDiff_(p[i - 1].s, p[i].s);
+    if (c >= 15 && c <= 60) used.push(c);   // period.js の MIN_CYCLE・MAX_CYCLE
+  }
+  var recent = used.slice(-6);              // period.js の RECENT
+  var cycle = recent.length ? Math.round(recent.reduce(function (x, y) { return x + y; }, 0) / recent.length) : 28;   // TEMP_CYCLE
+  var last = p[p.length - 1];
+  var ongoing = !last.e && last.s <= today;
+  var next = wgAdd_(last.s, cycle);
+  var late = wgDiff_(next, today);
+  if (late > 14) next = null;               // period.js の KEEP_PAST
+  return {
+    ongoing: ongoing,
+    start: ongoing ? last.s : '',
+    day: ongoing ? wgDiff_(last.s, today) + 1 : 0,
+    next: next,
+    until: next ? wgDiff_(today, next) : null,
+    late: next && late > 0 ? late : 0
+  };
 }

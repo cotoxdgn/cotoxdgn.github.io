@@ -30,6 +30,12 @@
  * 通信の形：POST（Content-Type: text/plain）で JSON → JSON。text/plain なので CORS の事前確認が起きない。
  *  { key, action, ... } → { ok: true, ... } / { ok: false, error }
  *  action: ping / list / add / done / undone / actual / setWait（📅・⏰・👤・前提を書く）
+ *          widget（iPhone のホーム画面のウィジェット用。今日の未完了タスクだけ。見るだけ用の合言葉でも使える）
+ *
+ * 見るだけ用の合言葉（ウィジェット用）
+ *  関数「taskApiShowViewKey」を実行 → 実行ログに出る合言葉を Scriptable のスクリプトに貼る（スクリプトのプロパティ TASK_VIEW_KEY に保存）。
+ *  この合言葉で出来るのは widget だけ（ほかの action は合言葉違いと同じ bad_key）。スプシには何も書けない。
+ *  漏れたかもと思ったら「taskApiRenewViewKey」で作り直す（いつもの合言葉・つないだ端末はそのまま）。
  */
 
 var TASKAPI = {
@@ -58,6 +64,7 @@ var TASKAPI = {
   },
   SLOTS: { '朝': '🌅', '昼': '☀️', '夕': '🌙' },
   PROP_KEY: 'TASK_API_KEY',
+  PROP_VIEW_KEY: 'TASK_VIEW_KEY',   // 見るだけ用の合言葉（ウィジェット用。widget だけ）
   MAX_TEXT: 500
 };
 
@@ -113,6 +120,36 @@ function taskApiAddActualColumn() {
   Logger.log('「実働」列を %s 列目に追加しました。', col);
 }
 
+// 見るだけ用の合言葉（ウィジェット用）を実行ログに出す。なければ作る
+function taskApiShowViewKey() {
+  if (taskApi_isBound()) return;
+  Logger.log('見るだけ用の合言葉（ウィジェットに貼る。人に見せない）：\n%s\n送り先URL：%s', taskApi_viewKey(false), taskApi_execUrl() || '（［デプロイを管理］のウェブアプリURL）');
+}
+
+// 見るだけ用の合言葉を作り直す（古い合言葉のウィジェットは読めなくなる）
+function taskApiRenewViewKey() {
+  if (taskApi_isBound()) return;
+  Logger.log('作り直しました。ウィジェットの合言葉を貼り替えてください：\n%s', taskApi_viewKey(true));
+}
+
+function taskApi_viewKey(renew) {
+  var props = PropertiesService.getScriptProperties();
+  var pass = props.getProperty(TASKAPI.PROP_KEY) || '';
+  var k = props.getProperty(TASKAPI.PROP_VIEW_KEY) || '';
+  if (!k || renew || k === pass) {
+    do { k = 'vw' + Utilities.getUuid().replace(/-/g, ''); } while (k === pass);
+    props.setProperty(TASKAPI.PROP_VIEW_KEY, k);
+  }
+  return k;
+}
+
+function taskApi_execUrl() {
+  var url = '';
+  try { url = ScriptApp.getService().getUrl() || ''; } catch (e) { url = ''; }
+  if (!/\/exec$/.test(url) && TASKAPI.EXEC_URL) url = String(TASKAPI.EXEC_URL).trim();
+  return /\/exec$/.test(url) ? url : '';
+}
+
 function taskApi_connectLink() {
   var key = PropertiesService.getScriptProperties().getProperty(TASKAPI.PROP_KEY);
   var url = '';
@@ -138,7 +175,20 @@ function taskApi_handle(req) {
   if (!req || typeof req !== 'object') return { ok: false, error: 'bad_request' };
   var pass = PropertiesService.getScriptProperties().getProperty(TASKAPI.PROP_KEY) || '';
   if (!pass) return { ok: false, error: 'no_setup' };
-  if (String(req.key || '') !== pass) return { ok: false, error: 'bad_key' };
+  // 見るだけ用の合言葉（ウィジェット）は widget だけ。ほかの action は合言葉違いと同じ答えで断る
+  var view = PropertiesService.getScriptProperties().getProperty(TASKAPI.PROP_VIEW_KEY) || '';
+  var viewOnly = !!view && view !== pass && String(req.key || '') === view;
+  if (viewOnly && req.action !== 'widget') return { ok: false, error: 'bad_key' };
+  if (!viewOnly && String(req.key || '') !== pass) return { ok: false, error: 'bad_key' };
+  if (req.action === 'widget') {   // 読むだけ（書かない）なので、順番待ち（ロック）なしで返す
+    try {
+      var w = taskApi_widget(taskApi_sheet());
+      w.ok = true;
+      return w;
+    } catch (err) {
+      return { ok: false, error: 'server' };   // 見るだけ用の窓口ではシート名などの中身を出さない
+    }
+  }
 
   var lock = LockService.getScriptLock();
   try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'busy' }; }
@@ -288,18 +338,11 @@ function taskApi_list(sh) {
   var c = taskApi_cols(sh);
   var all = taskApi_readAll(sh, c);
   var today = taskApi_ymd(new Date());
-  var doneByNo = {};
-  all.forEach(function (t) { if (t.no !== null) doneByNo[t.no] = t.done; });
   var tasks = all.filter(function (t) {
     if (!t.date) return false;
     return t.done ? t.date === today : t.date <= today;
   });
-  // 前提：「No.タイトル」の No が完了済みなら待ちではない。番号が読めない・見つからないときは待ちとして扱う
-  tasks.forEach(function (t) {
-    if (!t.pre) return;
-    var m = /^\s*(?:No)?(\d+)/.exec(t.pre);
-    t.preWait = !(m && doneByNo[Number(m[1])] === true);
-  });
+  taskApi_markPreWait(all, tasks);
   var seen = {}, pjs = [];
   all.forEach(function (t) { if (t.pj && !seen[t.pj]) { seen[t.pj] = true; pjs.push(t.pj); } });
   // 前提の選択肢：未完了で No と ToDo があるタスク（スプシのプルダウンと同じ「12.ToDo」の形）
@@ -310,6 +353,33 @@ function taskApi_list(sh) {
   all.forEach(function (t) { if (t.wait && !pseen[t.wait]) { pseen[t.wait] = true; people.push(t.wait); } });
   return { tasks: tasks, projects: pjs, actualColumn: !!c.actual, preOptions: preOptions, people: people.slice(0, 30),
     waitColumn: !!c.wait, preColumn: !!c.pre };
+}
+
+// 前提：「No.タイトル」の No が完了済みなら待ちではない。番号が読めない・見つからないときは待ちとして扱う
+function taskApi_markPreWait(all, tasks) {
+  var doneByNo = {};
+  all.forEach(function (t) { if (t.no !== null) doneByNo[t.no] = t.done; });
+  tasks.forEach(function (t) {
+    if (!t.pre) return;
+    var m = /^\s*(?:No)?(\d+)/.exec(t.pre);
+    t.preWait = !(m && doneByNo[Number(m[1])] === true);
+  });
+}
+
+// widget：今日の未完了（📅が今日以前＝持ち越し含む）だけ。返すのは todo・pj・date・slot（朝・昼・夕・空）・wait（👤が入っているか）・preWait・done
+//  （詳細・前提の中身・👤の名前・No・行番号・候補の一覧は返さない）
+function taskApi_widget(sh) {
+  var c = taskApi_cols(sh);
+  var all = taskApi_readAll(sh, c);
+  var today = taskApi_ymd(new Date());
+  var tasks = all.filter(function (t) { return !t.done && t.date && t.date <= today; });
+  taskApi_markPreWait(all, tasks);
+  return {
+    today: today,
+    tasks: tasks.map(function (t) {
+      return { todo: t.todo.slice(0, 100), pj: t.pj.slice(0, 40), date: t.date, slot: t.slot, wait: !!t.wait, preWait: t.preWait, done: false };
+    })
+  };
 }
 
 // No と ToDo の両方が一致する行を探す（行番号は追加のたびにずれるため）

@@ -285,7 +285,7 @@ async function noHScroll(page, label) {
     await page.click('#skCopy');
     assert.strictEqual(await page.evaluate(() => navigator.clipboard.readText()), SK);
     assert.ok((await text(page, '#v-sleep-setup')).includes('オートメーション'));
-    assert.ok((await text(page, '#v-sleep-setup')).includes('睡眠を送った日.txt'));
+    assert.ok((await text(page, '#v-sleep-setup')).includes('URLの内容を取得'));
     await page.screenshot({ path: path.join(SHOT, 'phone-8-setup.png'), fullPage: true });
     await page.click('#skNew');
     await page.waitForFunction(k => { const t = document.getElementById('sk').textContent; return t !== k && t.startsWith('sl'); }, SK);

@@ -430,6 +430,26 @@ const go = (page, h) => page.evaluate(x => { location.hash = x; }, h);
     await page.click('#swSleep');
     await page.screenshot({ path: path.join(SHOT, 'v2-phone-09-habits.png'), fullPage: true });
   });
+  await t('習慣＞ホーム画面のウィジェット：送り先URLと見るだけ用の合言葉（B6）を表示・作り直し。その合言葉で読めるのは widget だけ', async () => {
+    await page.click('.tabbar a[data-v="habits"]');
+    await page.click('a[href="#widget"]');
+    await page.waitForSelector('#v-widget:not([hidden])');
+    assert.strictEqual(await page.locator('.tabbar a[data-v="habits"]').getAttribute('aria-current'), 'page');
+    assert.ok((await text(page, '#wvUrl')).endsWith('/exec'));
+    assert.ok((await text(page, '#wv')).includes('•'));
+    await page.click('#wvShow');
+    await page.waitForFunction(() => !document.getElementById('wv').textContent.includes('•'));
+    const vk = await text(page, '#wv');
+    assert.strictEqual(vk, String(conf.getRange('B6').getValue()));
+    assert.ok(gas.ctx.handle_({ key: vk, action: 'widget' }).ok);
+    assert.strictEqual(gas.ctx.handle_({ key: vk, action: 'list', app: 'routine' }).error, 'bad_key');
+    await page.click('#wvNew');
+    await page.waitForFunction(old => document.getElementById('wv').textContent !== old, vk);
+    const nk = await text(page, '#wv');
+    assert.notStrictEqual(nk, vk); assert.strictEqual(nk, String(conf.getRange('B6').getValue()));
+    await page.screenshot({ path: path.join(SHOT, 'v2-phone-10-widget.png'), fullPage: true });
+    await noHScroll(page, 'widget');
+  });
   await ctx.close();
 
   await t('iPad・パソコン幅：左に大きな月のマス目、右にその日の中身。ラベル3つ・時刻つき。← → で月を切り替え', async () => {
