@@ -76,7 +76,13 @@ const t = async (name, fn) => { await fn(); n++; console.log('ok -', name); };
     const roles = await page.$$eval('#week .dot', ds => ds.map(d => d.getAttribute('role')));
     assert.strictEqual(roles.filter(Boolean).length, 12);   // 2頭 × 6日
   });
+  await t('だれが何割の円（この30日）', async () => {
+    assert.ok(await page.isVisible('#share'));
+    const txt = await page.textContent('#shareList');
+    assert.ok(/%/.test(txt), txt);
+  });
   await page.screenshot({ path: path.join(SHOT, 'log.png'), fullPage: true });
+  await page.locator('#share').screenshot({ path: path.join(SHOT, 'share.png') });
   await t('JSエラーなし', async () => assert.deepStrictEqual(errs, []));
   await b.close(); server.close();
   console.log(`\n${n} 件 すべて成功（スクショ：${SHOT}）`);

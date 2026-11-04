@@ -85,6 +85,13 @@
   .log .p { font-size: 11px; color: var(--muted); font-weight: 400; }
   .log.nod li { grid-template-columns: 5.6em 1fr auto; }
   .log.nod .d { display: none; }
+  .share { display: flex; align-items: center; gap: 14px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+  .pie { width: 64px; height: 64px; border-radius: 50%; flex: 0 0 auto; -webkit-mask: radial-gradient(circle, transparent 15px, #000 16px); mask: radial-gradient(circle, transparent 15px, #000 16px); }
+  .shareTxt { display: grid; gap: 4px; font-size: 13px; color: var(--muted); min-width: 0; }
+  .shareH { font-weight: 700; font-size: 12px; }
+  .shareTxt ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .shareTxt li { display: flex; align-items: center; gap: 5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .shareTxt li i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
   .log li.editable { grid-template-columns: 5.6em 1fr auto auto; cursor: pointer; }
   .log li.editable:active { background: var(--line); }
   .log .ed { font-size: 12px; font-weight: 700; color: var(--ax-muted, #888); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
@@ -246,6 +253,10 @@
       <h2 class="sec">この1週間</h2>
       <div class="weekgrid" id="week" aria-label="この1週間の状況"></div>
       <div class="note"><span style="color:var(--mint)">●</span> した　<span style="color:var(--amber)">◌</span> 記録なし　（昨日までは、丸や下の行を押すと直せます）</div>
+      <div class="share" id="share" hidden aria-label="この30日、だれが何割みがいたか">
+        <div class="pie" id="pie" role="img"></div>
+        <div class="shareTxt"><span class="shareH">この30日の担当</span><ul id="shareList"></ul></div>
+      </div>
       <h2 class="sec">ぜんぶの記録（30日分）</h2>
       <div class="daygroup" id="allLog"></div>
     </div>

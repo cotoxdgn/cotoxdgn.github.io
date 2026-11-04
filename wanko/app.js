@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var APP = 'wanko';
-  var VERSION = '6';                        // version.json と sw.js の CACHE（wanko-v3）と一緒に上げる
+  var VERSION = '7';                        // version.json と sw.js の CACHE（wanko-v3）と一緒に上げる
   var OLD_SETTINGS_ID = 'settings';         // 旧版がアプリ内で保存していた名前（今は使わない・書かない）
   var ME_KEY = 'wanko.me.v1';               // この端末で使う人（家族のID）
   var NAMES_KEY = 'wanko.names.v1';         // スプシの名前表の控え（オフラインでも表示するため）
@@ -228,6 +228,7 @@
         g.appendChild(dot);
       });
     });
+    renderShare(today);
     var box = $('allLog');
     box.innerHTML = '';
     for (var j = 0; j < 30; j++) {
@@ -258,6 +259,32 @@
       });
       box.appendChild(h); box.appendChild(ul);
     }
+  }
+
+  // この30日、だれが何割みがいたか（記録した人の割合。さりげない小さな円）
+  var SHARE_COLORS = ['var(--mint)', 'var(--amber)', '#8A7BB8', '#C7778F', '#7C8C8A'];
+  function renderShare(today) {
+    var from = dayKey(addDays(today, -29)), cnt = {}, total = 0;
+    brushRecords().forEach(function (r) {
+      if (r.data.date < from || r.data.date > dayKey(today)) return;
+      var k = r.data.by || ''; cnt[k] = (cnt[k] || 0) + 1; total++;
+    });
+    $('share').hidden = !total;
+    if (!total) return;
+    var ids = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a]; });
+    var acc = 0, stops = [], ul = $('shareList'); ul.innerHTML = '';
+    var label = [];
+    ids.forEach(function (id, i) {
+      var c = SHARE_COLORS[i % SHARE_COLORS.length], pct = cnt[id] / total * 100;
+      stops.push(c + ' ' + acc + '% ' + (acc + pct) + '%'); acc += pct;
+      var r = brushRecords().filter(function (x) { return (x.data.by || '') === id; })[0];
+      var name = memberName(id, r && r.data.byName) || '不明';
+      var li = el('li'); var dot = el('i'); dot.style.background = c; li.appendChild(dot);
+      li.appendChild(document.createTextNode(name + ' ' + Math.round(pct) + '%'));
+      ul.appendChild(li); label.push(name + ' ' + Math.round(pct) + '%');
+    });
+    $('pie').style.background = 'conic-gradient(' + stops.join(',') + ')';
+    $('pie').setAttribute('aria-label', 'この30日の担当：' + label.join('、'));
   }
 
   // ---------- 表示：使う人 ----------
