@@ -111,11 +111,11 @@
     $('today').textContent = md(today) + ' (' + dow(today) + ')';
     $('todayLbl').textContent = '今日（📅 ' + md(today) + '）';
     var open = state.tasks.filter(function (t) { return !t.done; });
-    var carry = open.filter(function (t) { return t.date < today; }).sort(function (a, b) { return locked(a) - locked(b) || (a.date < b.date ? -1 : a.date > b.date ? 1 : 0); });
+    var carry = open.filter(function (t) { return t.date < today; }).sort(function (a, b) { return rank(a) - rank(b) || (a.date < b.date ? -1 : a.date > b.date ? 1 : 0); });
     var todays = open.filter(function (t) { return t.date === today; });
     var done = state.tasks.filter(function (t) { return t.done; });
     var order = { '朝': 0, '昼': 1, '夕': 2, '': 3 };
-    todays.sort(function (a, b) { return locked(a) - locked(b) || order[a.slot] - order[b.slot]; });
+    todays.sort(function (a, b) { return rank(a) - rank(b) || order[a.slot] - order[b.slot]; });
     fill($('carry'), carry, today); $('carryBox').hidden = !carry.length;
     fill($('todayList'), todays, today); $('todayEmpty').hidden = !!todays.length;
     fill($('doneList'), done, today); $('doneBox').hidden = !done.length;
@@ -129,6 +129,8 @@
   }
   // 前提が未完了のタスクは、アプリでは完了にできない。薄いグレーで下の方に並べる（👤の待ちは印だけで、ロックしない）
   function locked(t) { return !t.done && t.preWait ? 1 : 0; }
+  // 並び順：ふつう → 👤の待ち → 前提待ち（ロック）
+  function rank(t) { return locked(t) ? 2 : (!t.done && t.wait ? 1 : 0); }
   function fill(box, list, today) {
     box.innerHTML = '';
     list.forEach(function (t) {
