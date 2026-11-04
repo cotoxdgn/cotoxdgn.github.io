@@ -111,11 +111,11 @@
     $('today').textContent = md(today) + ' (' + dow(today) + ')';
     $('todayLbl').textContent = '今日（📅 ' + md(today) + '）';
     var open = state.tasks.filter(function (t) { return !t.done; });
-    var carry = open.filter(function (t) { return t.date < today; }).sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+    var carry = open.filter(function (t) { return t.date < today; }).sort(function (a, b) { return locked(a) - locked(b) || (a.date < b.date ? -1 : a.date > b.date ? 1 : 0); });
     var todays = open.filter(function (t) { return t.date === today; });
     var done = state.tasks.filter(function (t) { return t.done; });
     var order = { '朝': 0, '昼': 1, '夕': 2, '': 3 };
-    todays.sort(function (a, b) { return order[a.slot] - order[b.slot]; });
+    todays.sort(function (a, b) { return locked(a) - locked(b) || order[a.slot] - order[b.slot]; });
     fill($('carry'), carry, today); $('carryBox').hidden = !carry.length;
     fill($('todayList'), todays, today); $('todayEmpty').hidden = !!todays.length;
     fill($('doneList'), done, today); $('doneBox').hidden = !done.length;
@@ -127,19 +127,27 @@
     state.projects.forEach(function (p) { var o = el('option'); o.value = p; dl.appendChild(o); });
     renderQuickMeta();
   }
+  // 待ち（👤に名前あり、または前提が未完了）のタスクは、アプリでは完了にできない。薄いグレーで下の方に並べる
+  function locked(t) { return !t.done && !!(t.wait || t.preWait) ? 1 : 0; }
   function fill(box, list, today) {
     box.innerHTML = '';
     list.forEach(function (t) {
-      var row = el('div', 'task' + (t.done ? ' done' : '') + (!t.done && t.date < today ? ' carry' : ''));
+      var lk = locked(t);
+      var row = el('div', 'task' + (t.done ? ' done' : '') + (!t.done && t.date < today ? ' carry' : '') + (lk ? ' locked' : ''));
       var cb = el('button', 'cb'); cb.type = 'button';
-      cb.setAttribute('aria-label', (t.done ? '完了を外す：' : '完了にする：') + t.todo);
+      cb.setAttribute('aria-label', lk ? '待ちのため完了にできません：' + t.todo : (t.done ? '完了を外す：' : '完了にする：') + t.todo);
+      if (lk) cb.setAttribute('aria-disabled', 'true');
       cb.appendChild(el('span', '', t.done ? '✓' : ''));
-      cb.addEventListener('click', function () { if (t.done) undone(t, row); else openSheet(t); });
+      cb.addEventListener('click', function () {
+        if (lk) { toast('待ちのタスクです。スプシの👤・前提を空にすると完了にできます'); return; }
+        if (t.done) undone(t, row); else openSheet(t);
+      });
       var body = el('div', 'body');
       body.appendChild(el('div', 'tt', t.todo));
       var meta = el('div', 'meta');
       if (t.pj) meta.appendChild(el('span', 'pj', t.pj));
       if (!t.done && t.wait) meta.appendChild(el('span', 'chip wait', '⏳ ' + t.wait + ' 待ち'));
+      if (!t.done && t.preWait) meta.appendChild(el('span', 'chip wait', '⏳ 前提 ' + t.pre.slice(0, 20) + ' 待ち'));
       if (!t.done && t.date < today) meta.appendChild(el('span', 'chip', md(t.date) + 'から'));
       if (t.slot) meta.appendChild(el('span', '', SLOT_EMOJI[t.slot] + ' ' + t.slot));
       else if (t.slotRaw) meta.appendChild(el('span', '', t.slotRaw));

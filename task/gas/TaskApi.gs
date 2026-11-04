@@ -42,6 +42,7 @@ var TASKAPI = {
   INSERT_ROW: 4,   // 新しいタスクを入れる行（既存GASと同じ）
   FIRST_ROW: 4,    // ここから下をタスクとして読む
   ACTUAL_HEADER: '実働',
+  PRE_HEADER: '前提', // 前提タスクの列（「No.タイトル」。その No が未完了なら「前提待ち」）
   WAIT_HEADER: '👤',  // 待ち相手の列（空でなければ、アプリに「〇〇待ち」と出す）
   // 見出しの文字で列を探す（列の順番が変わっても動くように）。見つからなければ既定列を使う
   COLS: {
@@ -222,6 +223,7 @@ function taskApi_cols(sh) {
   for (var k in TASKAPI.COLS) c[k] = taskApi_findCol(heads, TASKAPI.COLS[k].head, k !== 'todo') || TASKAPI.COLS[k].def;
   c.actual = taskApi_findCol(heads, TASKAPI.ACTUAL_HEADER, true);
   // 待ち相手（👤）：見つからないときは読まない（違う列を「待ち」と表示しないため、既定列は使わない）
+  c.pre = taskApi_findCol(heads, TASKAPI.PRE_HEADER, false);
   c.wait = taskApi_findCol(heads.map(function (x) { return x.replace(/[\uFE0E\uFE0F]/g, ''); }), TASKAPI.WAIT_HEADER, false);
   c.width = heads.length;
   return c;
@@ -259,7 +261,9 @@ function taskApi_rowToTask(row, v, c, today) {
     slotRaw: slot ? '' : slotEmoji,
     detail: String(v[c.detail - 1] || ''),
     actual: c.actual ? taskApi_num(v[c.actual - 1]) : null,
-    wait: c.wait ? taskApi_text(v[c.wait - 1]).slice(0, 40) : ''
+    wait: c.wait ? taskApi_text(v[c.wait - 1]).slice(0, 40) : '',
+    pre: c.pre ? taskApi_text(v[c.pre - 1]).slice(0, 60) : '',
+    preWait: false   // taskApi_list で、前提の No が未完了かどうかを見て決める
   };
 }
 
@@ -282,9 +286,17 @@ function taskApi_list(sh) {
   var c = taskApi_cols(sh);
   var all = taskApi_readAll(sh, c);
   var today = taskApi_ymd(new Date());
+  var doneByNo = {};
+  all.forEach(function (t) { if (t.no !== null) doneByNo[t.no] = t.done; });
   var tasks = all.filter(function (t) {
     if (!t.date) return false;
     return t.done ? t.date === today : t.date <= today;
+  });
+  // 前提：「No.タイトル」の No が完了済みなら待ちではない。番号が読めない・見つからないときは待ちとして扱う
+  tasks.forEach(function (t) {
+    if (!t.pre) return;
+    var m = /^\s*(\d+)/.exec(t.pre);
+    t.preWait = !(m && doneByNo[Number(m[1])] === true);
   });
   var seen = {}, pjs = [];
   all.forEach(function (t) { if (t.pj && !seen[t.pj]) { seen[t.pj] = true; pjs.push(t.pj); } });

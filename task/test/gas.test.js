@@ -38,6 +38,8 @@ t('list：今日＋持ち越しの未完了、今日の完了。読むだけで�
   assert.strictEqual(r.tasks[2].done, true);
   assert.strictEqual(r.tasks[2].slot, '昼');
   assert.strictEqual(r.tasks[1].wait, '山田さん'); assert.strictEqual(r.tasks[0].wait, '');
+  assert.strictEqual(r.tasks[0].preWait, false, '前提の No.10 は完了済み');
+  assert.strictEqual(r.tasks[1].preWait, true, '前提の No.12 は未完了');
   assert.deepStrictEqual(r.projects, ['例）案件A', '例）案件B', '例）案件C']);
   assert.deepStrictEqual(snap(), before);
   assert.strictEqual(sh.writes.length, 0);
