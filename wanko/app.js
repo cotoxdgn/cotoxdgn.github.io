@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var APP = 'wanko';
-  var VERSION = '5';                        // version.json と sw.js の CACHE（wanko-v3）と一緒に上げる
+  var VERSION = '6';                        // version.json と sw.js の CACHE（wanko-v3）と一緒に上げる
   var OLD_SETTINGS_ID = 'settings';         // 旧版がアプリ内で保存していた名前（今は使わない・書かない）
   var ME_KEY = 'wanko.me.v1';               // この端末で使う人（家族のID）
   var NAMES_KEY = 'wanko.names.v1';         // スプシの名前表の控え（オフラインでも表示するため）
@@ -87,6 +87,21 @@
     db.put({ date: k, dog: dog, by: who, byName: memberName(who), at: new Date().toISOString() }, recId(k, dog))
       .then(function () { showUndo(k, dog); });
   }
+  // 昨日までの記録を直す（記録一覧から）。今日の分は今まで通り「今日」の画面で
+  function editPast(k, dog) {
+    if (!familyConn()) { show('connect'); return; }
+    if (k >= dayKey(new Date())) return;
+    var s = settings(), r = recordFor(k, dog), name = s.dogs[dog] || dog;
+    if (r) {
+      if (!confirm(longDate(k) + ' の ' + name + ' の記録（' + memberName(r.data.by, r.data.byName) + '）を消しますか？')) return;
+      db.remove(recId(k, dog)).then(function () { Apps.toast(md(k) + ' の ' + name + ' を「記録なし」にしました'); });
+    } else {
+      var who = me();
+      if (!confirm(longDate(k) + ' の ' + name + ' を「した」にしますか？（記録した人：' + memberName(who) + '）')) return;
+      db.put({ date: k, dog: dog, by: who, byName: memberName(who), at: new Date().toISOString(), later: true }, recId(k, dog))
+        .then(function () { Apps.toast(md(k) + ' の ' + name + ' を「した」にしました'); });
+    }
+  }
   function undo(k, dog) {
     hideUndo();
     db.remove(recId(k, dog)).then(function () { Apps.toast('取り消しました'); });
@@ -110,7 +125,7 @@
     var n = el('span', 'n', memberName(r.data.by, r.data.byName));
     if (r.pending) n.appendChild(el('span', 'p', ' 送信待ち'));
     li.appendChild(n);
-    li.appendChild(el('span', 't', hm(r.data.at)));
+    li.appendChild(el('span', 't', r.data.later ? 'あとで記入' : hm(r.data.at)));
     return li;
   }
   function show(v) {
@@ -206,6 +221,10 @@
         var ok = !!recordFor(k, dog);
         var dot = el('div', 'dot ' + (ok ? 'ok' : 'ng') + (k === tk ? ' td' : ''), ok ? '✓' : '−');
         dot.setAttribute('aria-label', md(k) + ' ' + s.dogs[dog] + (ok ? ' した' : ' 記録なし'));
+        if (k < tk) {
+          dot.setAttribute('role', 'button'); dot.tabIndex = 0; dot.style.cursor = 'pointer';
+          (function (kk, dd) { dot.addEventListener('click', function () { editPast(kk, dd); }); })(k, dog);
+        }
         g.appendChild(dot);
       });
     });
@@ -216,16 +235,26 @@
       var h = el('h3', null, longDate(k) + (j === 0 ? ' 今日' : j === 1 ? ' 昨日' : ''));
       var ul = el('ul', 'log nod');
       DOGS.forEach(function (dog) {
-        var r = recordFor(k, dog);
-        if (r) ul.appendChild(logRow(r, s, false));
+        var r = recordFor(k, dog), li;
+        if (r) li = logRow(r, s, false);
         else {
-          var li = el('li');
+          li = el('li');
           li.appendChild(el('span', 'd', ''));
           li.appendChild(el('span', 'w ' + dog, s.dogs[dog]));
           li.appendChild(el('span', 'none', j === 0 ? 'まだ' : '記録なし'));
           li.appendChild(el('span', 't', ''));
-          ul.appendChild(li);
         }
+        if (j > 0) {   // 昨日までは押して直せる（ある→消す／ない→「した」にする）
+          li.className = 'editable';
+          li.setAttribute('role', 'button'); li.tabIndex = 0;
+          li.setAttribute('aria-label', longDate(k) + ' ' + s.dogs[dog] + (r ? ' の記録を消す' : ' を「した」にする'));
+          li.appendChild(el('span', 'ed', r ? '消す' : '＋した'));
+          (function (kk, dd) {
+            li.addEventListener('click', function () { editPast(kk, dd); });
+            li.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); editPast(kk, dd); } });
+          })(k, dog);
+        }
+        ul.appendChild(li);
       });
       box.appendChild(h); box.appendChild(ul);
     }
