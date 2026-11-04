@@ -37,6 +37,7 @@ t('list：今日＋持ち越しの未完了、今日の完了。読むだけで�
   assert.strictEqual(r.tasks[0].date, '2026-10-28');
   assert.strictEqual(r.tasks[2].done, true);
   assert.strictEqual(r.tasks[2].slot, '昼');
+  assert.strictEqual(r.tasks[1].wait, '山田さん'); assert.strictEqual(r.tasks[0].wait, '');
   assert.deepStrictEqual(r.projects, ['例）案件A', '例）案件B', '例）案件C']);
   assert.deepStrictEqual(snap(), before);
   assert.strictEqual(sh.writes.length, 0);
@@ -126,14 +127,14 @@ t('taskApiAddActualColumn：最終列の右の1行目に「実働」を書くだ
   ctx.taskApiAddActualColumn();
   assert.deepStrictEqual(snap(), again);
 });
-t('done＋実働：完了列と実働列のセルだけ（0.25h 単位に丸め）', () => {
+t('done＋実働：完了列と実働列のセルだけ（0.1h 単位に丸め）', () => {
   const before = snap(); sh.writes.length = 0;
   const r = call({ key: KEY, action: 'done', no: 12, todo: '見積書の確認 | 設備項目', actual: 1.3 });
-  assert.ok(r.ok); assert.strictEqual(r.actualSaved, true); assert.strictEqual(r.task.actual, 1.25);
+  assert.ok(r.ok); assert.strictEqual(r.actualSaved, true); assert.strictEqual(r.task.actual, 1.3);
   const after = snap();
   after.forEach((s, i) => { if (i !== 5) assert.strictEqual(s, before[i]); });
   assert.deepStrictEqual(sh.writes, [['setValue', 6, 2], ['setValue', 6, 15]]);
-  assert.strictEqual(sh.peek(6, 15).v, 1.25);
+  assert.strictEqual(sh.peek(6, 15).v, 1.3);
 });
 t('actual：実働だけ直す・範囲外は拒否', () => {
   const before = snap();
