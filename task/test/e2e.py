@@ -89,6 +89,7 @@ try:
 
         lk = pg.locator('.task.locked', has_text='目次を作る')
         check('待ちのタスクは薄いグレー（locked）', lk.count() == 1)
+        check('👤だけの待ちはロックしない', pg.locator('.task.locked').count() == 1)
         check('前提が未完了なら「前提…待ち」の印', lk.locator('.chip.wait', has_text='前提').count() == 1)
         check('待ちのタスクは今日の一番下', pg.locator('#todayList .task').last.inner_text().find('目次を作る') >= 0)
         lk.locator('.cb').click(force=True)
