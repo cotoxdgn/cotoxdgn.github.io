@@ -184,7 +184,7 @@ const urls = r => r.sent.map(x => x.url).sort();
   await t('大（昼）：日付・天気（今・最高最低・降水・3時間ごと6つ）・予定（今の予定は太字・終わった予定は出さない・明日の最初）・タスク5つ（持越の印）', async () => {
     const r = await run(configured, { respond: good, files, family: 'large' });
     assert.ok(r.completed);
-    assert.deepStrictEqual(urls(r), [R_URL, T_URL, 'weather'].sort(), '大は天気・ルーティン・タスクだけ読む');
+    assert.deepStrictEqual(urls(r), [R_URL, T_URL, W_URL, 'weather'].sort(), '大は全部読む');
     assert.strictEqual(r.widget.refreshAfterDate - Date.parse('2026-11-05T10:30:00+09:00'), 15 * 60000);
     assert.strictEqual(r.widget.url, undefined, '押しても Scriptable が開くだけ');
     has(r, '11.5'); has(r, '木曜日・大阪');
@@ -199,13 +199,14 @@ const urls = r => r.sent.map(x => x.url).sort();
     assert.ok(item(r, '現場 引渡し').font.bold, '今やっている予定は太字');
     assert.ok(!item(r, '打合せ（仕様確認）').font.bold);
     const times = r.texts.filter(x => /^\d+:\d\d$|^終日$/.test(x));
-    assert.deepStrictEqual(times, ['10:00', '15:00', '17:30', '19:00', '終日']);
-    const order = ['現場 引渡し', '打合せ（仕様確認）', '見積提出〆', 'ジム', '母の誕生日'].map(s => r.texts.indexOf(s));
+    assert.deepStrictEqual(times, ['10:00', '15:00', '17:30', '19:00']);
+    has(r, 'ほか1件');
+    const order = ['現場 引渡し', '打合せ（仕様確認）', '見積提出〆', 'ジム'].map(s => r.texts.indexOf(s));
     assert.deepStrictEqual(order.slice().sort((a, b) => a - b), order, '時刻順、終日はあと');
     has(r, '明日 9:30 歯医者');
     // タスク
     has(r, 'タスク'); assert.ok(r.texts.includes('8件'));
-    const names = ['古い持ち越し', '朝のタスク', '昼のタスク', '夕方のタスク', '時間帯なし'];
+    const names = ['古い持ち越し', '朝のタスク', '昼のタスク', '夕方のタスク'];
     const idx = names.map(n => r.texts.indexOf(n));
     assert.ok(idx.every(i => i >= 0), JSON.stringify(r.texts));
     assert.deepStrictEqual(idx.slice().sort((a, b) => a - b), idx, 'アプリと同じ順');
@@ -213,10 +214,15 @@ const urls = r => r.sent.map(x => x.url).sort();
     assert.strictEqual(r.texts.filter(x => x === '持越').length, 1);
     assert.strictEqual(r.texts[r.texts.indexOf('古い持ち越し') + 1], '持越');
     assert.ok(r.texts.includes('🌅') && r.texts.includes('☀️') && r.texts.includes('🌙'));
-    has(r, 'ほか1件・待ち2件・明日3件');
+    has(r, 'ほか2件・待ち2件・明日3件');
     hasNot(r, '更新できませんでした');
+    // 下段：ルーティン・歯みがき・脳みそ（大1つに全部）
+    has(r, 'ルーティン'); assert.ok(r.texts.includes('日連続')); has(r, '生理 2日後');
+    has(r, '歯みがき'); assert.ok(r.texts.includes('ポチ') && r.texts.includes('わんこB'));
+    has(r, '脳みそ'); has(r, '全128枚'); has(r, '造作収納は');
+    has(r, '10:30 更新');
     const c = JSON.parse(files['/docs/koto-widget-cache.json']);
-    assert.deepStrictEqual(Object.keys(c).sort(), ['routine', 'task', 'weather']);
+    assert.deepStrictEqual(Object.keys(c).sort(), ['routine', 'task', 'wanko', 'weather']);
   });
 
   await t('大（夜 21:40）：明日の予報・3時間ごとは22時から・予定は「今日は終了」で明日の分・タスクは今日の残りと明日', async () => {
@@ -227,10 +233,10 @@ const urls = r => r.sent.map(x => x.url).sort();
     ['歯医者', '打合せ', '現場 立会い'].forEach(s => assert.ok(r.texts.includes(s), s));
     hasNot(r, 'ジム'); hasNot(r, '母の誕生日');
     assert.deepStrictEqual(r.texts.filter(x => /^\d+:\d\d$/.test(x)), ['9:30', '13:00', '16:00']);
-    // タスク：今日の残り3つ＋ほか・待ち、明日（待ちは名前に出さない）
-    ['古い持ち越し', '朝のタスク', '昼のタスク'].forEach(s => assert.ok(r.texts.includes(s), s));
-    hasNot(r, '夕方のタスク');
-    has(r, 'ほか3件・待ち2件');
+    // タスク：今日の残り2つ＋ほか・待ち、明日（待ちは名前に出さない）
+    ['古い持ち越し', '朝のタスク'].forEach(s => assert.ok(r.texts.includes(s), s));
+    hasNot(r, '昼のタスク');
+    has(r, 'ほか4件・待ち2件');
     assert.ok(r.texts.includes('3件'), '明日の件数（待ち含む）');
     assert.ok(r.texts.indexOf('明日の朝') < r.texts.indexOf('明日の夕方'));
     hasNot(r, '明日の待ち');
@@ -280,7 +286,7 @@ const urls = r => r.sent.map(x => x.url).sort();
     r = await run(onlyW, { respond: good, files: {}, family: 'medium' });
     assert.ok(r.texts.includes('ポチ')); assert.strictEqual(r.texts.filter(x => x === '未設定').length, 2, 'ルーティンと脳みそ');
     r = await run(onlyW, { respond: good, files: {}, family: 'large' });
-    assert.strictEqual(r.texts.filter(x => x === '未設定').length, 2, '予定とタスク'); has(r, '木曜日・大阪');
+    assert.strictEqual(r.texts.filter(x => x === '未設定').length, 4, '予定・タスク・ルーティン・脳みそ'); has(r, '木曜日・大阪'); assert.ok(r.texts.includes('ポチ'));
   });
 
   await t('天気だけ読めない：天気の所に一言。予定・タスクはそのまま', async () => {
@@ -305,7 +311,7 @@ const urls = r => r.sent.map(x => x.url).sort();
 
   await t('全部読めない：前の内容を出し、下に「…：更新できませんでした HH:MM」。中は「更新」の代わりにそれ', async () => {
     let r = await run(configured, { respond: fail, files, family: 'large', weather: false, now: '2026-11-05T11:05:00+09:00' });
-    has(r, '現場 引渡し'); has(r, '古い持ち越し'); has(r, '予定・タスク表：更新できませんでした 11:05');
+    has(r, '現場 引渡し'); has(r, '古い持ち越し'); has(r, '予定・タスク表・歯みがき：更新できませんでした 11:05');
     r = await run(configured, { respond: fail, files, family: 'medium', now: '2026-11-05T11:05:00+09:00' });
     has(r, '生理 2日後'); has(r, 'ポチ'); has(r, 'ルーティン・歯みがき：更新できませんでした 11:05'); hasNot(r, '11:05 更新');
   });
@@ -382,12 +388,12 @@ const urls = r => r.sent.map(x => x.url).sort();
     has(r, '今日のタスクはありません'); has(r, '明日のタスクはありません'); hasNot(r, '持越');
   });
 
-  await t('アプリの中で実行：大と中の見本を続けて出す（全部読む）', async () => {
+  await t('アプリの中で実行：大の見本を出す（全部読む・大1つに全部入る）', async () => {
     const r = await run(configured, { respond: good, files: {}, inWidget: false });
-    assert.deepStrictEqual(r.presented, ['large', 'medium']); assert.ok(r.completed);
+    assert.deepStrictEqual(r.presented, ['large']); assert.ok(r.completed);
     assert.deepStrictEqual(urls(r), [R_URL, T_URL, W_URL, 'weather'].sort());
     assert.ok(r.previewLarge.texts().includes('現場 引渡し'));
-    has(r, 'ポチ');
+    assert.ok(r.previewLarge.texts().includes('ポチ'));
   });
 
   await t('キャッシュが壊れていても動く', async () => {
