@@ -286,6 +286,7 @@
   function openWait(t) {
     wcur = t; wpre = t.pre || '';
     wslot0 = t.slot || slotTime(t.slotRaw) || ''; wslot = wslot0;
+    $('wsTodo').value = t.todo || '';
     $('wsDate').value = t.date || ''; drawSlot();
     $('wsTitle').textContent = t.todo;
     var m = $('wsMeta'); m.innerHTML = '';
@@ -335,15 +336,22 @@
   function saveWait() {
     var t = wcur; if (!t) return;
     var params = { no: t.no, todo: t.todo };
+    var nt = $('wsTodo').value.replace(/[\r\n]+/g, ' ').trim();
+    if (!nt) { toast('タスク名を空にはできません', true); $('wsTodo').focus(); return; }
+    if (nt !== t.todo) params.newTodo = nt;
     var dt = $('wsDate').value;
     if (dt && dt !== (t.date || '')) params.date = dt;
     if (wslot !== wslot0) params.slot = wslot;
     var who = $('wsWho').value.trim();
     if (state.waitColumn && who !== (t.wait || '')) params.wait = who;
     if (state.preColumn && wpre !== (t.pre || '')) params.pre = wpre;
-    if (params.wait === undefined && params.pre === undefined && params.date === undefined && params.slot === undefined) { closeSheet(); return; }
+    if (params.newTodo === undefined && params.wait === undefined && params.pre === undefined && params.date === undefined && params.slot === undefined) { closeSheet(); return; }
     var btn = $('wsSave'); btn.disabled = true; btn.textContent = '保存中…';
     api('setWait', params).then(function () {
+      if (params.newTodo) {   // 名前を変えたら、動いているタイマーも新しい名前に付け替える
+        var all = timers(), ok0 = tkey(t), nk = t.no + '|' + params.newTodo;
+        if (all[ok0]) { all[nk] = all[ok0]; delete all[ok0]; lsSet(TIMER_KEY, all); }
+      }
       toast('保存しました'); closeSheet(); return load(true);
     }, function (e) { toast(errText(e), true); if (e.code === 'not_found') { closeSheet(); load(true); } })
       .then(function () { btn.disabled = false; btn.textContent = '保存'; });
