@@ -127,6 +127,7 @@
     if (all) $('alldone').innerHTML = FLOWER + '<span>今日は全部できました。カレンダーに花のスタンプを押しました。</span>';
     renderPerCard();
     renderDiaryCard();
+    renderGo();
   }
   function toggle(hid) {
     var date = state.today, id = logId(date, hid);
@@ -1196,6 +1197,15 @@
       '<span class="small muted dline">' + (e ? esc(diaryText(e)) : '出来事・感謝・格言。夜に1分で。') + '</span>';
   }
   $('tDiary').onclick = function () { openDiary(state.today); };
+  // ほかのアプリへの入口：空間ひきだし帖（今日の1枚を書いたか。同じスプシの app=hikidashi を読むだけ）と、noteのネタ帳
+  var hiki = Apps.collection('hikidashi');
+  function renderGo() {
+    var t = state.today, cal = ymd(new Date());
+    var n = hiki.all().filter(function (r) { return r.data && r.data.kind === 'card' && r.data.status === 'done' && (r.data.doneOn === t || r.data.doneOn === cal); }).length;
+    $('tGo').innerHTML = '<a class="golink" href="../hikidashi/#write"><b>空間ひきだし帖</b><small>今日の1枚（商品・納まり・法規・おすすめ）</small><span class="pill' + (n ? ' ok' : '') + '">' + (n ? n + '枚書いた' : 'まだ') + '</span></a>' +
+      '<a class="golink" href="' + NOTE_URL + '" target="_blank" rel="noopener"><b>noteのネタ帳</b><small>ネタを足す・構成案を作る・週の振り返り</small><span class="pill">開く ›</span></a>';
+  }
+  hiki.onChange(function () { if (state.view === 'today') renderGo(); });
   function openDiary(ds) {
     closeSheet();
     dy.date = ds || state.today;
@@ -1411,7 +1421,7 @@
     DEFAULTS.forEach(function (x) { db.put(x.data, x.id); });
   }
   Apps.on('error', function (d) { if (d.app === APP || !d.app) $('syncState').textContent = Apps.errorText(d.error); });
-  Apps.ensureConnected(APP).then(function () { return db.sync(); }).then(function () {
+  Apps.ensureConnected(APP).then(function () { hiki.sync().catch(function () {}); return db.sync(); }).then(function () {
     seed();
     renderAll();
     retryImageDeletes();
