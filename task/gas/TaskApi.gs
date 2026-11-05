@@ -62,7 +62,7 @@ var TASKAPI = {
     slot:   { head: '⏰',   def: 8 },
     detail: { head: '詳細', def: 11 }
   },
-  SLOTS: { '朝': '🌅', '昼': '☀️', '夕': '🌙' },
+  SLOTS: { '朝': '🌅', '昼': '☀️', '夕': '🌙', '移動': '🚃' },
   PROP_KEY: 'TASK_API_KEY',
   PROP_VIEW_KEY: 'TASK_VIEW_KEY',   // 見るだけ用の合言葉（ウィジェット用。widget だけ）
   MAX_TEXT: 500
@@ -370,7 +370,7 @@ function taskApi_markPreWait(all, tasks) {
 }
 
 // widget：今日の未完了（📅が今日以前＝持ち越し含む）と、明日（日本時間の次の日・taskApi_list の tomorrow と同じ）の未完了だけ。
-//  返すのは todo・pj・date・slot（朝・昼・夕・空）・wait（👤が入っているか）・preWait・done
+//  返すのは todo・pj・date・slot（朝・昼・夕・移動・空）・wait（👤が入っているか）・preWait・done
 //  （詳細・前提の中身・👤の名前・No・行番号・候補の一覧は返さない）
 function taskApi_widget(sh) {
   var c = taskApi_cols(sh);

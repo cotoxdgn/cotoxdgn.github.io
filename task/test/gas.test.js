@@ -193,6 +193,8 @@ t('setWait：👤と前提のセルだけを書く。自分自身・形の違う
   assert.ok(r3.ok, JSON.stringify(r3)); assert.strictEqual(r3.task.date, '2026-11-05'); assert.strictEqual(r3.task.slot, '夕');
   const r4 = call({ key: KEY, action: 'setWait', no, todo, slot: '13:30' });
   assert.ok(r4.ok); assert.strictEqual(sh.peek(row, 8).v, 13.5);
+  const r4b = call({ key: KEY, action: 'setWait', no, todo, slot: '移動' });
+  assert.ok(r4b.ok); assert.strictEqual(sh.peek(row, 8).v, '🚃'); assert.strictEqual(r4b.task.slot, '移動', '🚃 はシートの移動の印');
   const r5 = call({ key: KEY, action: 'setWait', no, todo, slot: '' });
   assert.ok(r5.ok); assert.strictEqual(r5.task.slot, ''); assert.strictEqual(r5.task.slotRaw, '');
   const b1 = snap();

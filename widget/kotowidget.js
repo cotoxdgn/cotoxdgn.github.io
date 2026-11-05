@@ -160,7 +160,7 @@ function trouble(r) {
 // ---------- 表示用にまとめる ----------
 // タスク表：アプリ（task/app.js の render）と同じ並び。持ち越し（ふつう→👤待ち→前提待ち、日付順）→ 今日（同じ順、朝・昼・夕・なし）
 const SLOT_ORDER = { '朝': 0, '昼': 1, '夕': 2, '': 3 };
-const SLOT_ICON = { '朝': '🌅', '昼': '☀️', '夕': '🌙' };
+const SLOT_ICON = { '朝': '🌅', '昼': '☀️', '夕': '🌙', '移動': '🚃' };
 const taskRank = t => (t.preWait ? 2 : (t.wait ? 1 : 0));
 function bySlot(a, b) { return taskRank(a) - taskRank(b) || (SLOT_ORDER[a.slot || ''] ?? 3) - (SLOT_ORDER[b.slot || ''] ?? 3); }
 function taskSummary(data) {
