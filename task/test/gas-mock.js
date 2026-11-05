@@ -29,6 +29,9 @@ class Sheet {
     return m;
   }
   getMaxColumns() { return this.maxCols; }
+  getMaxRows() { return Math.max(this.rows.length, this.getLastRow()); }
+  insertRowsAfter(r, n) { for (let i = 0; i < n; i++) this.rows.push([]); this.writes.push(['insertRowsAfter', r, n]); }
+  getFilter() { return null; }
   insertColumnsAfter(c, n) { this.maxCols += n; }
   insertRowBefore(r) {
     while (this.rows.length < r - 1) this.rows.push([]);
@@ -63,6 +66,26 @@ class Range {
   }
   setValues(vs) { this.each((r, c, i, j) => { const x = this.sh.cell(r, c); x.v = vs[i][j]; x.f = ''; }); this.sh.writes.push(['setValues', this.r, this.c]); return this; }
   setFormulaR1C1(f) { this.each((r, c) => { const x = this.sh.cell(r, c); x.f = f; x.v = '(fx)'; }); this.sh.writes.push(['setFormulaR1C1', this.r, this.c]); return this; }
+  // 並べ替え（GAS の Range.sort と同じ：指定列の値で行ごと並べ替える。空はうしろ。同じ値は元の順）
+  sort(specs) {
+    const rows = [];
+    for (let i = 0; i < this.nr; i++) { const row = []; for (let j = 0; j < this.nc; j++) row.push(Object.assign({}, this.sh.peek(this.r + i, this.c + j))); rows.push(row); }
+    const key = (row, col) => { const v = row[col - this.c].v; return v instanceof Date ? v.getTime() : v; };
+    const idx = rows.map((row, i) => i);
+    idx.sort((a, b) => {
+      for (const s of specs) {
+        const x = key(rows[a], s.column), y = key(rows[b], s.column);
+        const ex = x === '' || x == null, ey = y === '' || y == null;
+        if (ex !== ey) return ex ? 1 : -1;
+        if (x < y) return s.ascending ? -1 : 1;
+        if (x > y) return s.ascending ? 1 : -1;
+      }
+      return a - b;
+    });
+    idx.forEach((from, to) => { for (let j = 0; j < this.nc; j++) { const t = this.sh.cell(this.r + to, this.c + j); Object.assign(t, rows[from][j]); } });
+    this.sh.writes.push(['sort', this.r]);
+    return this;
+  }
   copyTo(dest, type) {
     for (let i = 0; i < this.nr; i++) for (let j = 0; j < this.nc; j++) {
       const s = this.sh.peek(this.r + i, this.c + j);
