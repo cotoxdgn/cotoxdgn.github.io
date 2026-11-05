@@ -8,7 +8,7 @@
   var PREF_KEY = 'task.prefs.v1';
   var HASH_RE = /#(?:.*&)?t=([A-Za-z0-9_-]+)/;
   var LIB = '../shared/lib/';
-  var SLOT_EMOJI = { '朝': '🌅', '昼': '☀️', '夕': '🌙' };
+  var SLOT_EMOJI = { '朝': '🌅', '昼': '☀️', '夕': '🌙', '移動': '🚃' };
   var ERR = {
     not_connected: 'まだつながっていません', offline: 'オフラインです。電波のある所でもう一度',
     network: 'スプシにつながりませんでした。少し待ってもう一度', timeout: '時間がかかりすぎました。もう一度押してください',
@@ -16,7 +16,7 @@
     busy: 'スプシが混み合っています。もう一度', not_found: 'このタスクがシートで見つかりません（PCで書き換えた？）。読み込み直します',
     no_todo: 'タスク名を入れてください', bad_ko: '工は 0〜24 の数字で', bad_date: '作業日を選んでください',
     bad_actual: '実働は 0〜24 の数字で', server: 'スプシ側でエラーが起きました',
-    bad_wait: '待ち相手は40文字までで', bad_slot: '時間帯は朝・昼・夕・なし、または時刻で', bad_pre: '前提は一覧から選んでください（自分自身は選べません）',
+    bad_wait: '待ち相手は40文字までで', bad_slot: '時間帯は朝・昼・夕・移動・なし、または時刻で', bad_pre: '前提は一覧から選んでください（自分自身は選べません）',
     no_wait_column: 'スプシに「👤」の列が見つかりません', no_pre_column: 'スプシに「前提」の列が見つかりません',
     bad_action: 'スクリプトが古いままです。デプロイを新しい版にしてください'
   };
@@ -117,7 +117,7 @@
     var carry = open.filter(function (t) { return t.date < today; }).sort(function (a, b) { return rank(a) - rank(b) || (a.date < b.date ? -1 : a.date > b.date ? 1 : 0); });
     var todays = open.filter(function (t) { return t.date === today; });
     var done = state.tasks.filter(function (t) { return t.done; });
-    var order = { '朝': 0, '昼': 1, '夕': 2, '': 3 };
+    var order = { '朝': 0, '昼': 1, '夕': 2, '移動': 3, '': 4 };
     todays.sort(function (a, b) { return rank(a) - rank(b) || order[a.slot] - order[b.slot]; });
     fill($('carry'), carry, today); $('carryBox').hidden = !carry.length;
     fill($('todayList'), todays, today); $('todayEmpty').hidden = !!todays.length;
