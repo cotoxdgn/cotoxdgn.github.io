@@ -16,7 +16,7 @@
     busy: 'スプシが混み合っています。もう一度', not_found: 'このタスクがシートで見つかりません（PCで書き換えた？）。読み込み直します',
     no_todo: 'タスク名を入れてください', bad_ko: '工は 0〜24 の数字で', bad_date: '作業日を選んでください',
     bad_actual: '実働は 0〜24 の数字で', server: 'スプシ側でエラーが起きました',
-    bad_wait: '待ち相手は40文字までで', bad_slot: '時間帯は朝・昼・夕・移動・なし、または時刻で', bad_pre: '前提は一覧から選んでください（自分自身は選べません）',
+    bad_wait: '待ち相手は40文字までで', bad_slot: '時間帯は朝・昼・夕・移動・なし、または時刻で', bad_pre: '前提は一覧から選んでください（自分自身は選べません）', used_as_pre: 'ほかのタスクの前提になっているので削除できません',
     no_wait_column: 'スプシに「👤」の列が見つかりません', no_pre_column: 'スプシに「前提」の列が見つかりません',
     bad_action: 'スクリプトが古いままです。デプロイを新しい版にしてください'
   };
@@ -287,6 +287,7 @@
     wcur = t; wpre = t.pre || '';
     wslot0 = t.slot || slotTime(t.slotRaw) || ''; wslot = wslot0;
     $('wsTodo').value = t.todo || '';
+    delStep = 0; drawDel();
     $('wsDate').value = t.date || ''; drawSlot();
     $('wsTitle').textContent = t.todo;
     var m = $('wsMeta'); m.innerHTML = '';
@@ -333,6 +334,31 @@
     if (all.length > list.length) box.appendChild(el('p', 'note', 'ほか ' + (all.length - list.length) + ' 件。上の欄に番号や名前を入れると絞り込めます'));
     if (!list.length) box.appendChild(el('p', 'note', q ? '見つかりません' : '未完了のタスクがありません'));
   }
+  // 削除：1回目「削除しますか？」→ 2回目「ほんとに大丈夫？！」の2段階。シートの行ごと消える
+  var delStep = 0;
+  function drawDel() {
+    var box = $('wsDelAsk'); box.innerHTML = '';
+    $('wsDel').hidden = delStep > 0; box.hidden = delStep === 0;
+    if (!delStep || !wcur) return;
+    box.appendChild(el('span', '', delStep === 1 ? '「' + wcur.todo + '」をシートから削除しますか？（行ごと消えます）' : 'ほんとに大丈夫？！ 元に戻せません。'));
+    var r = el('div', 'row2');
+    var no = el('button', 'btn ghost sm', 'やめる'); no.type = 'button';
+    no.addEventListener('click', function () { delStep = 0; drawDel(); });
+    var yes = el('button', 'btn danger sm', delStep === 1 ? '削除する' : 'ほんとに削除する'); yes.type = 'button';
+    yes.addEventListener('click', function () {
+      if (delStep === 1) { delStep = 2; drawDel(); return; }
+      var t = wcur; yes.disabled = true; yes.textContent = '削除中…';
+      api('remove', { no: t.no, todo: t.todo }).then(function () {
+        var all = timers(); if (all[tkey(t)]) { delete all[tkey(t)]; lsSet(TIMER_KEY, all); }
+        toast('削除しました'); delStep = 0; closeSheet(); return load(true);
+      }, function (e) {
+        toast(errText(e) + (e.detail ? '：' + e.detail : ''), true); delStep = 0; drawDel();
+        if (e.code === 'not_found') { closeSheet(); load(true); }
+      });
+    });
+    r.appendChild(no); r.appendChild(yes); box.appendChild(r);
+  }
+  $('wsDel').addEventListener('click', function () { delStep = 1; drawDel(); });
   function saveWait() {
     var t = wcur; if (!t) return;
     var params = { no: t.no, todo: t.todo };

@@ -242,4 +242,23 @@ t('グローバルは TASKAPI・taskApi*・doGet/doPost だけ（既存GASと名
   ['setup', 'showConnectLink', 'addActualColumn'].forEach(n => assert.ok(!names.includes(n), n));
 });
 
+t('remove：No と ToDo が合う1行だけ削除。前提にされている未完了タスクは消さない', () => {
+  // 前提にされているタスク（No.12 は No.11 の前提）は断る
+  const all0 = ctx.taskApi_readAll(sh, ctx.taskApi_cols(sh));
+  const t12 = all0.find(x => x.no === 12);
+  const user = all0.find(x => !x.done && /^\s*12\./.test(x.pre || ''));
+  if (user) {
+    const r0 = call({ key: KEY, action: 'remove', no: 12, todo: t12.todo });
+    assert.strictEqual(r0.error, 'used_as_pre'); assert.ok(r0.detail.includes(String(user.no)));
+  }
+  assert.strictEqual(call({ key: KEY, action: 'remove', no: 13, todo: '違う名前' }).error, 'not_found');
+  const before = snap();
+  const t13 = all0.find(x => x.no === 13);
+  const r = call({ key: KEY, action: 'remove', no: 13, todo: t13.todo });
+  assert.ok(r.ok, JSON.stringify(r)); assert.strictEqual(r.removed.no, 13);
+  const after = snap();
+  assert.strictEqual(after.length, before.length - 1);
+  assert.deepStrictEqual(after, before.filter((x, i) => i !== t13.row - 1), 'その行だけ消えて、ほかは同じ');
+  assert.ok(!ctx.taskApi_readAll(sh, ctx.taskApi_cols(sh)).some(x => x.no === 13));
+});
 console.log(`\n${passed} passed`);
