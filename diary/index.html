@@ -332,6 +332,11 @@ button.row { width: 100%; background: transparent; border-left: 0; border-right:
 .diarycard { border: 0; text-align: left; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; color: var(--ink); cursor: pointer; border-left: 6px solid var(--ax-accent); font: inherit; width: 100%; }
 .diarycard .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .diarycard b { font-family: var(--display); font-size: 16px; }
+.golinks { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.golink { background: var(--card); border-radius: 18px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: var(--ink); min-width: 0; }
+.golink b { font-family: var(--display); font-size: 14px; }
+.golink small { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.golink .pill { align-self: flex-start; margin-top: 4px; }
 .diarycard .dline { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .pill { font-size: 12px; border-radius: 999px; padding: 1px 10px; background: var(--mustard-soft); color: var(--ink); }
 .pill.ok { background: var(--sage-soft); }
@@ -361,6 +366,7 @@ button.row { width: 100%; background: transparent; border-left: 0; border-right:
     <div class="alldone" id="alldone" hidden></div>
     <div class="card percard" id="tPer"></div>
     <button class="card diarycard" type="button" id="tDiary"></button>
+    <div class="golinks" id="tGo"></div>
     <p class="hint">丸をタップで記録／もう一度タップで取り消し。深夜3時までは前の日として記録します</p>
   </section>
 

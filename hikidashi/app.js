@@ -253,6 +253,15 @@
   function stockRec(s) { var d = {}; Object.keys(s).forEach(function (k) { if (k !== 'id') d[k] = s[k]; }); return d; }
   function releaseStock(sid) { var s = st.stocks.filter(function (x) { return x.id === sid; })[0]; if (s) db.put(Object.assign(stockRec(s), { cardId: '' }), s.id); }
   $('wDone').addEventListener('click', function () { saveCard(true); });
+  // noteへ：カードの文をコピーして、noteのネタ帳（claude.ai のページ）を開く。記事を書いたら「noteの記事」欄にURLを貼る
+  var NOTE_URL = 'https://claude.ai/artifact/99p3EizFftnBMoFMRDH5Uj';
+  $('wNeta').addEventListener('click', function () {
+    var k = K[ed.type];
+    if (!(ed.from || '').trim() && !(ed.to || '').trim()) { Apps.toast('先に' + k.from.replace(/（.*）/, '') + 'と' + k.to.replace(/（.*）/, '') + 'を書いてください', true); return; }
+    var t = (ed.from || '') + ' → ' + (ed.to || '') + (k.suffix || '') + (ed.phrase ? '：' + ed.phrase : '') + '（空間ひきだし帖' + (ed.no ? ' ' + S.no3(ed.no) : '') + 'から）';
+    try { navigator.clipboard.writeText(t).then(function () { Apps.toast('文をコピーしました。ネタ帳に貼ってください'); }, function () { Apps.toast('コピーできませんでした', true); }); } catch (e) { Apps.toast('コピーできませんでした', true); }
+    window.open(NOTE_URL, '_blank', 'noopener');
+  });
   $('wSave').addEventListener('click', function () { saveCard(false); });
   $('wDel').addEventListener('click', function () {
     if (!ed.id || !confirm('このカードを消しますか？' + (ed.publishAt && ed.publishAt <= today() ? '\nHPからも消えます。' : ''))) return;

@@ -79,6 +79,7 @@ h2 { font-size: 16px; margin: 0; }
 .stock4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .stock4 div { background: var(--ks); color: var(--ki); border-radius: 14px; padding: 10px 8px; display: flex; flex-direction: column; }
 .stock4 b { font-size: 20px; }
+.notego { text-decoration: none; color: var(--ink); gap: 4px; }
 .alert { background: var(--rec-soft); color: var(--rec-ink); border-radius: 14px; padding: 10px 12px; font-size: 13px; }
 .alert a { color: inherit; font-weight: 700; }
 
@@ -194,6 +195,7 @@ h2 { font-size: 16px; margin: 0; }
     <h2>ネタのストック</h2>
     <div class="stock4" id="tStock"></div>
     <div class="between small"><span class="muted">案件が終わったら、PCからまとめて追加できます</span><a href="#desk">まとめて入力 ›</a></div>
+    <a class="box notego" id="tNote" href="https://claude.ai/artifact/99p3EizFftnBMoFMRDH5Uj" target="_blank" rel="noopener"><b class="disp">noteのネタ帳を開く</b><span class="small muted">書いたカードを、もう少し長く記事にするなら。カードの「noteネタにする」で文を持っていけます</span></a>
     <p class="small muted" id="sync" style="margin:0"></p>
   </section>
 
@@ -221,6 +223,7 @@ h2 { font-size: 16px; margin: 0; }
       <div class="row"><button class="link" type="button" id="wIllX" hidden>イラストを外す</button><button class="link" type="button" id="wPhX" hidden>写真を外す</button></div>
       <input type="file" accept="image/*" capture="environment" id="wIllFile" hidden><input type="file" accept="image/*" id="wPhFile" hidden>
     </div>
+    <button class="ax-btn" type="button" id="wNeta" style="align-self:flex-start">noteネタにする（文をコピーしてネタ帳を開く）</button>
     <label class="f">noteの記事（あれば）<input id="wNote" type="url" maxlength="500" placeholder="https://note.com/…"><span class="hint">HPのこのカードから記事へ飛べるようになります</span></label>
     <label class="f" id="wPubF">フジイプロダクツの案件なら、HPに出す通称<input id="wPub" maxlength="40" placeholder="例：〇〇のブース"><span class="hint">2027年3月までは、通称も「実務で使用」もHPに出ません</span></label>
     <div class="sticky"><button class="btn-dark" type="button" id="wDone"></button><div class="between"><button class="link" type="button" id="wSave">下書きで保存</button><button class="link" type="button" id="wDel" hidden>このカードを消す</button></div></div>
