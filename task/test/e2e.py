@@ -56,8 +56,9 @@ try:
         pg.click('#addBtn')
         pg.wait_for_selector('#toast:has-text("シートに追加しました")')
         s = sheet()
-        check('シート4行目に追加（No/PJ/ToDo/工/⏰）', s[3][0] == 13 and s[3][2] == '例）案件B' and s[3][3] == 'プレゼン構成 | 表紙を作る' and s[3][4] == 1 and s[3][7] == '☀️')
-        check('元の4行目以下は1行下がっただけ', s[5][3] == '見積書の確認 | 設備項目' and s[6][3] == 'プレゼン構成 | 目次を作る')
+        nr = [r for r in s if r and r[0] == 13]
+        check('シートに追加（No/PJ/ToDo/工/⏰）', len(nr) == 1 and nr[0][2] == '例）案件B' and nr[0][3] == 'プレゼン構成 | 表紙を作る' and nr[0][4] == 1 and nr[0][7] == '☀️')
+        check('既存の行は残っている', any(r and r[3] == '見積書の確認 | 設備項目' for r in s) and any(r and r[3] == 'プレゼン構成 | 目次を作る' for r in s))
         check('画面の今日に出る', pg.locator('#todayList .task', has_text='表紙を作る').count() == 1)
         check('入力欄は空に戻る', pg.input_value('#aTodo') == '')
 
@@ -71,7 +72,8 @@ try:
         pg.click('#shDone')
         pg.wait_for_selector('#toast:has-text("完了にしました")')
         s = sheet()
-        check('完了列 TRUE・実働列 1.1', s[3][1] is True and s[3][-1] == 1.1)
+        nr = [r for r in s if r and r[0] == 13]
+        check('完了列 TRUE・実働列 1.1', len(nr) == 1 and nr[0][1] is True and nr[0][-1] == 1.1)
         check('今日完了に移る', pg.locator('#doneList .task', has_text='表紙を作る').count() == 1)
 
         # タイマー

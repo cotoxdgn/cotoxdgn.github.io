@@ -14,11 +14,11 @@
  *   既存の Apps Script・トリガー・カレンダー連携には一切触りません。
  *   名前の衝突を避けるため、設定は TASKAPI の1つにまとめ、内部の関数は taskApi_ で始めています。
  * ・スプシへの書き込みは次の4つだけです。
- *   1) タスク追加：「_日次ガントチャート」の4行目に1行挿入して入力（下の行は1行ずつ下がるだけで中身は変えない）
+ *   1) タスク追加：「_日次ガントチャート」の最終行の下に追加し、📅順に並べ替える（2026-11-05 変更。旧：4行目に挿入）
  *   2) 完了チェック：その行の「完了」(B列) を TRUE / FALSE にする
  *   3) 実働時間：見出し「実働」の列があれば、その行のセルに時間(h)を書く
  *      「実働」列は自動では作りません。コトさんの承認後に関数「taskApiAddActualColumn」を1回だけ実行して追加します。
- *   4) タスクの設定：その行の「📅」「⏰」「👤」「前提」のセルだけを書く（setWait）
+ *   4) タスクの設定：その行の「ToDo」「📅」「⏰」「👤」「前提」のセルだけを書く（setWait）
  *
  * 準備（約5分）
  *  1) script.google.com を直接開いて［新しいプロジェクト］→ このコードを貼り付けて保存
@@ -46,7 +46,7 @@ var TASKAPI = {
   APP_URL: 'https://cotoxdgn.github.io/task/',
   TZ: 'Asia/Tokyo',
   HEADER_ROW: 1,   // 見出し行
-  INSERT_ROW: 4,   // 新しいタスクを入れる行（既存GASと同じ）
+  INSERT_ROW: 4,   // 旧方式の挿入行（2026-11-05 以降は使っていない）
   FIRST_ROW: 4,    // ここから下をタスクとして読む
   ACTUAL_HEADER: '実働',
   PRE_HEADER: '前提', // 前提タスクの列（「No.タイトル」。その No が未完了なら「前提待ち」）
@@ -425,8 +425,9 @@ function taskApi_add(sh, req) {
   if (slot && !TASKAPI.SLOTS[slot]) return { error: 'bad_slot' };
 
   var c = taskApi_cols(sh);
+  var dataW = taskApi_dataWidth(sh);   // A列〜ガントの手前の列まで（ガント列は数式が自動で計算するので触らない）
+  var last = taskApi_lastDataRow(sh, c);
   // No は今ある最大＋1
-  var last = sh.getLastRow();
   var maxNo = 0;
   if (last >= TASKAPI.FIRST_ROW) {
     sh.getRange(TASKAPI.FIRST_ROW, c.no, last - TASKAPI.FIRST_ROW + 1, 1).getValues().forEach(function (r) {
@@ -435,18 +436,21 @@ function taskApi_add(sh, req) {
   }
   var no = maxNo + 1;
 
-  // 4行目に1行挿入（今の4行目以下は1行ずつ下がるだけ）
-  sh.insertRowBefore(TASKAPI.INSERT_ROW);
-  var width = sh.getLastColumn();
-  var tpl = sh.getRange(TASKAPI.INSERT_ROW + 1, 1, 1, width);   // 押し下げられた元の4行目＝見本
-  var row = sh.getRange(TASKAPI.INSERT_ROW, 1, 1, width);
-  // 見本の行の書式・入力規則（チェックボックスなど）だけ写す
-  tpl.copyTo(row, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
-  tpl.copyTo(row, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
-  // 見本の行に数式があるセル（曜日・日付列など）は同じ数式を入れる（相対参照で新しい行用になる）
-  var f = tpl.getFormulasR1C1()[0];
-  for (var j = 0; j < f.length; j++) {
-    if (f[j]) sh.getRange(TASKAPI.INSERT_ROW, j + 1).setFormulaR1C1(f[j]);
+  // 最終行の下に追加（2026-11-05 変更：4行目への挿入はやめた。挿入するとガント・合計の数式の範囲がずれるため）
+  var newRow = Math.max(last, TASKAPI.FIRST_ROW - 1) + 1;
+  if (newRow > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), 1);
+  var row = sh.getRange(newRow, 1, 1, dataW);
+  var f = [];
+  if (last >= TASKAPI.FIRST_ROW) {
+    var tpl = sh.getRange(last, 1, 1, dataW);   // 1つ上の行＝見本
+    // 見本の行の書式・入力規則（チェックボックスなど）だけ写す
+    tpl.copyTo(row, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+    tpl.copyTo(row, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
+    // 行ごとの数式（曜日など）だけ写す。下へ広がる数式（ARRAYFORMULA など）は写さない（重なって #REF! になるため）
+    f = tpl.getFormulasR1C1()[0].map(function (x) { return /ARRAYFORMULA|^=\{|LET\(|BYCOL|MAP\(/i.test(x) ? '' : x; });
+    for (var j = 0; j < f.length; j++) {
+      if (f[j]) sh.getRange(newRow, j + 1).setFormulaR1C1(f[j]);
+    }
   }
 
   var date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
@@ -461,13 +465,72 @@ function taskApi_add(sh, req) {
   set[c.detail] = taskApi_text(req.detail);
   for (var col in set) {
     if (f[Number(col) - 1]) continue;  // 数式の列には書かない
-    sh.getRange(TASKAPI.INSERT_ROW, Number(col)).setValue(set[col]);
+    sh.getRange(newRow, Number(col)).setValue(set[col]);
   }
 
-  var v = sh.getRange(TASKAPI.INSERT_ROW, 1, 1, c.width).getValues()[0];
-  var res = { task: taskApi_rowToTask(TASKAPI.INSERT_ROW, v, c, taskApi_ymd(new Date())) };
+  // 完了を隠すフィルタが新しい行まで効くように広げてから、📅順に並べ替える
+  taskApi_extendFilter(sh, newRow);
+  taskApi_sortByDate(sh, c, dataW, newRow);
+
+  var at = taskApi_findRowByNo(sh, c, no, newRow);
+  var v = sh.getRange(at, 1, 1, c.width).getValues()[0];
+  var res = { task: taskApi_rowToTask(at, v, c, taskApi_ymd(new Date())) };
   taskApi_remember(reqId, res);
   return res;
+}
+
+// 1行目で最初に日付が入っている列（ガントの始まり）の1つ手前までを「データの列」とする
+function taskApi_dataWidth(sh) {
+  var r1 = sh.getRange(TASKAPI.HEADER_ROW, 1, 1, sh.getLastColumn()).getValues()[0];
+  for (var i = 0; i < r1.length; i++) if (r1[i] instanceof Date) return i;
+  return r1.length;
+}
+
+// No か ToDo が入っている一番下の行（ガントの数式は下まで広がっているので getLastRow は使わない）
+function taskApi_lastDataRow(sh, c) {
+  var max = sh.getMaxRows();
+  if (max < TASKAPI.FIRST_ROW) return TASKAPI.FIRST_ROW - 1;
+  var n = max - TASKAPI.FIRST_ROW + 1;
+  var a = sh.getRange(TASKAPI.FIRST_ROW, c.no, n, 1).getValues();
+  var b = sh.getRange(TASKAPI.FIRST_ROW, c.todo, n, 1).getValues();
+  for (var i = n - 1; i >= 0; i--) {
+    if (String(a[i][0]).trim() !== '' || String(b[i][0]).trim() !== '') return TASKAPI.FIRST_ROW + i;
+  }
+  return TASKAPI.FIRST_ROW - 1;
+}
+
+// フィルタの範囲が lastRow より上で終わっていたら、条件（完了を隠す など）をそのままに範囲だけ広げる
+function taskApi_extendFilter(sh, lastRow) {
+  var fl = sh.getFilter();
+  if (!fl) return;
+  var r = fl.getRange();
+  if (r.getLastRow() >= lastRow) return;
+  var crit = {};
+  for (var col = r.getColumn(); col <= r.getLastColumn(); col++) {
+    var cr = fl.getColumnFilterCriteria(col);
+    if (cr) crit[col] = cr.copy().build();
+  }
+  var top = r.getRow(), left = r.getColumn(), w = r.getNumColumns();
+  fl.remove();
+  var nf = sh.getRange(top, left, lastRow - top + 1, w).createFilter();
+  for (var k in crit) nf.setColumnFilterCriteria(Number(k), crit[k]);
+}
+
+// 5行目〜最終行を 📅 → ⏰ → PJ の順に並べ替える（シート側の「未完了・日付順」と同じ。4行目＝入力行とガント列は動かさない）
+function taskApi_sortByDate(sh, c, dataW, lastRow) {
+  var top = TASKAPI.FIRST_ROW + 1;
+  if (lastRow <= top) return;
+  sh.getRange(top, 1, lastRow - top + 1, dataW).sort([
+    { column: c.date, ascending: true },
+    { column: c.slot, ascending: true },
+    { column: c.pj, ascending: true }
+  ]);
+}
+
+function taskApi_findRowByNo(sh, c, no, lastRow) {
+  var vals = sh.getRange(TASKAPI.FIRST_ROW, c.no, lastRow - TASKAPI.FIRST_ROW + 1, 1).getValues();
+  for (var i = 0; i < vals.length; i++) if (taskApi_num(vals[i][0]) === no) return TASKAPI.FIRST_ROW + i;
+  return lastRow;
 }
 
 function taskApi_setDone(sh, req, done) {

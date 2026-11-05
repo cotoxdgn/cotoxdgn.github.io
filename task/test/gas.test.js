@@ -8,7 +8,8 @@ makeGas.fillExample(sh);
 
 let passed = 0;
 function t(name, fn) { fn(); passed++; console.log('ok -', name); }
-const snap = () => sh.rows.map(row => JSON.stringify(row.map(x => [x.v instanceof Date ? x.v.toISOString() : x.v, x.f, x.fmt, x.dv])));
+const trimRow = row => { const r = row.slice(); while (r.length && r[r.length - 1].v === '' && !r[r.length - 1].f && !r[r.length - 1].fmt && !r[r.length - 1].dv) r.pop(); return r; };   // 末尾の空のセルは比べない（並べ替えで行の長さだけ変わるため）
+const snap = () => sh.rows.map(row => JSON.stringify(trimRow(row).map(x => [x.v instanceof Date ? x.v.toISOString() : x.v, x.f, x.fmt, x.dv])));
 const rowSnap = r => snap()[r - 1];
 
 t('taskApiSetup 前は no_setup', () => assert.strictEqual(call({ key: 'x', action: 'ping' }).error, 'no_setup'));
@@ -46,16 +47,19 @@ t('list：今日＋持ち越しの未完了、今日の完了。読むだけで�
 });
 
 let added;
-t('add：4行目に挿入。既存の行は1行下がるだけで中身は同じ', () => {
+t('add：最終行の下に足して📅順に並べ替え（2026-11-05 から）。既存の行の中身は変わらない', () => {
   const before = snap();
   const r = call({ key: KEY, action: 'add', reqId: 'req-0001-abcd', pj: '例）案件B', parent: 'プレゼン構成', todo: '表紙', detail: 'メモ', ko: 0.5, date: '2026-10-31', slot: '夕' });
   assert.ok(r.ok, JSON.stringify(r));
   added = r.task;
   const after = snap();
-  assert.deepStrictEqual(after.slice(0, 3), before.slice(0, 3), '1〜3行目は不変');
-  assert.deepStrictEqual(after.slice(4), before.slice(3), '元の4行目以下は1行下がるだけ');
-  // 新しい行の中身
-  const v = n => sh.peek(4, n);
+  assert.deepStrictEqual(after.slice(0, 4), before.slice(0, 4), '1〜4行目（見出し・入力行）は不変');
+  const rest = after.slice(4);
+  before.slice(4).forEach(x => assert.ok(rest.includes(x), '既存の行が変わった：' + x));
+  assert.strictEqual(after.length, before.length + 1);
+  // 新しい行の中身（並べ替えのあとの位置）
+  const row = added.row;
+  const v = n => sh.peek(row, n);
   assert.strictEqual(v(1).v, 13);
   assert.strictEqual(v(2).v, false);
   assert.strictEqual(v(3).v, '例）案件B');
@@ -64,12 +68,11 @@ t('add：4行目に挿入。既存の行は1行下がるだけで中身は同じ
   assert.strictEqual(ctx.Utilities.formatDate(v(6).v, 'Asia/Tokyo', 'yyyy-MM-dd'), '2026-10-31');
   assert.strictEqual(v(8).v, '🌙');
   assert.strictEqual(v(11).v, 'メモ');
-  // 書式・チェックボックス・数式は見本（元の4行目）と同じ
   assert.strictEqual(v(2).dv, 'checkbox');
-  assert.strictEqual(v(1).fmt, 'body');
   assert.strictEqual(v(7).f, '=IF(RC6="","",TEXT(RC6,"(ddd)"))');
-  assert.strictEqual(v(12).f, '=IF(RC6=R1C,RC5,"")');
-  assert.strictEqual(v(12).fmt, 'gantt');
+  // 5行目から下は📅順
+  const dates = []; for (let k = 5; k <= sh.getLastRow(); k++) { const d = sh.peek(k, 6).v; if (d instanceof Date) dates.push(d.getTime()); }
+  assert.deepStrictEqual(dates, dates.slice().sort((a, b) => a - b));
   assert.strictEqual(added.no, 13); assert.strictEqual(added.slot, '夕');
 });
 t('add：同じ reqId の再送では二重に追加しない', () => {
@@ -94,12 +97,12 @@ t('done：完了列だけが変わる（実働列なし→実働は保存され�
   assert.strictEqual(r.actualSaved, false);
   assert.strictEqual(r.task.done, true);
   const after = snap();
-  const row = 7; // 元6行目 → 1行下がって7行目
+  const row = r.task.row; // 並べ替えで行は動くので、返ってきた行で見る
   after.forEach((s, i) => { if (i !== row - 1) assert.strictEqual(s, before[i], (i + 1) + '行目が変わった'); });
   const b = JSON.parse(before[row - 1]), a = JSON.parse(after[row - 1]);
   a.forEach((cell, j) => { if (j !== 1) assert.deepStrictEqual(cell, b[j], (j + 1) + '列目が変わった'); });
   assert.strictEqual(a[1][0], true);
-  assert.deepStrictEqual(sh.writes, [['setValue', 7, 2]]);
+  assert.deepStrictEqual(sh.writes, [['setValue', row, 2]]);
 });
 t('done：No と ToDo が合わなければ何も書かない', () => {
   const before = snap();
@@ -112,7 +115,7 @@ t('undone：完了を外す（完了列だけ）', () => {
   const r = call({ key: KEY, action: 'undone', no: 11, todo: 'プレゼン構成 | 目次を作る' });
   assert.ok(r.ok); assert.strictEqual(r.task.done, false);
   const after = snap();
-  after.forEach((s, i) => { if (i !== 6) assert.strictEqual(s, before[i]); });
+  after.forEach((s, i) => { if (i !== r.task.row - 1) assert.strictEqual(s, before[i]); });
 });
 
 t('taskApiAddActualColumn：最終列の右の1行目に「実働」を書くだけ。2回目は何もしない', () => {
@@ -150,8 +153,9 @@ t('add（実働列あり）：実働列は空のまま、ほかの行は不変',
   const r = call({ key: KEY, action: 'add', todo: '単発タスク', ko: 1, date: '2026-10-30', slot: '朝' });
   assert.ok(r.ok); assert.strictEqual(r.task.todo, '単発タスク'); assert.strictEqual(r.task.actual, null);
   const after = snap();
-  assert.deepStrictEqual(after.slice(4), before.slice(3));
-  assert.deepStrictEqual(after.slice(0, 3), before.slice(0, 3));
+  assert.deepStrictEqual(after.slice(0, 4), before.slice(0, 4));
+  before.slice(4).forEach(x => assert.ok(after.slice(4).includes(x), '既存の行が変わった：' + x.slice(0, 120)));
+  assert.strictEqual(sh.peek(r.task.row, 15).v, '', '実働は空');
 });
 t('list：明日（次の日）の未完了を tomorrow で返す。今日の一覧には入れない', () => {
   // No.8（古い完了タスク）の行を、明日の未完了に一時的に変えて確かめる

@@ -162,7 +162,7 @@
   function renderMini() {
     var k = K[ed.type], src = illustSrc(ed.illust);
     $('wMini').className = 'mini k-' + ed.type;
-    $('wMini').innerHTML = '<div class="t">' + esc(S.TITLE) + ' ' + (ed.no ? S.no3(ed.no) : '#—') + '</div><div class="p">' +
+    $('wMini').innerHTML = '<div class="t">' + esc(S.TITLE) + ' ' + (ed.no ? S.no3(ed.no) : '#—') + '</div><div class="p' + (ed.illust ? ' has-il' : '') + '">' +
       (ed.illust ? '<div class="il"><img alt="" src="' + esc(src) + '"></div>' : '') +
       '<div class="small" style="font-size:7px;color:#6B645B">' + esc(k.lead) + '</div><div class="q">' + esc(ed.from || '（元）') + '</div>' +
       '<div class="a">' + (k.suffix ? '→ ' : '') + esc(ed.to || '（代案）') + esc(k.suffix) + '</div><div class="b">' + esc(ed.phrase) + '</div></div>' +

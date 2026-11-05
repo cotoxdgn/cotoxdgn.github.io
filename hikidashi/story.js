@@ -53,13 +53,13 @@
     var px = 70, py = 250, pw = W - 140, ph = H - 250 - 300;
     ctx.fillStyle = '#FBF7F0'; rr(ctx, px, py, pw, ph, 60); ctx.fill();
     var x = px + 56, y = py + 56, w = pw - 112;
-    if (o.illust) {   // イラストは文章の上
-      var ih = 560, iw = w, img = o.illust, s = Math.min(iw / img.width, ih / img.height);
-      ctx.fillStyle = '#FFFFFF'; rr(ctx, x, y, iw, ih, 36); ctx.fill();
-      ctx.save(); rr(ctx, x, y, iw, ih, 36); ctx.clip();
-      ctx.drawImage(img, x + (iw - img.width * s) / 2, y + (ih - img.height * s) / 2, img.width * s, img.height * s);
+    if (o.illust) {   // イラストは紙の上部いっぱいに（幅に合わせて拡大し、はみ出す分は上下左右を均等に切る＝真ん中が出る）
+      var ih = 680, iw = pw, img = o.illust, s = Math.max(iw / img.width, ih / img.height);
+      ctx.save(); rr(ctx, px, py, pw, ph, 60); ctx.clip();
+      ctx.beginPath(); ctx.rect(px, py, iw, ih); ctx.clip();
+      ctx.drawImage(img, px + (iw - img.width * s) / 2, py + (ih - img.height * s) / 2, img.width * s, img.height * s);
       ctx.restore();
-      y += ih + 48;
+      y = py + ih + 56;
     } else y += 260;   // イラストなしは文章を少し下げて、紙の中ほどに置く
     ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = K.ink; ctx.font = '700 34px ' + BODY; ctx.fillText(K.lead, x, y + 30); y += 78;
