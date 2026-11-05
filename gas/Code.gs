@@ -210,6 +210,8 @@ function handle_(req) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   // 予定合わせの相手用の窓口（合言葉なし）。合言葉の確認より前に分け、ここから先の処理には進ませない
   if (req.action === 'yoteiGet' || req.action === 'yoteiAnswer') return yoteiPublic_(ss, req);
+  // 空間ひきだし帖のHP用（合言葉なし・読むだけ）。公開日を過ぎたカードの公開項目と賞の締切だけ返す
+  if (req.action === 'hikiPublic') return hikiPublic_(ss);
   var conf = ss.getSheetByName(CONF_SHEET);
   var pass = conf ? String(conf.getRange(CELL_KEY).getValue()).trim() : '';
   if (!pass) return { ok: false, error: 'no_setup' };
@@ -1117,4 +1119,66 @@ function wgPeriod_(list, today) {
     until: next ? wgDiff_(today, next) : null,
     late: next && late > 0 ? late : 0
   };
+}
+
+/*
+ * hikiPublic：{ action:'hikiPublic' }（合言葉なし。archifriends.net の公開ページと賞カレンダーの自動処理が読む）
+ *   「設定」B3（対象アプリ）が空か hikidashi のスプシだけ。ほか（家族用など）は not_found
+ *   → { ok, now, today, name（公開名義）, updated（最後に公開した日）,
+ *       cards:[{ no, type, date, from, to, phrase, article, checked, link, note, illust, photo, work }],
+ *       awards:[{ name, url, date, tentative, memo }] }
+ *   ・cards：kind:'card' で status:'done'、publishAt が今日（日本時間）以前のものだけ。ここに書いた項目のほかは出さない
+ *     （ストック・下書き・予約中・工夫点・案件名・脳みその id・スプシの記録 id は出さない）
+ *     work：worksFrom（設定。既定 2027-04-01）より前は ''。それ以降は workPub（フジイの案件の通称）があれば「実績：通称」、実務のカードなら「実務で使用」
+ *     illust・photo：ドライブの画像（作成時に「リンクを知っている全員が閲覧可」）の表示URL
+ *   ・awards：kind:'award'。締切が過ぎたら翌年の同じ月日に仮で繰り越し、tentative:true（公式ページで確かめて直す）
+ */
+var HIKI_APP = 'hikidashi';
+var HIKI_WORKS_FROM = '2027-04-01';
+function hikiPublic_(ss) {
+  try {
+    var conf = ss.getSheetByName(CONF_SHEET);
+    var target = conf ? String(conf.getRange(CELL_TARGET).getValue()).trim() : '';
+    if (target && target !== HIKI_APP) return { ok: false, error: 'not_found' };
+    var list = wgRecords_(ss, HIKI_APP);
+    var today = wgCalToday_();
+    var setting = {};
+    list.forEach(function (r) { if (r.id === 'conf' && r.data && r.data.kind === 'conf') setting = r.data; });
+    var worksFrom = /^\d{4}-\d{2}-\d{2}$/.test(String(setting.worksFrom || '')) ? setting.worksFrom : HIKI_WORKS_FROM;
+    var str = function (v, n) { return String(v == null ? '' : v).slice(0, n); };
+    var url = function (v) { v = String(v || ''); return /^https:\/\/[^\s"'<>]+$/.test(v) ? v.slice(0, 500) : ''; };
+    var img = function (v) { var id = v && v.id ? String(v.id) : ''; return /^[A-Za-z0-9_-]{1,100}$/.test(id) ? 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1600' : ''; };
+    var cards = [], updated = '';
+    list.forEach(function (r) {
+      var d = r.data || {};
+      if (d.kind !== 'card' || d.status !== 'done') return;
+      var day = String(d.publishAt || '');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today) return;
+      if (day > updated) updated = day;
+      var work = '';
+      if (today >= worksFrom) work = d.workPub ? '実績：' + str(d.workPub, 40) : (d.fromWork ? '実務で使用' : '');
+      cards.push({
+        no: typeof d.no === 'number' ? d.no : null,
+        type: ['item', 'detail', 'law', 'rec'].indexOf(d.type) >= 0 ? d.type : 'item',
+        date: day, from: str(d.from, 120), to: str(d.to, 120), phrase: str(d.phrase, 60),
+        article: d.type === 'law' ? str(d.article, 80) : '', checked: d.type === 'law' ? str(d.checkedOn, 10) : '',
+        link: url(d.link), note: url(d.noteUrl), illust: img(d.illust), photo: img(d.photo), work: work
+      });
+    });
+    cards.sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : (b.no || 0) - (a.no || 0); });
+    var awards = [];
+    list.forEach(function (r) {
+      var d = r.data || {};
+      if (d.kind !== 'award' || !/^\d{4}-\d{2}-\d{2}$/.test(String(d.date || ''))) return;
+      var date = d.date, tentative = !!d.tentative;
+      while (date < today) { date = (+date.slice(0, 4) + 1) + date.slice(4); tentative = true; }
+      if (date.slice(5) === '02-29' && !(+date.slice(0, 4) % 4 === 0)) date = date.slice(0, 5) + '02-28';
+      awards.push({ name: str(d.name, 80), url: url(d.url), date: date, tentative: tentative, memo: str(d.memo, 120) });
+    });
+    awards.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+    var name = str(setting.publicName, 20) || 'coo';
+    return { ok: true, now: now_(), today: today, name: name, updated: updated, cards: cards, awards: awards };
+  } catch (err) {
+    return { ok: false, error: 'server' };
+  }
 }

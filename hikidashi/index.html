@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ひきだし帖">
+<meta name="theme-color" content="#FBF7F0">
+<title>空間ひきだし帖</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="../shared/apps.css">
+<style>
+/* 自分用アプリ：iPhone は1列＋下のタブ。PC（900px〜）の一括入力は3列 */
+:root {
+  --bg: #FBF7F0; --card: #FFFFFF; --ink: #2E2A26; --muted: #6B645B; --line: #DDD4C5; --soft: #EAE3D6; --sub: #3D3830;
+  --item: #3E6FA8; --item-ink: #2B5283; --item-soft: #E6EEF7;
+  --detail: #B4580C; --detail-ink: #8A4209; --detail-soft: #FBE6D6;
+  --law: #3B7A57; --law-ink: #2A5A3F; --law-soft: #E3F0E8;
+  --rec: #7A4F9A; --rec-ink: #5E3A72; --rec-soft: #F0E6F4;
+  --gold: #F2C14E; --on-dark: #FFFFFF;
+  --ax-bg: var(--bg); --ax-surface: var(--card); --ax-text: var(--ink); --ax-muted: var(--muted); --ax-line: var(--line);
+  --ax-accent: #2E2A26; --ax-accent-text: #FFFFFF;
+  --display: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Hiragino Sans", sans-serif;
+  --ax-font: "Noto Sans JP", -apple-system, "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1E1C1A; --card: #2A2724; --ink: #EFE9E1; --muted: #B3AA9E; --line: #45403A; --soft: #3A3530; --sub: #DCD5C8;
+    --item-ink: #9DBBE3; --item-soft: #26354A; --detail-ink: #F0A973; --detail-soft: #47301F;
+    --law-ink: #94CFAE; --law-soft: #233A2D; --rec-ink: #CFAEE6; --rec-soft: #3B2C47;
+    --ax-accent: #EFE9E1; --ax-accent-text: #1E1C1A; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1E1C1A; --card: #2A2724; --ink: #EFE9E1; --muted: #B3AA9E; --line: #45403A; --soft: #3A3530; --sub: #DCD5C8;
+  --item-ink: #9DBBE3; --item-soft: #26354A; --detail-ink: #F0A973; --detail-soft: #47301F;
+  --law-ink: #94CFAE; --law-soft: #233A2D; --rec-ink: #CFAEE6; --rec-soft: #3B2C47;
+  --ax-accent: #EFE9E1; --ax-accent-text: #1E1C1A; color-scheme: dark;
+}
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); overflow-x: hidden; }
+main { max-width: 640px; margin: 0 auto; padding: 16px 18px calc(96px + env(safe-area-inset-bottom)); }
+main.wide { max-width: 1240px; }
+h1, h2, .disp { font-family: var(--display); }
+h1 { font-size: 22px; margin: 0; line-height: 1.35; }
+h2 { font-size: 16px; margin: 0; }
+.view { display: flex; flex-direction: column; gap: 14px; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.row { display: flex; align-items: center; gap: 8px; }
+.between { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.box { background: var(--card); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.btn-dark { border: 0; background: var(--ink); color: var(--bg); border-radius: 14px; padding: 15px 0; font-weight: 700; font-size: 15px; cursor: pointer; width: 100%; text-align: center; text-decoration: none; display: block; }
+.btn-dark:disabled { background: var(--soft); color: var(--muted); cursor: default; }
+.link { border: 0; background: none; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 6px 0; font-size: 13px; }
+.pill { font-size: 11px; font-weight: 700; border-radius: 8px; padding: 2px 8px; flex-shrink: 0; }
+.k-item { --k: var(--item); --ki: var(--item-ink); --ks: var(--item-soft); }
+.k-detail { --k: var(--detail); --ki: var(--detail-ink); --ks: var(--detail-soft); }
+.k-law { --k: var(--law); --ki: var(--law-ink); --ks: var(--law-soft); }
+.k-rec { --k: var(--rec); --ki: var(--rec-ink); --ks: var(--rec-soft); }
+.tagk { background: var(--ks); color: var(--ki); }
+
+/* 今日 */
+.lv { font-family: var(--display); font-size: 20px; font-weight: 700; text-align: right; }
+.bar { height: 10px; border-radius: 5px; background: var(--soft); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--item); border-radius: 5px; }
+.rec-kind { width: 44px; height: 44px; border-radius: 14px; background: var(--k); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.week7 { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; text-align: center; }
+.week7 .d { font-size: 11px; color: var(--muted); }
+.week7 .s { width: 100%; max-width: 40px; aspect-ratio: 1; margin: 2px auto; border-radius: 12px; display: grid; place-items: center; font-size: 11px; font-weight: 700; border: 1px solid var(--line); background: var(--card); color: var(--muted); cursor: pointer; padding: 0; }
+.week7 .s.on { background: var(--k); border-color: var(--k); color: #fff; }
+.week7 .s.dr { border: 2px dashed var(--k); color: var(--ki); }
+.week7 .kn { font-size: 9px; color: var(--muted); line-height: 1.2; }
+.stock4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.stock4 div { background: var(--ks); color: var(--ki); border-radius: 14px; padding: 10px 8px; display: flex; flex-direction: column; }
+.stock4 b { font-size: 20px; }
+.alert { background: var(--rec-soft); color: var(--rec-ink); border-radius: 14px; padding: 10px 12px; font-size: 13px; }
+.alert a { color: inherit; font-weight: 700; }
+
+/* 書く */
+.kinds { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.kinds button { border: 2px solid var(--k); background: var(--card); color: var(--ki); border-radius: 12px; padding: 10px 0; font-weight: 700; font-size: 13px; cursor: pointer; }
+.kinds button[aria-pressed="true"] { background: var(--k); color: #fff; }
+.wtop { display: flex; gap: 12px; align-items: flex-start; }
+.mini { width: 144px; flex-shrink: 0; aspect-ratio: 9 / 16; border-radius: 14px; background: var(--k); padding: 10px 9px; display: flex; flex-direction: column; gap: 5px; color: #fff; overflow: hidden; }
+.mini .t { font-size: 7px; letter-spacing: .06em; }
+.mini .p { background: #FBF7F0; color: #2E2A26; border-radius: 10px; padding: 7px; display: flex; flex-direction: column; gap: 3px; flex: 1; min-height: 0; overflow: hidden; }
+.mini .il { height: 60px; border-radius: 6px; background: #fff; display: grid; place-items: center; font-size: 7px; color: #6B645B; border: 1px dashed #CFC6B5; overflow: hidden; flex-shrink: 0; }
+.mini .il img { width: 100%; height: 100%; object-fit: contain; }
+.mini .q { font-family: var(--display); font-size: 8.5px; font-weight: 700; line-height: 1.3; }
+.mini .a { font-family: var(--display); font-size: 9.5px; font-weight: 700; line-height: 1.3; color: var(--k); }
+.mini .b { font-size: 6.5px; line-height: 1.5; color: #3D3830; }
+.mini .c { font-size: 7px; text-align: center; }
+.side { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
+.checks { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.checks .ok { color: var(--law-ink); }
+.f { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; }
+.f input, .f textarea, .f select { font-weight: 400; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); width: 100%; }
+.f textarea { resize: vertical; line-height: 1.6; }
+.f .hint { font-weight: 400; color: var(--muted); font-size: 11px; }
+.chk { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.chk input { width: 22px; height: 22px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.photos { display: flex; gap: 10px; flex-wrap: wrap; }
+.ph { width: 96px; height: 96px; border-radius: 12px; border: 1px dashed var(--line); background: var(--card); display: grid; place-items: center; overflow: hidden; font-size: 11px; color: var(--muted); cursor: pointer; padding: 0; text-align: center; }
+.ph img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.sticky { position: sticky; bottom: calc(72px + env(safe-area-inset-bottom)); background: var(--bg); padding: 8px 0 2px; display: flex; flex-direction: column; gap: 6px; }
+
+/* イラストを整える */
+.crop { display: flex; flex-direction: column; gap: 10px; }
+.crop canvas { width: 100%; max-height: 50vh; object-fit: contain; background: #fff; border-radius: 10px; border: 1px solid var(--line); }
+.crop label { font-size: 13px; display: grid; grid-template-columns: 3em 1fr; align-items: center; gap: 8px; }
+
+/* 公開 */
+.bonus { background: var(--ink); color: var(--bg); border-radius: 18px; padding: 14px 16px; }
+.bonus b.n { font-family: var(--display); font-size: 22px; color: var(--gold); }
+.wrow { background: var(--card); border-radius: 14px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; cursor: pointer; border: 0; text-align: left; width: 100%; color: var(--ink); font: inherit; }
+.wrow .d { font-size: 12px; font-weight: 700; width: 3.2em; color: var(--muted); flex-shrink: 0; }
+.wrow .tt { font-size: 13px; flex: 1; min-width: 0; line-height: 1.4; overflow-wrap: anywhere; }
+.wrow.empty .tt { color: var(--muted); }
+.step { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; border: 0; border-radius: 14px; padding: 14px; cursor: pointer; background: var(--card); color: var(--ink); width: 100%; font: inherit; }
+.step b { font-size: 14px; }
+.step span { font-size: 12px; line-height: 1.5; color: var(--muted); }
+.step.on { background: var(--law); color: #fff; }
+.step.on span { color: #EAF4EE; }
+
+/* 帖 */
+.kb { display: flex; flex-direction: column; gap: 4px; }
+.kb .bar { height: 8px; background: var(--soft); }
+.kb .bar i { background: var(--k); }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.filters button { border: 2px solid var(--k, var(--ink)); background: var(--card); color: var(--ki, var(--ink)); border-radius: 16px; padding: 7px 12px; font-weight: 700; font-size: 12px; min-height: 38px; cursor: pointer; }
+.filters button[aria-pressed="true"] { background: var(--k, var(--ink)); color: var(--card); }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (min-width: 700px) { .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.cd { background: var(--card); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 6px; border: 0; border-top: 5px solid var(--k); min-height: 120px; text-align: left; cursor: pointer; color: var(--ink); font: inherit; }
+.cd .tt { font-size: 13px; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
+.cd .st { margin-top: auto; font-size: 11px; font-weight: 700; }
+.badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.badge { font-size: 11px; border-radius: 999px; padding: 3px 10px; background: var(--soft); color: var(--muted); }
+.badge.got { background: var(--gold); color: #2E2A26; font-weight: 700; }
+
+/* 一括入力（PC） */
+.desk { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+@media (min-width: 900px) { .desk { grid-template-columns: 240px minmax(0, 1fr) 280px; align-items: start; } }
+.work { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: 0; border-radius: 14px; padding: 12px 14px; cursor: pointer; background: var(--card); color: var(--sub); width: 100%; font: inherit; }
+.work[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.work small { font-size: 11px; opacity: .85; }
+.drow { display: grid; grid-template-columns: 92px minmax(0, 2fr) minmax(0, 2fr) minmax(0, 3fr) 36px; gap: 6px; align-items: center; background: var(--bg); border-radius: 12px; padding: 6px; }
+.drow select, .drow input { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); min-width: 0; }
+.dhead { display: grid; grid-template-columns: 92px minmax(0, 2fr) minmax(0, 2fr) minmax(0, 3fr) 36px; gap: 6px; font-size: 11px; color: var(--muted); padding: 0 6px; }
+@media (max-width: 899px) {
+  .dhead { display: none; }
+  .drow { grid-template-columns: minmax(0, 1fr) 36px; }
+  .drow > :nth-child(2), .drow > :nth-child(3), .drow > :nth-child(4) { grid-column: 1 / 2; }
+  .drow > :last-child { grid-row: 1; grid-column: 2; }
+}
+.count { background: var(--ink); color: var(--bg); border-radius: 18px; padding: 18px; }
+.count b { font-family: var(--display); font-size: 34px; }
+.cand { display: flex; gap: 8px; align-items: center; background: var(--bg); border-radius: 12px; padding: 8px 10px; font-size: 13px; }
+.cand span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+/* 下のタブ */
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: var(--card); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+.tabbar .in { max-width: 640px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tabbar a { text-align: center; padding: 16px 0; font-size: 13px; color: var(--muted); text-decoration: none; }
+.tabbar a[aria-current="page"] { color: var(--ink); font-weight: 700; }
+.tabbar a .jo { font-family: var(--display); font-size: 15px; }
+</style>
+</head>
+<body>
+<main id="main">
+  <!-- ① 今日 -->
+  <section class="view" id="v-today">
+    <div class="between">
+      <div><div class="small muted" id="tDate"></div><h1>今日のクエスト</h1></div>
+      <div><div class="lv" id="tLv">Lv.1</div><div class="small muted" id="tStreak" style="text-align:right"></div></div>
+    </div>
+    <div><div class="bar"><i id="tBar" style="width:0"></i></div><div class="small muted" style="text-align:right" id="tNext"></div></div>
+    <div id="tAlerts"></div>
+    <div class="box">
+      <div class="row" id="tRec"></div>
+      <a class="btn-dark" href="#write" id="tWrite">今日のカードを書く</a>
+      <div class="small muted" style="text-align:center">種類は書く画面で選べます。書き終えると +20 EXP</div>
+    </div>
+    <div class="between"><h2>来週分のストック</h2><span class="small muted" id="tWeekN"></span></div>
+    <div class="week7" id="tWeek"></div>
+    <h2>ネタのストック</h2>
+    <div class="stock4" id="tStock"></div>
+    <div class="between small"><span class="muted">案件が終わったら、PCからまとめて追加できます</span><a href="#desk">まとめて入力 ›</a></div>
+    <p class="small muted" id="sync" style="margin:0"></p>
+  </section>
+
+  <!-- ② 書く -->
+  <section class="view" id="v-write" hidden>
+    <div class="between"><a href="#today" class="link">← 今日</a><span class="pill" id="wBadge"></span></div>
+    <div class="f">種類<div class="kinds" id="wKinds"></div></div>
+    <div class="wtop">
+      <div class="mini" id="wMini"></div>
+      <div class="side">
+        <div class="box" style="padding:10px;gap:6px"><b class="small" id="wScore"></b><div class="checks" id="wChecks"></div></div>
+        <div class="small muted" id="wNo"></div>
+      </div>
+    </div>
+    <label class="f">いつの分か（公開予定日）<input type="date" id="wDate"></label>
+    <label class="f" id="wStockF">ストックから選ぶ<select id="wStock"></select></label>
+    <label class="f"><span id="wFromL">これが嫌やったら（元）</span><input id="wFrom" maxlength="120" autocomplete="off"></label>
+    <label class="f"><span id="wToL">これもいけます（代案）</span><input id="wTo" maxlength="120" autocomplete="off"></label>
+    <label class="f">ことの一言（60字まで・<span id="wCount">0</span>字）<textarea id="wPhrase" rows="3" maxlength="60"></textarea></label>
+    <label class="chk" id="wCheckF"><input type="checkbox" id="wCheck"><span id="wCheckL">品番・廃番を確認済み</span></label>
+    <div class="grid2" id="wLawF"><label class="f">根拠の条文番号<input id="wArticle" maxlength="80" placeholder="例：建築基準法 第35条の2"></label><label class="f">最終確認日<input type="date" id="wChecked"></label></div>
+    <label class="f" id="wLinkF">公式ページ・出典のURL<input id="wLink" type="url" maxlength="500" placeholder="https://"></label>
+    <div class="f">手描きイラストとHP用の写真<span class="hint">イラストはノートを撮ると、背景を白く整えて描いた範囲を切り出します（ストーリーとHPの文章の上に入る）。写真はHPにだけ出ます</span>
+      <div class="photos"><button class="ph" type="button" id="wIll">イラスト<br>ノートを撮る</button><button class="ph" type="button" id="wPh">写真<br>（HP用）</button></div>
+      <div class="row"><button class="link" type="button" id="wIllX" hidden>イラストを外す</button><button class="link" type="button" id="wPhX" hidden>写真を外す</button></div>
+      <input type="file" accept="image/*" capture="environment" id="wIllFile" hidden><input type="file" accept="image/*" id="wPhFile" hidden>
+    </div>
+    <label class="f">noteの記事（あれば）<input id="wNote" type="url" maxlength="500" placeholder="https://note.com/…"><span class="hint">HPのこのカードから記事へ飛べるようになります</span></label>
+    <label class="f" id="wPubF">フジイプロダクツの案件なら、HPに出す通称<input id="wPub" maxlength="40" placeholder="例：〇〇のブース"><span class="hint">2027年3月までは、通称も「実務で使用」もHPに出ません</span></label>
+    <div class="sticky"><button class="btn-dark" type="button" id="wDone"></button><div class="between"><button class="link" type="button" id="wSave">下書きで保存</button><button class="link" type="button" id="wDel" hidden>このカードを消す</button></div></div>
+  </section>
+
+  <!-- イラストを整える -->
+  <section class="view" id="v-crop" hidden>
+    <h1>イラストを整える</h1>
+    <p class="small muted" style="margin:0">背景を白くして、描いた範囲を自動で切り出しました。余白が残っていたら下のつまみで直してください。</p>
+    <div class="crop"><canvas id="cCanvas"></canvas>
+      <label>上<input type="range" id="cT" min="0" max="90" value="0"></label>
+      <label>下<input type="range" id="cB" min="0" max="90" value="0"></label>
+      <label>左<input type="range" id="cL" min="0" max="90" value="0"></label>
+      <label>右<input type="range" id="cR" min="0" max="90" value="0"></label>
+      <label>白さ<input type="range" id="cW" min="0" max="100" value="50"></label>
+    </div>
+    <div class="row"><button class="btn-dark" type="button" id="cOk">このイラストを使う</button></div>
+    <button class="link" type="button" id="cCancel">やめる</button>
+  </section>
+
+  <!-- ③ 公開 -->
+  <section class="view" id="v-week" hidden>
+    <div><div class="small muted" id="kRange"></div><div class="between"><h1>今週の公開作業</h1><span class="row"><button class="link" type="button" id="kPrev" aria-label="前の週">‹ 前</button><button class="link" type="button" id="kNext" aria-label="次の週">次 ›</button></span></div></div>
+    <div class="bonus between"><div><div class="small" style="opacity:.8">週ボーナス</div><b id="kBonus"></b></div><b class="n" id="kSteps">0/3</b></div>
+    <h2>この週の7枚（押すと直せます。曜日は「いつの分か」で入れ替え）</h2>
+    <div class="view" style="gap:8px" id="kCards"></div>
+    <div class="view" style="gap:8px" id="kStepList"></div>
+    <p class="small muted" id="kMsg" style="margin:0"></p>
+  </section>
+
+  <!-- ④ 帖 -->
+  <section class="view" id="v-cho" hidden>
+    <div class="between"><h1>帖</h1><span class="row"><span class="small muted" id="zN"></span><a class="link" href="#settings">設定</a></span></div>
+    <div class="box" id="zBars"></div>
+    <div class="filters" id="zFilters"></div>
+    <div class="cards" id="zCards"></div>
+  </section>
+
+  <!-- ⑤ 案件完了時の一括入力 -->
+  <section class="view" id="v-desk" hidden>
+    <div class="between"><a href="#today" class="link">← 今日</a><span class="small muted">お客様名・住所・原価は入れない</span></div>
+    <div class="desk">
+      <aside class="view" style="gap:10px">
+        <h1>完了した案件</h1>
+        <div class="small muted">脳みその実績ポートフォリオから選びます（読むだけ）。</div>
+        <div class="view" style="gap:8px" id="dWorks"></div>
+      </aside>
+      <div class="box" style="gap:14px">
+        <div class="between"><div><div class="small muted">まとめて入力</div><h2 id="dCur" style="font-size:20px">案件を選んでください</h2></div></div>
+        <div class="dhead"><div>種類</div><div>使ったもの</div><div>これが嫌やったら（元）</div><div>メモ（走り書きでOK）</div><div></div></div>
+        <div class="view" style="gap:8px" id="dRows"></div>
+        <button class="ax-btn" type="button" id="dAdd" style="align-self:flex-start">＋ 行を足す</button>
+        <label class="f">賞・メディア用の工夫点（200字・非公開）<textarea id="dPoint" rows="3" maxlength="200" placeholder="この案件で一番伝えたい工夫と、その理由"></textarea></label>
+        <div class="box" style="background:var(--bg)"><b class="small">アーキマップの見学メモから（脳みそに残したディテール）</b><div class="view" style="gap:6px" id="dArch"></div></div>
+      </div>
+      <aside class="view" style="gap:12px">
+        <div class="count"><div class="small" style="opacity:.8">ストックに入る数</div><div><b id="dCount">+0</b> ネタ</div><div class="small" style="opacity:.85;line-height:1.7">一気に入れてOK。毎日のクエストで1つずつ「ことの一言」を書いてカードにします。カードにしたものだけが公開の対象です。</div></div>
+        <button class="btn-dark" type="button" id="dSave">ストックに入れる</button>
+        <p class="small muted" id="dMsg" style="margin:0"></p>
+      </aside>
+    </div>
+  </section>
+
+  <!-- 設定 -->
+  <section class="view" id="v-settings" hidden>
+    <div class="between"><a href="#cho" class="link">← 帖</a><button class="link" type="button" id="sConn">接続</button></div>
+    <h1>設定</h1>
+    <div class="box">
+      <label class="f">公開物の名義（ストーリー・HP）<input id="sName" maxlength="20"><span class="hint">3月までは「coo」。4月にここを「こと」に変えると、HPとこれから書き出すストーリーが切り替わります</span></label>
+      <label class="f">インスタのアカウント名（ストーリーの下に出す。空なら出さない）<input id="sHandle" maxlength="40" placeholder="@…"></label>
+      <label class="f">HPに実績の表記を出し始める日<input type="date" id="sWorks"></label>
+      <label class="f">アプリに賞の「要確認」を出し始める日<input type="date" id="sAlert"></label>
+      <button class="btn-dark" type="button" id="sSave">保存</button>
+    </div>
+    <div class="box">
+      <div class="between"><h2>賞の締切</h2><span class="small muted" id="aN"></span></div>
+      <div class="small muted">HPの締切カレンダーに出ます。締切が過ぎると、翌年の同じ日に仮で繰り越します（1か月前に要確認）。</div>
+      <div class="view" style="gap:6px" id="aList"></div>
+      <div class="grid2"><label class="f">賞の名前<input id="aName" maxlength="80"></label><label class="f">締切<input type="date" id="aDate"></label></div>
+      <label class="f">公式ページ<input id="aUrl" type="url" maxlength="500" placeholder="https://"></label>
+      <label class="f">メモ（HPに出ます）<input id="aMemo" maxlength="120"></label>
+      <div class="row"><button class="ax-btn ax-btn-primary" type="button" id="aSave">追加</button><button class="link" type="button" id="aCancel" hidden>やめる</button></div>
+    </div>
+  </section>
+</main>
+
+<nav class="tabbar" aria-label="画面の切り替え"><div class="in">
+  <a href="#today" data-v="today">今日</a>
+  <a href="#write" data-v="write">書く</a>
+  <a href="#week" data-v="week">公開</a>
+  <a href="#cho" data-v="cho"><span class="jo">帖</span></a>
+</div></nav>
+
+<script src="../shared/apps.js"></script>
+<script src="illust.js"></script>
+<script src="story.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
