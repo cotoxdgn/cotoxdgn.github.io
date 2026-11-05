@@ -256,6 +256,7 @@ async function notePhoto(page) {
   await t('設定：公開名義（既定 coo）と賞の締切。過ぎた締切は翌年に仮で繰り越し。4月からは今日に要確認', async () => {
     await go(page, '#settings');
     assert.strictEqual(await page.inputValue('#sName'), 'coo');
+    assert.ok(of('award').filter(r => /^aw-seed-/.test(r.id)).length === 5 && all().some(r => r.id === 'aw-seeded'), '最初の5つの賞が入っている');
     await page.fill('#aName', 'テストの賞'); await page.fill('#aDate', '2026-11-20'); await page.fill('#aUrl', 'https://example.com/a');
     await page.click('#aSave');
     await page.fill('#aName', '去年の賞'); await page.fill('#aDate', '2026-03-01');
@@ -271,7 +272,9 @@ async function notePhoto(page) {
     await settled(page);
     await go(page, '#today');
     assert.match(await text(page, '#tAlerts'), /要確認：テストの賞/);
-    assert.strictEqual(gas.ctx.handle_({ action: 'hikiPublic' }).awards.length, 2);
+    const aw = gas.ctx.handle_({ action: 'hikiPublic' }).awards;
+    assert.strictEqual(aw.length, 7, '最初に入れた5つ＋2つ');
+    assert.ok(aw.filter(a => /日本空間デザイン賞|グッドデザイン賞|住まいのリフォームコンクール|JID AWARD|リノベーション・オブ・ザ・イヤー/.test(a.name)).every(a => a.tentative && a.date.startsWith('2027-')), '2026年の締切は2027年に仮で繰り越し');
   });
   await noHScroll(page, 'today');
   for (const v of ['#write', '#week', '#cho', '#settings']) { await go(page, v); await page.waitForTimeout(150); await noHScroll(page, v); }
