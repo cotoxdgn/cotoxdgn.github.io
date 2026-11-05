@@ -1,5 +1,5 @@
 // コトのホーム画面ウィジェット（Scriptable 用）。ホーム画面の1ページを「大」1つ＋「中」1つで埋める
-//  大（4×4）：日付・大阪の天気（3時間ごと6つ。18時からは明日の予報）・今日の予定・今日のタスク（夜は明日の分も）
+//  大（4×4）：日付・大阪の天気（4時間おきに3つ。18時からは明日の予報）・今日の予定（夜まで6件）・今日のタスク（夜は明日の分も）
 //  中（4×2）：ルーティン（習慣の○×・連続日数・生理）・わんこの歯みがき（今日の2頭）・脳みその新しい2枚
 //  小：タスクの件数・習慣・生理・次の予定だけ
 // どのサイズも同じスクリプトです。置いたサイズで中身が変わります。使い方は widget/README.md を見てください。
@@ -280,8 +280,8 @@ function weatherSummary(data, fresh, now) {
   else if (nowI >= 0) { cur = h.temperature_2m[nowI]; curCode = h.weather_code[nowI]; }
   const slots = [];
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1);
-  for (let i = 0; i < 6; i++) {
-    const t = new Date(start.getTime() + i * 3 * 3600000);
+  for (let i = 0; i < 3; i++) {   // 4時間おきに3つ（予定を夜まで出せるよう、1行に納める）
+    const t = new Date(start.getTime() + i * 4 * 3600000);
     const j = hourAt(t);
     if (j < 0) continue;
     const hr = t.getHours();
@@ -406,18 +406,19 @@ function drawLarge(w, S) {
   }
   w.addSpacer(6);
 
-  // 3時間ごとの天気
+  // 4時間おきの天気（3つを1行に）
   if (wx && wx.slots.length) {
     const row = hstack(w, 0);
-    const sw = Math.floor(inner / 6);
+    const sw = Math.floor(inner / 3);
     wx.slots.forEach(s => {
-      const c = vstack(row, 1);
+      const c = hstack(row, 4);
       c.size = new Size(sw, 0);
       c.centerAlignContent();
-      text(c, s.label, 10, C.muted, { align: 'center', round: true });
-      symbol(c, s.sym, 13, symColor(s.sym));
-      text(c, deg(s.temp), 12, C.ink, { w: 'semibold', align: 'center', round: true });
-      text(c, pct(s.rain), 9, s.rain >= 50 ? C.blue : C.muted, { align: 'center', round: true });
+      text(c, s.label, 10, C.muted, { round: true });
+      symbol(c, s.sym, 12, symColor(s.sym));
+      text(c, deg(s.temp), 12, C.ink, { w: 'semibold', round: true });
+      text(c, pct(s.rain), 9, s.rain >= 50 ? C.blue : C.muted, { round: true });
+      c.addSpacer();
     });
     w.addSpacer(5);
   }
@@ -531,18 +532,22 @@ function drawEvents(col, r, now, colW) {
     heading(col, C.blue, '予定', '今日は終了', colW);
     text(col, '明日', 12, C.ink, { w: 'semibold' });
     if (!E.tomorrow.length) { text(col, '明日の予定はありません', 11, C.muted); return; }
-    E.tomorrow.slice(0, 3).forEach(e => evRow(col, e, E.t1, false));
-    if (E.tomorrow.length > 3) text(col, 'ほか' + (E.tomorrow.length - 3) + '件', 10, C.muted);
+    E.tomorrow.slice(0, 5).forEach(e => evRow(col, e, E.t1, false));
+    if (E.tomorrow.length > 5) text(col, 'ほか' + (E.tomorrow.length - 5) + '件', 10, C.muted);
     return;
   }
   const ended = E.todays.length - E.left.length;
   heading(col, C.blue, '予定', E.todays.length ? (ended ? 'あと' + E.left.length + '件' : E.todays.length + '件') : '', colW);
   if (!E.left.length) text(col, '今日の予定はありません', 11, C.muted);
-  E.left.slice(0, 4).forEach(e => evRow(col, e, E.t0, !e.allDay && e.s <= E.nowMs && E.nowMs < e.e));
-  if (E.left.length > 4) text(col, 'ほか' + (E.left.length - 4) + '件', 10, C.muted);
-  const first = E.tomorrow[0];
-  col.addSpacer(1);
-  text(col, first ? '明日 ' + eventTime(first, E.t1) + ' ' + first.title : '明日の予定はありません', 10, C.muted, { scale: 0.75 });
+  // 夜まで：今日の残りを6件まで。5件以下なら明日の最初の1件も
+  const EV_MAX = 6;
+  E.left.slice(0, EV_MAX).forEach(e => evRow(col, e, E.t0, !e.allDay && e.s <= E.nowMs && E.nowMs < e.e));
+  if (E.left.length > EV_MAX) text(col, 'ほか' + (E.left.length - EV_MAX) + '件', 10, C.muted);
+  if (E.left.length < EV_MAX) {
+    const first = E.tomorrow[0];
+    col.addSpacer(1);
+    text(col, first ? '明日 ' + eventTime(first, E.t1) + ' ' + first.title : '明日の予定はありません', 10, C.muted, { scale: 0.75 });
+  }
 }
 
 function taskRow(col, t) {
@@ -565,20 +570,20 @@ function drawTasks(col, r, now, colW) {
   if (night && s.tomorrow) {
     // 夜：今日の残り（3つまで）と、明日の分
     if (!s.ready.length) empty();
-    s.ready.slice(0, 2).forEach(t => taskRow(col, t));
-    const rest = s.ready.length - Math.min(2, s.ready.length);
+    s.ready.slice(0, 3).forEach(t => taskRow(col, t));
+    const rest = s.ready.length - Math.min(3, s.ready.length);
     if (rest || s.wait) text(col, [rest ? 'ほか' + rest + '件' : '', s.wait ? '待ち' + s.wait + '件' : ''].filter(Boolean).join('・'), 10, C.muted);
     col.addSpacer(3);
     heading(col, null, '明日', s.tomorrowCount + '件', colW);
-    const n = 2;
+    const n = 3;
     if (!s.tomorrow.length) text(col, s.tomorrowCount ? '待ちのタスクだけです' : '明日のタスクはありません', 11, C.muted);
     s.tomorrow.slice(0, n).forEach(t => taskRow(col, t));
     return;
   }
   if (!s.ready.length) empty();
-  s.ready.slice(0, 4).forEach(t => taskRow(col, t));
+  s.ready.slice(0, 6).forEach(t => taskRow(col, t));
   const more = [];
-  if (s.ready.length > 4) more.push('ほか' + (s.ready.length - 4) + '件');
+  if (s.ready.length > 6) more.push('ほか' + (s.ready.length - 6) + '件');
   if (s.wait) more.push('待ち' + s.wait + '件');
   if (s.tomorrowCount != null) more.push('明日' + s.tomorrowCount + '件');
   if (more.length) text(col, more.join('・'), 10, C.muted);
