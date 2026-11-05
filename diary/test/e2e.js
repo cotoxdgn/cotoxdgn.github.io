@@ -1,6 +1,6 @@
 // ルーティン（起床・就寝記録）の画面試験（Playwright の Chromium）
 // 2版目から睡眠は「記録」の中（習慣の設定「睡眠を表示する」でオン）。#sleep のリンクはそのまま 記録＞睡眠 を開く
-// 実行：node routine/test/e2e.js [スクショの保存先]
+// 実行：node diary/test/e2e.js [スクショの保存先]
 // スプシ（Apps Script）は test/gas-mock.js の Code.gs につなぐ。iPhone のショートカットの送信は sleepPut を直接呼んで再現する。
 'use strict';
 const http = require('http');
@@ -107,7 +107,7 @@ async function noHScroll(page, label) {
   watch(page, 'phone');
 
   await t('接続して睡眠タブ：自動で届いた分（重なり・覚醒・うたた寝を整理）と目標との差', async () => {
-    await page.goto(BASE + '/routine/' + hash);
+    await page.goto(BASE + '/diary/' + hash);
     await page.waitForFunction(() => Apps.isConnected('routine'));
     await sync(page);
     assert.strictEqual(await page.locator('.tabbar a').count(), 4);
@@ -305,7 +305,7 @@ async function noHScroll(page, label) {
     await wire(ctx2);
     const p2 = await ctx2.newPage();
     watch(p2, 'phone2');
-    await p2.goto(BASE + '/routine/' + hash);
+    await p2.goto(BASE + '/diary/' + hash);
     await p2.waitForFunction(() => Apps.isConnected('routine'));
     await sync(p2);
     await p2.evaluate(() => { location.hash = '#sleep'; });
@@ -336,7 +336,7 @@ async function noHScroll(page, label) {
     await wire(ctx3);
     const p3 = await ctx3.newPage();
     watch(p3, 'dark');
-    await p3.goto(BASE + '/routine/' + hash);
+    await p3.goto(BASE + '/diary/' + hash);
     await p3.waitForFunction(() => Apps.isConnected('routine'));
     await sync(p3);
     await p3.evaluate(() => { location.hash = '#sleep'; });

@@ -940,15 +940,15 @@ function sleepPut_(ss, req) {
 /*
  * widget：{ key: 見るだけ用またはいつもの合言葉, action:'widget' }
  *   「設定」B3（対象アプリ）が空のスプシ（自分用・全アプリ共通）
- *   → { today, habits:[{ name, done }], streak, period:{ ongoing, start, day, next, until, late } | null,
+ *   → { today, habits:[{ name, done }], streak, period:{ ongoing, start, day, next, until, late } | null, diary（今日の日記を書いたか true/false。中身は返さない）,
  *       events:[{ title, start, end, allDay, color }] | null,
  *       brain:{ latest:[{ kind, no, title, at }], count } }
  *   B3 にアプリ名があるスプシ（例：家族用 wanko）は、そのアプリの分だけ返す（予定は返さない。カレンダーには触れない）
  *     wanko → { wanko:{ today, dogs:[{ name, done }, { name, done }] } }
- *     routine → today・habits・streak・period だけ ／ brain → brain だけ ／ ほか → 何も入れない
+ *     routine → today・habits・streak・period・diary だけ ／ brain → brain だけ ／ ほか → 何も入れない
  *   ・スプシを読むだけ（書かない・ロックなし）。返すのは上のものだけ
  *     （睡眠・コレクション・メモ・id・家族の名前・ほかのアプリのデータは返さない）
- *   ・習慣：routine/app.js（習慣・記録・連続日数・深夜3時の区切り）と routine/period.js（次の予定日）と同じ決め方
+ *   ・習慣：diary/app.js（習慣・記録・連続日数・深夜3時の区切り）と diary/period.js（次の予定日）と同じ決め方
  *     today＝今日（日本時間・深夜3時まで前の日）、habits＝今の習慣（やめた習慣は除く・並び順どおり）と今日できたか、
  *     streak＝全部できた日の連続日数（今日がまだなら昨日から数える）
  *     period：ongoing＝記録中（day＝今日が何日目、start＝始まった日）／そうでなければ next＝次の予定日、until＝あと何日（0＝今日、マイナス＝予定日から過ぎた日数）
@@ -962,8 +962,8 @@ function sleepPut_(ss, req) {
  *  viewKey：いつもの合言葉の端末からだけ。{ renew:true } で作り直す。→ { viewKey }
  */
 var WIDGET_APP = 'routine';
-var WIDGET_DAY_START_HOUR = 3;   // 1日の区切り（routine/app.js の DAY_START_HOUR と同じ）
-var WIDGET_DEFAULT_HABITS = [    // 習慣が1つも無いときに出す初期の2つ（routine/app.js の DEFAULTS と同じ）
+var WIDGET_DAY_START_HOUR = 3;   // 1日の区切り（diary/app.js の DAY_START_HOUR と同じ）
+var WIDGET_DEFAULT_HABITS = [    // 習慣が1つも無いときに出す初期の2つ（diary/app.js の DEFAULTS と同じ）
   { id: 'h-supple', name: 'サプリを飲んだ', order: 10 },
   { id: 'h-bath', name: '22:30お風呂', order: 20 }
 ];
@@ -1012,6 +1012,7 @@ function widget_(ss, conf) {
     var today = wgToday_();
     var w = wgHabits_(list, today);
     out.today = today; out.habits = w.habits; out.streak = w.streak; out.period = wgPeriod_(list, today);
+    out.diary = list.some(function (r) { return r.data && r.data.kind === 'diary' && r.data.date === today; });
   }
   // カレンダーは全アプリ共通のスプシ（自分用）だけ。B3 があるスプシ（家族用など）では CalendarApp を呼ばない
   if (!target) out.events = wgEvents_();
@@ -1061,7 +1062,7 @@ function wgWanko_(ss, conf) {
   };
 }
 
-// 習慣と記録（routine/app.js の load・habitsOn・fullDay・streak と同じ決め方）
+// 習慣と記録（diary/app.js の load・habitsOn・fullDay・streak と同じ決め方）
 function wgHabits_(list, today) {
   var hs = [], logs = {}, anyHabit = false;
   list.forEach(function (r) {
@@ -1085,7 +1086,7 @@ function wgHabits_(list, today) {
   return { habits: active.map(function (h) { return { name: h.name.slice(0, 30), done: done(today, h.id) }; }), streak: n };
 }
 
-// 生理（routine/period.js の build・calc と同じ決め方）
+// 生理（diary/period.js の build・calc と同じ決め方）
 function wgPeriod_(list, today) {
   var YMD = /^\d{4}-\d{2}-\d{2}$/;
   var p = [];

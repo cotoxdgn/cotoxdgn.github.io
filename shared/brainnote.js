@@ -19,7 +19,7 @@
     { c: 'O', name: 'ほか' }
   ];
   var COLORS = { D: '#4D5A5C', T: '#9A6C78', M: '#A3812F', L: '#3F6F86', S: '#5E7C55', B: '#3E6B5A', H: '#B0602A', O: '#7A7570', x: '#6F6A8A' };
-  var APP_NAME = { hondana: '本棚', archmap: 'アーキマップ', brain: '脳みそ' };
+  var APP_NAME = { hondana: '本棚', archmap: 'アーキマップ', brain: '脳みそ', diary: '日記' };
   var brain = null;
   function db() { return brain || (brain = global.Apps.collection('brain')); }
 

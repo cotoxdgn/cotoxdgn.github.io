@@ -5,7 +5,7 @@
 process.env.TZ = 'Asia/Tokyo';
 const assert = require('assert');
 const makeGas = require('./gas-mock');
-const P = require('../routine/period.js');
+const P = require('../diary/period.js');
 
 let passed = 0;
 function t(name, fn) { fn(); passed++; console.log('ok -', name); }
@@ -56,6 +56,7 @@ A.put('sleep-20261104', { kind: 'sleep', date: '2026-11-04', samples: [{ s: '202
 A.put('item-1', { kind: 'item', type: 'ctype-food', date: '2026-11-03', name: 'ひみつの料理', memo: 'ひみつのメモ', image: null, at: 'x' });
 A.put('ctype-x', { kind: 'ctype', name: 'ひみつの種類', icon: 'dot', color: 'blue', order: 20, archivedOn: '' });
 assert.ok(A.call({ key: A.key, action: 'put', app: 'diary', id: 'd1', data: { text: 'ひみつの日記' } }).ok);
+A.put('diary-20261103', { kind: 'diary', date: '2026-11-03', event: 'ひみつの出来事', thanks: '', maxim: 'ひみつの格言', free: '', image: null, at: 'x' });
 
 t('widget：見るだけ用の合言葉で、今日の習慣（並び順・やめた習慣は除く）・連続日数・生理だけ', () => {
   A.at('2026-11-04T12:00:00+09:00');
@@ -65,13 +66,14 @@ t('widget：見るだけ用の合言葉で、今日の習慣（並び順・や�
   assert.deepStrictEqual(r.habits, [{ name: 'サプリを飲んだ', done: true }, { name: 'ストレッチ', done: false }]);
   assert.strictEqual(r.streak, 3, '今日はまだなので昨日から数える（11/1〜11/3）');
   assert.deepStrictEqual(r.period, { ongoing: false, start: '', day: 0, next: '2026-11-05', until: 1, late: 0 });
-  assert.deepStrictEqual(Object.keys(r).sort(), ['brain', 'events', 'habits', 'now', 'ok', 'period', 'streak', 'today']);
+  assert.deepStrictEqual(Object.keys(r).sort(), ['brain', 'diary', 'events', 'habits', 'now', 'ok', 'period', 'streak', 'today']);
+  assert.strictEqual(r.diary, false, '今日の日記はまだ（昨日の分はある）');
   assert.deepStrictEqual(r.events, []); assert.deepStrictEqual(r.brain, { latest: [], count: 0 });
 });
 
 t('widget：ほかのデータ（睡眠・コレクション・メモ・ほかのアプリ・id）は入れない', () => {
   const s = JSON.stringify(A.call({ key: VKEY, action: 'widget' }));
-  ['ひみつ', 'sleep', 'item', 'ctype', 'diary', 'h-a', 'h-b', 'log-', 'period-', 'samples', 'memo', 'records'].forEach(w => assert.ok(!s.includes(w), w));
+  ['ひみつ', 'sleep', 'item', 'ctype', 'diary-', '"event"', 'maxim', 'h-a', 'h-b', 'log-', 'period-', 'samples', 'memo', 'records'].forEach(w => assert.ok(!s.includes(w), w));
 });
 
 t('widget：スプシには何も書かない', () => {
@@ -93,6 +95,8 @@ t('widget：全部できたら今日から数える。深夜3時までは前の�
   r = A.call({ key: VKEY, action: 'widget' });
   assert.strictEqual(r.today, '2026-11-05'); assert.ok(r.habits.every(h => !h.done)); assert.strictEqual(r.streak, 4, '今日はまだ＝昨日まで');
   assert.strictEqual(r.period.until, 0, '予定日が今日');
+  A.put('diary-20261105', { kind: 'diary', date: '2026-11-05', event: 'ひみつ', thanks: '', maxim: '', free: '', image: null, at: 'x' });
+  assert.strictEqual(A.call({ key: VKEY, action: 'widget' }).diary, true, '今日の日記を書いた');
   // 記録を取り消す（削除）と数えない
   A.at('2026-11-05T12:00:00+09:00');
   assert.ok(A.call({ key: A.key, action: 'delete', app: 'routine', id: 'log-20261104-h-a' }).ok);
@@ -294,7 +298,7 @@ t('B3 がほかのアプリ：routine → 習慣だけ、brain → 脳みそだ�
     assert.ok(r.ok); assert.strictEqual(F.calls(), 0, target);
     return Object.keys(r).sort();
   };
-  assert.deepStrictEqual(keysOf('routine'), ['habits', 'now', 'ok', 'period', 'streak', 'today']);
+  assert.deepStrictEqual(keysOf('routine'), ['diary', 'habits', 'now', 'ok', 'period', 'streak', 'today']);
   assert.deepStrictEqual(keysOf('brain'), ['brain', 'now', 'ok']);
   assert.deepStrictEqual(keysOf('diary'), ['now', 'ok']);
 });

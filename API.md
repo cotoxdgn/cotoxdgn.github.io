@@ -183,12 +183,12 @@ node test/shared.test.js   # apps.js ↔ Code.gs の通し
 node test/yotei.test.js    # 予定合わせの窓口（Code.gs・モック）
 node yotei/test/e2e.js     # 予定合わせの画面（Playwright）
 node test/sleep.test.js    # 睡眠の窓口 sleepPut / sleepKey（Code.gs・モック）
-node routine/test/sleep.test.js  # 就寝・起床の決め方・目標の履歴
+node diary/test/sleep.test.js  # 就寝・起床の決め方・目標の履歴
 node test/calmonth.test.js # ルーティンの月カレンダーの窓口 calMonth（Code.gs・モック）
-node routine/test/period.test.js # 生理の記録・次の予定日の決め方
-node routine/test/e2e.js   # ルーティン（睡眠）の画面（Playwright）
+node diary/test/period.test.js # 生理の記録・次の予定日の決め方
+node diary/test/e2e.js   # ルーティン（睡眠）の画面（Playwright）
 node test/widget.test.js   # ウィジェットの窓口 widget / viewKey（Code.gs・モック。生理は period.js と同じ答えか・予定・脳みそ・B3=wanko）
 TZ=Asia/Tokyo node task/test/widget.test.js  # タスク表の widget・見るだけ用の合言葉（TaskApi.gs・モック）
 TZ=Asia/Tokyo node widget/test/widget.test.js # Scriptable のウィジェット（部品をまねして node で表示）
-node routine/test/e2e-v2.js # ルーティン2版目（月カレンダー・生理・コレクション、1版目のデータとの比べ）の画面（Playwright）
+node diary/test/e2e-v2.js # ルーティン2版目（月カレンダー・生理・コレクション、1版目のデータとの比べ）の画面（Playwright）
 ```
