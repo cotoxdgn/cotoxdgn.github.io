@@ -33,6 +33,7 @@ class Sheet {
   insertRowsAfter(r, n) { for (let i = 0; i < n; i++) this.rows.push([]); this.writes.push(['insertRowsAfter', r, n]); }
   getFilter() { return null; }
   insertColumnsAfter(c, n) { this.maxCols += n; }
+  deleteRow(r) { this.rows.splice(r - 1, 1); this.writes.push(['deleteRow', r]); }
   insertRowBefore(r) {
     while (this.rows.length < r - 1) this.rows.push([]);
     this.rows.splice(r - 1, 0, []);

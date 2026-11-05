@@ -150,3 +150,8 @@ html.noscroll, html.noscroll body { overflow: hidden; }
 .tmrsum::after { content: '▸'; font-size: 12px; transition: transform .15s; }
 #tmrDet[open] .tmrsum::after { transform: rotate(90deg); }
 #tmrDet[open] .tmrsum { margin-bottom: 8px; }
+
+/* タスクの削除（2回確かめる） */
+.delzone { border-top: 1px dashed var(--line); padding-top: 12px; }
+.delask { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.delask .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

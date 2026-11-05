@@ -19,6 +19,8 @@
  *   3) 実働時間：見出し「実働」の列があれば、その行のセルに時間(h)を書く
  *      「実働」列は自動では作りません。コトさんの承認後に関数「taskApiAddActualColumn」を1回だけ実行して追加します。
  *   4) タスクの設定：その行の「ToDo」「📅」「⏰」「👤」「前提」のセルだけを書く（setWait）
+ *   5) タスクの削除：No と ToDo が一致する1行を削除する（remove。アプリで2回確かめてから送る）
+ *      ほかの未完了タスクの「前提」に入っているタスクは消さない（消すと相手がずっと前提待ちになるため）
  *
  * 準備（約5分）
  *  1) script.google.com を直接開いて［新しいプロジェクト］→ このコードを貼り付けて保存
@@ -203,9 +205,10 @@ function taskApi_handle(req) {
       case 'undone': res = taskApi_setDone(sh, req, false); break;
       case 'actual': res = taskApi_actual(sh, req); break;
       case 'setWait': res = taskApi_setWait(sh, req); break;
+      case 'remove': res = taskApi_remove(sh, req); break;
       default: res = { error: 'bad_action' };
     }
-    if (res.error) return { ok: false, error: res.error };
+    if (res.error) return res.detail ? { ok: false, error: res.error, detail: res.detail } : { ok: false, error: res.error };
     res.ok = true;
     res.today = taskApi_ymd(new Date());
     return res;
@@ -588,6 +591,23 @@ function taskApi_setWait(sh, req) {
   if (req.wait !== undefined) sh.getRange(t.row, c.wait).setValue(taskApi_text(req.wait));
   if (req.pre !== undefined) sh.getRange(t.row, c.pre).setValue(taskApi_text(req.pre));   // 自分自身・形の違う前提は上で断り済み
   return { task: taskApi_rowToTask(t.row, sh.getRange(t.row, 1, 1, c.width).getValues()[0], c, taskApi_ymd(new Date())) };
+}
+
+// タスクを1行削除。前提にしている未完了タスクがあれば断って、その一覧を返す
+function taskApi_remove(sh, req) {
+  var c = taskApi_cols(sh);
+  var t = taskApi_findTask(sh, c, req);
+  if (!t) return { error: 'not_found' };
+  if (c.pre && t.no !== null) {
+    var users = taskApi_readAll(sh, c).filter(function (x) {
+      if (x.done || x.row === t.row || !x.pre) return false;
+      var m = /^\s*(?:No)?(\d+)/.exec(x.pre);
+      return m && Number(m[1]) === t.no;
+    });
+    if (users.length) return { error: 'used_as_pre', detail: users.slice(0, 5).map(function (x) { return x.no + '.' + x.todo.slice(0, 40); }).join('、') };
+  }
+  sh.deleteRow(t.row);
+  return { removed: { no: t.no, todo: t.todo } };
 }
 
 function taskApi_actual(sh, req) {
