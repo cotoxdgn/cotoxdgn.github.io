@@ -181,7 +181,7 @@ const urls = r => r.sent.map(x => x.url).sort();
   });
 
   const files = {};
-  await t('大（昼）：日付・天気（今・最高最低・降水・3時間ごと6つ）・予定（今の予定は太字・終わった予定は出さない・明日の最初）・タスク5つ（持越の印）', async () => {
+  await t('大（昼）：日付・天気（今・最高最低・降水・4時間おき3つ）・予定（夜まで6件・今の予定は太字・終わった予定は出さない・明日の最初）・タスク6つ（持越の印）', async () => {
     const r = await run(configured, { respond: good, files, family: 'large' });
     assert.ok(r.completed);
     assert.deepStrictEqual(urls(r), [R_URL, T_URL, W_URL, 'weather'].sort(), '大は全部読む');
@@ -190,17 +190,17 @@ const urls = r => r.sent.map(x => x.url).sort();
     has(r, '11.5'); has(r, '木曜日・大阪');
     has(r, '16°'); has(r, '最高 20° / 最低 12° / 降水 30%'); has(r, 'くもり');
     const slotLabels = r.texts.filter(x => /^\d+時$/.test(x));
-    assert.deepStrictEqual(slotLabels, ['11時', '14時', '17時', '20時', '23時', '2時']);
+    assert.deepStrictEqual(slotLabels, ['11時', '15時', '19時']);
     assert.ok(r.texts.includes('16°') && r.texts.includes('70%'));
-    assert.ok(r.syms.includes('sun.max.fill') && r.syms.includes('cloud.rain.fill') && r.syms.includes('moon.stars.fill'), JSON.stringify(r.syms));
+    assert.ok(r.syms.includes('sun.max.fill') && r.syms.includes('cloud.rain.fill'), JSON.stringify(r.syms));
     // 予定
     has(r, '予定'); has(r, 'あと5件');
     hasNot(r, '朝会');
     assert.ok(item(r, '現場 引渡し').font.bold, '今やっている予定は太字');
     assert.ok(!item(r, '打合せ（仕様確認）').font.bold);
     const times = r.texts.filter(x => /^\d+:\d\d$|^終日$/.test(x));
-    assert.deepStrictEqual(times, ['10:00', '15:00', '17:30', '19:00']);
-    has(r, 'ほか1件');
+    assert.deepStrictEqual(times, ['10:00', '15:00', '17:30', '19:00', '終日'], '夜の予定と終日まで全部');
+    hasNot(r, 'ほか1件');
     const order = ['現場 引渡し', '打合せ（仕様確認）', '見積提出〆', 'ジム'].map(s => r.texts.indexOf(s));
     assert.deepStrictEqual(order.slice().sort((a, b) => a - b), order, '時刻順、終日はあと');
     has(r, '明日 9:30 歯医者');
@@ -210,11 +210,11 @@ const urls = r => r.sent.map(x => x.url).sort();
     const idx = names.map(n => r.texts.indexOf(n));
     assert.ok(idx.every(i => i >= 0), JSON.stringify(r.texts));
     assert.deepStrictEqual(idx.slice().sort((a, b) => a - b), idx, 'アプリと同じ順');
-    hasNot(r, 'もう一つ'); hasNot(r, '山田さん待ち'); hasNot(r, '前提待ちの持ち越し'); hasNot(r, '明日の朝');
+    has(r, 'もう一つ'); hasNot(r, '山田さん待ち'); hasNot(r, '前提待ちの持ち越し'); hasNot(r, '明日の朝');
     assert.strictEqual(r.texts.filter(x => x === '持越').length, 1);
     assert.strictEqual(r.texts[r.texts.indexOf('古い持ち越し') + 1], '持越');
     assert.ok(r.texts.includes('🌅') && r.texts.includes('☀️') && r.texts.includes('🌙'));
-    has(r, 'ほか2件・待ち2件・明日3件');
+    has(r, '待ち2件・明日3件'); hasNot(r, 'ほか2件');
     hasNot(r, '更新できませんでした');
     // 下段：ルーティン・歯みがき・脳みそ（大1つに全部）
     has(r, 'ルーティン'); assert.ok(r.texts.includes('日連続')); has(r, '生理 2日後');
@@ -225,18 +225,18 @@ const urls = r => r.sent.map(x => x.url).sort();
     assert.deepStrictEqual(Object.keys(c).sort(), ['routine', 'task', 'wanko', 'weather']);
   });
 
-  await t('大（夜 21:40）：明日の予報・3時間ごとは22時から・予定は「今日は終了」で明日の分・タスクは今日の残りと明日', async () => {
+  await t('大（夜 21:40）：明日の予報・4時間おきは22時から・予定は「今日は終了」で明日の分・タスクは今日の残りと明日', async () => {
     const r = await run(configured, { respond: good, files: {}, family: 'large', now: '2026-11-05T21:40:00+09:00' });
     has(r, 'あす 21° / 13° / 降水 10%'); has(r, 'あす 小雨');
-    assert.deepStrictEqual(r.texts.filter(x => /^\d+時$/.test(x)), ['22時', '1時', '4時', '7時', '10時', '13時']);
+    assert.deepStrictEqual(r.texts.filter(x => /^\d+時$/.test(x)), ['22時', '2時', '6時']);
     has(r, '今日は終了'); assert.ok(r.texts.includes('明日'));
     ['歯医者', '打合せ', '現場 立会い'].forEach(s => assert.ok(r.texts.includes(s), s));
     hasNot(r, 'ジム'); hasNot(r, '母の誕生日');
     assert.deepStrictEqual(r.texts.filter(x => /^\d+:\d\d$/.test(x)), ['9:30', '13:00', '16:00']);
-    // タスク：今日の残り2つ＋ほか・待ち、明日（待ちは名前に出さない）
-    ['古い持ち越し', '朝のタスク'].forEach(s => assert.ok(r.texts.includes(s), s));
-    hasNot(r, '昼のタスク');
-    has(r, 'ほか4件・待ち2件');
+    // タスク：今日の残り3つ＋ほか・待ち、明日（待ちは名前に出さない）
+    ['古い持ち越し', '朝のタスク', '昼のタスク'].forEach(s => assert.ok(r.texts.includes(s), s));
+    hasNot(r, '夕方のタスク');
+    has(r, 'ほか3件・待ち2件');
     assert.ok(r.texts.includes('3件'), '明日の件数（待ち含む）');
     assert.ok(r.texts.indexOf('明日の朝') < r.texts.indexOf('明日の夕方'));
     hasNot(r, '明日の待ち');
