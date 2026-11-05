@@ -1,5 +1,5 @@
 /* オフラインでも開けるようにする。CACHE は更新のたびに番号を上げる */
-var CACHE = 'hikidashi-v1';
+var CACHE = 'hikidashi-v2';
 var SHELL = ['./', 'index.html', 'app.js', 'story.js', 'illust.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png', '../shared/apps.js', '../shared/apps.css'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));
