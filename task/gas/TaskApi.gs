@@ -485,7 +485,8 @@ function taskApi_setDone(sh, req, done) {
   return res;
 }
 
-// 📅・⏰・👤（待ち相手）・前提 を書く。その行のそのセルだけ。undefined の項目は書かない
+// タスク名（D列）・📅・⏰・👤（待ち相手）・前提 を書く。その行のそのセルだけ。undefined の項目は書かない
+// newTodo：D列をそのまま置き換える（「親 | 子」の形もそのまま）。空・改行は不可（改行は空白にする）
 function taskApi_setWait(sh, req) {
   var c = taskApi_cols(sh);
   var t = taskApi_findTask(sh, c, req);
@@ -508,6 +509,8 @@ function taskApi_setWait(sh, req) {
     else if (TASKAPI.SLOTS[sl]) slotVal = TASKAPI.SLOTS[sl];
     else return { error: 'bad_slot' };
   }
+  var newTodo = null;
+  if (req.newTodo !== undefined) { newTodo = taskApi_text(req.newTodo); if (!newTodo) return { error: 'no_todo' }; }
   if (req.wait !== undefined && !c.wait) return { error: 'no_wait_column' };
   if (req.pre !== undefined && !c.pre) return { error: 'no_pre_column' };
   if (req.wait !== undefined && taskApi_text(req.wait).length > 40) return { error: 'bad_wait' };
@@ -516,6 +519,7 @@ function taskApi_setWait(sh, req) {
     if (p0 && !/^\d+\./.test(p0)) return { error: 'bad_pre' };
     if (p0 && Number(/^(\d+)/.exec(p0)[1]) === t.no) return { error: 'bad_pre' };
   }
+  if (newTodo !== null && newTodo !== t.todo) sh.getRange(t.row, c.todo).setValue(newTodo);
   if (date) sh.getRange(t.row, c.date).setValue(date);
   if (slotVal !== null) sh.getRange(t.row, c.slot).setValue(slotVal);
   if (req.wait !== undefined) sh.getRange(t.row, c.wait).setValue(taskApi_text(req.wait));

@@ -195,6 +195,13 @@ t('setWait：👤と前提のセルだけを書く。自分自身・形の違う
   assert.ok(r4.ok); assert.strictEqual(sh.peek(row, 8).v, 13.5);
   const r4b = call({ key: KEY, action: 'setWait', no, todo, slot: '移動' });
   assert.ok(r4b.ok); assert.strictEqual(sh.peek(row, 8).v, '🚃'); assert.strictEqual(r4b.task.slot, '移動', '🚃 はシートの移動の印');
+  // タスク名（D列）
+  assert.strictEqual(call({ key: KEY, action: 'setWait', no, todo, newTodo: '  ' }).error, 'no_todo');
+  const rn = call({ key: KEY, action: 'setWait', no, todo, newTodo: '現場写真の整理\nと共有' });
+  assert.ok(rn.ok, JSON.stringify(rn)); assert.strictEqual(rn.task.todo, '現場写真の整理 と共有');
+  assert.strictEqual(call({ key: KEY, action: 'setWait', no, todo, slot: '' }).error, 'not_found', '前の名前では見つからない');
+  const rb = call({ key: KEY, action: 'setWait', no, todo: '現場写真の整理 と共有', newTodo: todo });
+  assert.ok(rb.ok); assert.strictEqual(rb.task.todo, todo);
   const r5 = call({ key: KEY, action: 'setWait', no, todo, slot: '' });
   assert.ok(r5.ok); assert.strictEqual(r5.task.slot, ''); assert.strictEqual(r5.task.slotRaw, '');
   const b1 = snap();
