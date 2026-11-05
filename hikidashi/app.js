@@ -584,7 +584,21 @@
   Apps.on('error', function (d) { if (!d.app || d.app === APP) $('sync').textContent = Apps.errorText(d.error); });
   load(db.all());
   route();
-  Apps.ensureConnected(APP).then(function () { $('sync').textContent = ''; brain.sync().catch(function () {}); return db.sync(); }).catch(function () {});
+  // 最初に入れておく賞（2026-11-05 台帳で確認。2026年の締切。過ぎた分は翌年の同じ日に仮で繰り越して出る）。
+  // 固定の id なので、2台で同時に入れても重複しない。一度入れたら、消しても入れ直さない（印 aw-seeded）
+  var AWARD_SEED = [
+    ['aw-seed-kukan', '日本空間デザイン賞', '2026-05-14', 'https://kukan.design/27109/'],
+    ['aw-seed-gmark', 'グッドデザイン賞', '2026-05-21', 'https://www.g-mark.org'],
+    ['aw-seed-reform', '住まいのリフォームコンクール', '2026-06-17', 'https://www.chord.or.jp/reform_contest/'],
+    ['aw-seed-jid', 'JID AWARD（日本インテリアデザイナー協会）', '2026-06-30', 'https://jid-award.com/html/detail-2026.html'],
+    ['aw-seed-renov', 'リノベーション・オブ・ザ・イヤー', '2026-08-31', 'https://prtimes.jp/main/html/rd/p/000000105.000008586.html']
+  ];
+  function seedAwards() {
+    if (db.get('aw-seeded')) return;
+    AWARD_SEED.forEach(function (a) { if (!db.get(a[0])) db.put({ kind: 'award', name: a[1], date: a[2], url: a[3], memo: '', tentative: false }, a[0]); });
+    db.put({ kind: 'seedmark', at: new Date().toISOString() }, 'aw-seeded');
+  }
+  Apps.ensureConnected(APP).then(function () { $('sync').textContent = ''; brain.sync().catch(function () {}); return db.sync(); }).then(seedAwards).catch(function () {});
   window.__hiki = { st: st, score: score, awardNext: awardNext };
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
 })();
