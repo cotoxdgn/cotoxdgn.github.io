@@ -119,12 +119,12 @@ Apps.call(app, action, params) // → Promise<レスポンス>（ok:false は Er
 | `yoteiCreateEvent` | `id`, `start`, `end`（ISO） | `record`（決定済みにした予定合わせ）, `calendarEventId`。既定のカレンダーに1件だけ作る（招待なし）。決定済みなら `already` |
 | `sleepPut` | `samples: [{ s, e, v }]`（300件まで。s・e は ISO、v はヘルスケアの値） | `date`, `id`, `count`。`app=routine` に `sleep-YYYYMMDD` で上書き。読める件が無ければ `no_samples`（保存しない） |
 | `sleepKey` | `renew?: true` | `sleepKey`（睡眠用の合言葉。「設定」B5。空なら作る） |
-| `widget` | — | `today`, `habits: [{ name, done }]`, `streak`, `period: { ongoing, start, day, next, until, late } \| null`（iPhone のウィジェット用。`app=routine` を読むだけ・ロックなし。決め方は routine/app.js・period.js と同じ。睡眠・コレクション・ほかのアプリは返さない） |
+| `widget` | — | iPhone のウィジェット用（スプシを読むだけ・ロックなし）。「設定」B3 が空のスプシ（自分用）：`today`, `habits: [{ name, done }]`, `streak`, `period: { ongoing, start, day, next, until, late } \| null`, `events: [{ title, start, end, allDay, color }] \| null`（今日と明日・日本時間の0時区切り。形と決め方は `calMonth` と同じ。読めないときは null）, `brain: { latest: [{ kind, no（未採番は null）, title（空なら本文の1行目）, at（作った日時） }]（作った日時が新しい2枚）, count }`。B3 にアプリ名があるスプシはそのアプリの分だけで、**カレンダーには触れない**：`wanko` → `wanko: { today（0時区切り）, dogs: [{ name（名前表 B9・B10。空なら ''）, done }, …2頭] }`、`routine` → 習慣の4つだけ、`brain` → `brain` だけ。睡眠・コレクション・予定の場所やメモ・家族の名前・id・ほかのアプリは返さない |
 | `viewKey` | `renew?: true` | `viewKey`（見るだけ用の合言葉。「設定」B6。空なら作る。いつもの合言葉だけ） |
 
 睡眠用の合言葉（B5）では `sleepPut` だけ使える（`calMonth`・`widget` も断る）。見るだけ用の合言葉（B6）では `widget` だけ使える。ほかの action はすべて `bad_key`。形は `gas/Code.gs` の「睡眠」「ウィジェット」と `routine/sleep.js` の先頭を参照。
 
-タスク表の Apps Script（`task/gas/TaskApi.gs`・別のプロジェクト）にも `widget` がある：→ `today`, `tasks: [{ todo, pj, date, slot, wait（true/false）, preWait, done:false }]`（今日以前の未完了だけ。詳細・👤の名前・前提の中身・候補の一覧は返さない）。見るだけ用の合言葉はスクリプトのプロパティ `TASK_VIEW_KEY`（関数 `taskApiShowViewKey` で作って実行ログに出す、`taskApiRenewViewKey` で作り直す）で、これでは `widget` だけ使える。
+タスク表の Apps Script（`task/gas/TaskApi.gs`・別のプロジェクト）にも `widget` がある：→ `today`, `tasks: [{ todo, pj, date, slot, wait（true/false）, preWait, done:false }]`, `tomorrowDate`, `tomorrow: [同じ形]`（今日以前の未完了と、明日の未完了だけ。詳細・👤の名前・前提の中身・候補の一覧は返さない）。見るだけ用の合言葉はスクリプトのプロパティ `TASK_VIEW_KEY`（関数 `taskApiShowViewKey` で作って実行ログに出す、`taskApiRenewViewKey` で作り直す）で、これでは `widget` だけ使える。
 
 予定合わせの相手用の窓口（**合言葉なし**。`key` は見ない。合言葉の確認より前に分かれ、ほかの action には進めない）：
 
@@ -187,7 +187,7 @@ node routine/test/sleep.test.js  # 就寝・起床の決め方・目標の履歴
 node test/calmonth.test.js # ルーティンの月カレンダーの窓口 calMonth（Code.gs・モック）
 node routine/test/period.test.js # 生理の記録・次の予定日の決め方
 node routine/test/e2e.js   # ルーティン（睡眠）の画面（Playwright）
-node test/widget.test.js   # ウィジェットの窓口 widget / viewKey（Code.gs・モック。生理は period.js と同じ答えか）
+node test/widget.test.js   # ウィジェットの窓口 widget / viewKey（Code.gs・モック。生理は period.js と同じ答えか・予定・脳みそ・B3=wanko）
 TZ=Asia/Tokyo node task/test/widget.test.js  # タスク表の widget・見るだけ用の合言葉（TaskApi.gs・モック）
 TZ=Asia/Tokyo node widget/test/widget.test.js # Scriptable のウィジェット（部品をまねして node で表示）
 node routine/test/e2e-v2.js # ルーティン2版目（月カレンダー・生理・コレクション、1版目のデータとの比べ）の画面（Playwright）

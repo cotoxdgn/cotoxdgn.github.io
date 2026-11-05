@@ -15,7 +15,8 @@
  *          yoteiGet / yoteiAnswer（予定合わせの相手用・合言葉なし。下の「予定合わせ」を参照）
  *          sleepPut（睡眠の記録。睡眠用の合言葉でも使える）／ sleepKey（睡眠用の合言葉を見る・作り直す。下の「睡眠」を参照）
  *          calMonth（ルーティンの月カレンダー用。普段使いのカレンダーの予定の件名・時刻・色。いつもの合言葉だけ。下の「月カレンダー」を参照）
- *          widget（iPhone のホーム画面のウィジェット用。今日の習慣・連続日数・生理の予定日だけ。見るだけ用の合言葉でも使える）
+ *          widget（iPhone のホーム画面のウィジェット用。今日の習慣・連続日数・生理の予定日、今日と明日の予定、脳みその新しい2枚、
+ *                  わんこの今日の歯みがき（家族用のスプシだけ）。見るだけ用の合言葉でも使える）
  *          viewKey（見るだけ用の合言葉を見る・作り直す。いつもの合言葉だけ。下の「ウィジェット」を参照）
  */
 
@@ -222,7 +223,7 @@ function handle_(req) {
   if (viewOnly && req.action !== 'widget') return { ok: false, error: 'bad_key' };
   if (!sleepOnly && !viewOnly && String(req.key || '') !== pass) return { ok: false, error: 'bad_key' };
   if (req.action === 'widget') {   // スプシを読むだけ（書かない）ので、ロックなし
-    var wg = widget_(ss);
+    var wg = widget_(ss, conf);
     wg.ok = true; wg.now = now_();
     return wg;
   }
@@ -938,14 +939,26 @@ function sleepPut_(ss, req) {
 // ---------- ウィジェット（iPhone のホーム画面・Scriptable） ----------
 /*
  * widget：{ key: 見るだけ用またはいつもの合言葉, action:'widget' }
- *   → { today, habits:[{ name, done }], streak, period:{ ongoing, start, day, next, until, late } | null }
- *   ・シート app=routine を読むだけ（書かない・ロックなし）。返すのは上のものだけ
- *     （睡眠・コレクション・メモ・予定・ほかのアプリのデータは返さない）
- *   ・計算は routine/app.js（習慣・記録・連続日数・深夜3時の区切り）と routine/period.js（次の予定日）と同じ決め方
+ *   「設定」B3（対象アプリ）が空のスプシ（自分用・全アプリ共通）
+ *   → { today, habits:[{ name, done }], streak, period:{ ongoing, start, day, next, until, late } | null,
+ *       events:[{ title, start, end, allDay, color }] | null,
+ *       brain:{ latest:[{ kind, no, title, at }], count } }
+ *   B3 にアプリ名があるスプシ（例：家族用 wanko）は、そのアプリの分だけ返す（予定は返さない。カレンダーには触れない）
+ *     wanko → { wanko:{ today, dogs:[{ name, done }, { name, done }] } }
+ *     routine → today・habits・streak・period だけ ／ brain → brain だけ ／ ほか → 何も入れない
+ *   ・スプシを読むだけ（書かない・ロックなし）。返すのは上のものだけ
+ *     （睡眠・コレクション・メモ・id・家族の名前・ほかのアプリのデータは返さない）
+ *   ・習慣：routine/app.js（習慣・記録・連続日数・深夜3時の区切り）と routine/period.js（次の予定日）と同じ決め方
  *     today＝今日（日本時間・深夜3時まで前の日）、habits＝今の習慣（やめた習慣は除く・並び順どおり）と今日できたか、
  *     streak＝全部できた日の連続日数（今日がまだなら昨日から数える）
  *     period：ongoing＝記録中（day＝今日が何日目、start＝始まった日）／そうでなければ next＝次の予定日、until＝あと何日（0＝今日、マイナス＝予定日から過ぎた日数）
  *     記録が無い・予定日から14日より過ぎた＝ next は null
+ *   ・events：普段使いのカレンダーの、今日と明日（日本時間の0時区切り）の予定。形と決め方は calMonth と同じ
+ *     （件名・開始・終了・終日・色だけ。欠席にした予定は除く。場所・メモ・参加者は返さない）。読めないとき（許可がない等）は null
+ *   ・brain：脳みそ（app=brain）の知識カード（t:'k'）のうち、作った日時が新しい2枚と、全部の枚数。
+ *     kind＝種類の記号、no＝番号（まだ振られていなければ null）、title＝題（空なら本文の1行目）、at＝作った日時
+ *   ・wanko：今日（日本時間の0時区切り。wanko/app.js の dayKey と同じ）、わんこ2頭それぞれ記録があるか（id YYYY-MM-DD_a / _b）。
+ *     name＝名前表（B9・B10）の名前（空なら ''。表示側で「わんこA」などにする）
  *  viewKey：いつもの合言葉の端末からだけ。{ renew:true } で作り直す。→ { viewKey }
  */
 var WIDGET_APP = 'routine';
@@ -954,6 +967,8 @@ var WIDGET_DEFAULT_HABITS = [    // 習慣が1つも無いときに出す初期�
   { id: 'h-supple', name: 'サプリを飲んだ', order: 10 },
   { id: 'h-bath', name: '22:30お風呂', order: 20 }
 ];
+var WIDGET_BRAIN_LATEST = 2;     // 脳みそのカードを何枚返すか
+var WIDGET_DOGS = ['a', 'b'];    // wanko/app.js の DOGS と同じ
 
 function newViewKey_() { return 'vw' + Utilities.getUuid().replace(/-/g, ''); }
 
@@ -980,13 +995,70 @@ function wgAdd_(s, n) { return wgYmd_(wgParse_(s) + n * DAY_MS); }
 function wgDiff_(a, b) { return Math.round((wgParse_(b) - wgParse_(a)) / DAY_MS); }
 // 今日（日本時間。深夜3時までは前の日）
 function wgToday_() { return wgYmd_(new Date().getTime() + SLEEP_JST_MS - WIDGET_DAY_START_HOUR * 3600000); }
+// 暦の今日（日本時間の0時区切り。予定・わんこ用）
+function wgCalToday_() { return wgYmd_(new Date().getTime() + SLEEP_JST_MS); }
 
-function widget_(ss) {
-  var sh = sheet_(ss, WIDGET_APP, false);
-  var list = sh ? rows_(sh).filter(function (r) { return !r.deleted; }).map(toRecord_) : [];
-  var today = wgToday_();
-  var w = wgHabits_(list, today);
-  return { today: today, habits: w.habits, streak: w.streak, period: wgPeriod_(list, today) };
+// 消していないレコード（シートが無ければ空）
+function wgRecords_(ss, app) {
+  var sh = sheet_(ss, app, false);
+  return sh ? rows_(sh).filter(function (r) { return !r.deleted; }).map(toRecord_) : [];
+}
+
+function widget_(ss, conf) {
+  var target = String(conf.getRange(CELL_TARGET).getValue()).trim();
+  var out = {};
+  if (!target || target === WIDGET_APP) {
+    var list = wgRecords_(ss, WIDGET_APP);
+    var today = wgToday_();
+    var w = wgHabits_(list, today);
+    out.today = today; out.habits = w.habits; out.streak = w.streak; out.period = wgPeriod_(list, today);
+  }
+  // カレンダーは全アプリ共通のスプシ（自分用）だけ。B3 があるスプシ（家族用など）では CalendarApp を呼ばない
+  if (!target) out.events = wgEvents_();
+  if (!target || target === 'brain') out.brain = wgBrain_(wgRecords_(ss, 'brain'));
+  if (target === 'wanko') out.wanko = wgWanko_(ss, conf);
+  return out;
+}
+
+// 今日と明日の予定（calMonth と同じ形・決め方）。読めなければ null（理由は出さない）
+function wgEvents_() {
+  var today = wgCalToday_();
+  var r = calMonth_({ from: today, to: wgAdd_(today, 1) });
+  return r.error ? null : r.events;
+}
+
+// 脳みそ：作った日時が新しい2枚と全部の枚数
+function wgBrain_(list) {
+  var cards = list.filter(function (r) { return r.data && r.data.t === 'k'; });
+  cards.sort(function (a, b) {
+    return String(b.createdAt).localeCompare(String(a.createdAt)) || String(b.updatedAt).localeCompare(String(a.updatedAt)) || (a.id < b.id ? 1 : -1);
+  });
+  return {
+    latest: cards.slice(0, WIDGET_BRAIN_LATEST).map(function (r) {
+      var d = r.data;
+      var title = String(d.title == null ? '' : d.title).trim();
+      if (!title) title = (String(d.body == null ? '' : d.body).split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean)[0]) || '';
+      return {
+        kind: /^[A-Za-z]{1,3}$/.test(String(d.kind || '')) ? String(d.kind) : 'O',
+        no: typeof d.no === 'number' && d.no > 0 ? d.no : null,
+        title: title.slice(0, 80),
+        at: r.createdAt
+      };
+    }),
+    count: cards.length
+  };
+}
+
+// わんこ：今日の歯みがき（2頭それぞれ記録があるか）と名前表の名前
+function wgWanko_(ss, conf) {
+  var today = wgCalToday_();
+  var has = {};
+  wgRecords_(ss, 'wanko').forEach(function (r) { if (r.data) has[r.id] = true; });
+  var dogs = names_(conf).names.dogs;
+  return {
+    today: today,
+    dogs: WIDGET_DOGS.map(function (d, i) { return { name: dogs[i] || '', done: !!has[today + '_' + d] }; })
+  };
 }
 
 // 習慣と記録（routine/app.js の load・habitsOn・fullDay・streak と同じ決め方）
