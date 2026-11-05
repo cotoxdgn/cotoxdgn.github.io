@@ -1,5 +1,5 @@
 // ルーティン2版目（月カレンダー・生理・コレクション）の画面試験（Playwright の Chromium）
-// 実行：node routine/test/e2e-v2.js [スクショの保存先]
+// 実行：node diary/test/e2e-v2.js [スクショの保存先]
 // スプシ（Apps Script）は test/gas-mock.js の Code.gs につなぐ。Googleカレンダーの予定は gas-mock の cal.events に入れる。
 // 1版目のデータを入れたまま開き、今日の丸・連続日数・花スタンプの数・睡眠の数字が1版目（git の V1 のコミット）と同じかも確かめる。
 'use strict';
@@ -190,7 +190,7 @@ const go = (page, h) => page.evaluate(x => { location.hash = x; }, h);
     await ctx.close();
   });
 
-  const { ctx, page } = await open(phone, BASE + '/routine/', 'phone');
+  const { ctx, page } = await open(phone, BASE + '/diary/', 'phone');
   await t('2版目：今日の丸・連続日数・花スタンプの数・睡眠の数字が1版目と同じ', async () => {
     const n = await numbers(page, false);
     assert.strictEqual(n.stAll, '4', '10/30〜11/2 の4日連続（今日はまだ）');
@@ -453,7 +453,7 @@ const go = (page, h) => page.evaluate(x => { location.hash = x; }, h);
   await ctx.close();
 
   await t('iPad・パソコン幅：左に大きな月のマス目、右にその日の中身。ラベル3つ・時刻つき。← → で月を切り替え', async () => {
-    const { ctx: c2, page: w } = await open(wide, BASE + '/routine/', 'wide');
+    const { ctx: c2, page: w } = await open(wide, BASE + '/diary/', 'wide');
     await go(w, '#calendar');
     await w.waitForSelector('#cal .lab');
     assert.ok(await w.isVisible('#panel'));
@@ -483,7 +483,7 @@ const go = (page, h) => page.evaluate(x => { location.hash = x; }, h);
   });
 
   await t('ダークモード（iPhone・広い幅）', async () => {
-    const { ctx: c3, page: d } = await open(phone, BASE + '/routine/', 'dark', { colorScheme: 'dark' });
+    const { ctx: c3, page: d } = await open(phone, BASE + '/diary/', 'dark', { colorScheme: 'dark' });
     await go(d, '#calendar');
     await d.waitForSelector('#cal .lab');
     await d.screenshot({ path: path.join(SHOT, 'v2-dark-01-calendar.png'), fullPage: true });
@@ -496,7 +496,7 @@ const go = (page, h) => page.evaluate(x => { location.hash = x; }, h);
     await d.screenshot({ path: path.join(SHOT, 'v2-dark-04-rec.png'), fullPage: true });
     await noHScroll(d, 'dark');
     await c3.close();
-    const { ctx: c4, page: dw } = await open(wide, BASE + '/routine/', 'dark-wide', { colorScheme: 'dark' });
+    const { ctx: c4, page: dw } = await open(wide, BASE + '/diary/', 'dark-wide', { colorScheme: 'dark' });
     await go(dw, '#calendar');
     await dw.waitForSelector('#cal .lab');
     await dw.screenshot({ path: path.join(SHOT, 'v2-dark-05-wide.png'), fullPage: true });

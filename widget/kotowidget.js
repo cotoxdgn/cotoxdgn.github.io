@@ -205,6 +205,8 @@ function routineSummary(data, now) {
     per: periodText(data.period, today),
     dataDay: data.today,
     sameDay: sameDay,
+    // 今日の日記：true＝書いた／false＝まだ（読んだのが前の日なら、今日はまだ）／null＝スプシのプログラムが古くて分からない
+    diary: typeof data.diary === 'boolean' ? (sameDay && data.diary) : null,
   };
 }
 
@@ -347,13 +349,13 @@ function line(stack) {
   return l;
 }
 // 見出し：●予定　　　　5件
-function heading(col, color, label, right, width) {
+function heading(col, color, label, right, width, rightColor) {
   const h = hstack(col, 5);
   h.centerAlignContent();
   if (width) h.size = new Size(width, 0);
   if (color) dot(h, color, 7);
   text(h, label, 11, C.muted, { w: 'bold' });
-  if (right) { h.addSpacer(); text(h, right, 11, C.ink, { w: 'semibold', round: true }); }
+  if (right) { h.addSpacer(); text(h, right, rightColor ? 9 : 11, rightColor || C.ink, { w: 'semibold', round: true, scale: 0.7 }); }
   return h;
 }
 function shortName(s, n) { s = String(s); return s.length > n ? s.slice(0, n) + '…' : s; }
@@ -455,11 +457,11 @@ function drawBottomBand(w, S, now, inner) {
 
   // ルーティン
   const a = vstack(row, 3); a.size = new Size(rw, 0);
-  heading(a, C.sage, 'ルーティン', '', rw);
   const rmsg = trouble(S.routine);
+  const r = rmsg ? null : routineSummary(S.routine.data, now);
+  heading(a, C.sage, 'ルーティン', r && r.diary === false ? '日記まだ' : r && r.diary ? '日記✓' : '', rw, r && r.diary === false ? C.mustard : C.muted);
   if (rmsg) text(a, rmsg, 10, S.routine.state === 'none' ? C.warn : C.muted, { lines: 2 });
   else {
-    const r = routineSummary(S.routine.data, now);
     const chips = hstack(a, 3);
     const habitColors = [C.sage, C.blue, C.rose];
     r.habits.slice(0, 3).forEach((h, i) => {

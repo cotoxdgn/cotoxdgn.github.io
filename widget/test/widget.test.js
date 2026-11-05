@@ -133,7 +133,7 @@ const EVENTS = [
   { title: '打合せ', start: J('2026-11-06T13:00:00'), end: J('2026-11-06T14:00:00'), allDay: false, color: '' },
   { title: '現場 立会い', start: J('2026-11-06T16:00:00'), end: J('2026-11-06T17:00:00'), allDay: false, color: '2' }
 ];
-const ROUTINE = { ok: true, now: 'x', today: '2026-11-05', streak: 3,
+const ROUTINE = { ok: true, now: 'x', today: '2026-11-05', streak: 3, diary: false,
   habits: [{ name: 'サプリを飲んだ', done: true }, { name: 'ストレッチを10分する', done: false }],
   period: { ongoing: false, start: '', day: 0, next: '2026-11-07', until: 2, late: 0 },
   events: EVENTS,
@@ -217,7 +217,7 @@ const urls = r => r.sent.map(x => x.url).sort();
     has(r, '待ち2件・明日3件'); hasNot(r, 'ほか2件');
     hasNot(r, '更新できませんでした');
     // 下段：ルーティン・歯みがき・脳みそ（大1つに全部）
-    has(r, 'ルーティン'); assert.ok(r.texts.includes('日連続')); has(r, '生理 2日後');
+    has(r, 'ルーティン'); assert.ok(r.texts.includes('日連続')); has(r, '生理 2日後'); has(r, '日記まだ');
     has(r, '歯みがき'); assert.ok(r.texts.includes('ポチ') && r.texts.includes('わんこB'));
     has(r, '脳みそ'); has(r, '全128枚'); has(r, '造作収納は');
     has(r, '10:30 更新');

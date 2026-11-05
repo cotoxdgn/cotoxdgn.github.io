@@ -1,13 +1,13 @@
 {
-  "name": "琴音日記",
-  "short_name": "日記",
+  "name": "ルーティン",
+  "short_name": "ルーティン",
   "lang": "ja",
   "id": "/diary/",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#FBFAF7",
-  "theme_color": "#FBFAF7",
+  "background_color": "#F3EFE8",
+  "theme_color": "#F3EFE8",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

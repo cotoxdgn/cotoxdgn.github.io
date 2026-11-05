@@ -1,5 +1,5 @@
 // routine/sleep.js（就寝・起床の決め方・目標の履歴）の単体テスト
-// 実行：node routine/test/sleep.test.js
+// 実行：node diary/test/sleep.test.js
 'use strict';
 process.env.TZ = 'Asia/Tokyo';   // iPhone と同じ日本時間で計算する
 const assert = require('assert');

@@ -1,5 +1,5 @@
 // routine/period.js（生理の記録・次の予定日の決め方）の単体テスト
-// 実行：node routine/test/period.test.js
+// 実行：node diary/test/period.test.js
 'use strict';
 process.env.TZ = 'Asia/Tokyo';
 const assert = require('assert');
