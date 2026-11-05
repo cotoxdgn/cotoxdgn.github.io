@@ -433,8 +433,82 @@ function drawLarge(w, S) {
   drawTasks(right, S.task, now, colW);
   w.addSpacer();
 
-  const note = staleNote([['予定', S.routine], ['タスク表', S.task]]);
-  if (note) text(w, note, 9, C.warn, { scale: 0.7 });
+  // いちばん下：ルーティン・歯みがき・脳みそ（大1つに全部入れる）
+  line(w);
+  w.addSpacer(6);
+  drawBottomBand(w, S, now, inner);
+  w.addSpacer(3);
+  const note = staleNote([['予定', S.routine], ['タスク表', S.task], ['歯みがき', S.wanko]]);
+  const foot = hstack(w);
+  foot.addSpacer();
+  if (note) text(foot, note, 9, C.warn, { scale: 0.7 });
+  else text(foot, hm(now) + ' 更新', 8, C.muted, { round: true });
+}
+
+// 大の下段：ルーティン（習慣・連続・生理）｜歯みがき｜脳みそ（新しい2枚）
+function drawBottomBand(w, S, now, inner) {
+  const GAP = 10;
+  const rw = Math.floor((inner - GAP * 2) * 0.40), dw = Math.floor((inner - GAP * 2) * 0.22), bw = inner - GAP * 2 - rw - dw;
+  const row = hstack(w, GAP);
+  row.topAlignContent();
+
+  // ルーティン
+  const a = vstack(row, 3); a.size = new Size(rw, 0);
+  heading(a, C.sage, 'ルーティン', '', rw);
+  const rmsg = trouble(S.routine);
+  if (rmsg) text(a, rmsg, 10, S.routine.state === 'none' ? C.warn : C.muted, { lines: 2 });
+  else {
+    const r = routineSummary(S.routine.data, now);
+    const chips = hstack(a, 3);
+    const habitColors = [C.sage, C.blue, C.rose];
+    r.habits.slice(0, 3).forEach((h, i) => {
+      const chip = hstack(chips, 2);
+      chip.centerAlignContent();
+      const mark = hstack(chip); mark.size = new Size(13, 13); mark.cornerRadius = 6.5; mark.centerAlignContent();
+      if (h.done) { mark.backgroundColor = habitColors[i % habitColors.length]; text(mark, '✓', 8, C.white, { w: 'bold' }); }
+      else { mark.borderColor = C.muted; mark.borderWidth = 1; }
+      text(chip, shortName(h.name, 3), 9, h.done ? C.ink : C.muted, { scale: 0.7 });
+    });
+    if (r.habits.length > 3) text(chips, '+' + (r.habits.length - 3), 9, C.muted);
+    const kv = hstack(a, 3);
+    kv.bottomAlignContent();
+    text(kv, String(r.streak), 13, C.ink, { w: 'semibold', round: true });
+    text(kv, '日連続', 9, C.muted);
+    if (r.per) { kv.addSpacer(5); text(kv, '生理 ' + r.per, 9, C.rose, { w: 'semibold', scale: 0.7 }); }
+  }
+
+  // 歯みがき
+  const b = vstack(row, 3); b.size = new Size(dw, 0);
+  heading(b, C.dogOk, '歯みがき', '', dw);
+  const wmsg = trouble(S.wanko);
+  if (wmsg) text(b, wmsg, 9, S.wanko.state === 'none' ? C.warn : C.muted, { lines: 2, scale: 0.7 });
+  else if (!S.wanko.data.wanko) text(b, '未対応', 9, C.muted);
+  else {
+    const wk = S.wanko.data.wanko;
+    const sameDay = wk.today === ymd(now);
+    (wk.dogs || []).slice(0, 2).forEach((d, i) => {
+      const done = sameDay && !!d.done;
+      const one = hstack(b, 3);
+      one.centerAlignContent();
+      const m = hstack(one); m.size = new Size(14, 14); m.cornerRadius = 7; m.centerAlignContent();
+      if (done) { m.backgroundColor = C.dogOk; text(m, '✓', 8, C.white, { w: 'bold' }); }
+      else { m.borderColor = C.dogNg; m.borderWidth = 1.2; text(m, '−', 9, C.dogNg, { w: 'bold' }); }
+      text(one, shortName(d.name || DOG_DEFAULTS[i], 5), 10, C.ink, { scale: 0.7 });
+    });
+  }
+
+  // 脳みそ
+  const c = vstack(row, 2); c.size = new Size(bw, 0);
+  const bmsg = trouble(S.routine);
+  if (bmsg) { heading(c, C.brain, '脳みそ', '', bw); text(c, bmsg, 9, C.muted, { lines: 2 }); }
+  else if (!S.routine.data.brain) { heading(c, C.brain, '脳みそ', '', bw); text(c, '未対応', 9, C.muted); }
+  else {
+    const br = S.routine.data.brain;
+    heading(c, C.brain, '脳みそ', '全' + (+br.count || 0) + '枚', bw);
+    const cards = br.latest || [];
+    if (!cards.length) text(c, 'まだカードがありません', 10, C.muted);
+    cards.slice(0, 2).forEach(card => text(c, '・' + (card.title || '（題なし）'), 10, C.ink, { lines: 1, scale: 0.75 }));
+  }
 }
 
 function evRow(col, e, dayStart, bold) {
@@ -457,15 +531,15 @@ function drawEvents(col, r, now, colW) {
     heading(col, C.blue, '予定', '今日は終了', colW);
     text(col, '明日', 12, C.ink, { w: 'semibold' });
     if (!E.tomorrow.length) { text(col, '明日の予定はありません', 11, C.muted); return; }
-    E.tomorrow.slice(0, 4).forEach(e => evRow(col, e, E.t1, false));
-    if (E.tomorrow.length > 4) text(col, 'ほか' + (E.tomorrow.length - 4) + '件', 10, C.muted);
+    E.tomorrow.slice(0, 3).forEach(e => evRow(col, e, E.t1, false));
+    if (E.tomorrow.length > 3) text(col, 'ほか' + (E.tomorrow.length - 3) + '件', 10, C.muted);
     return;
   }
   const ended = E.todays.length - E.left.length;
   heading(col, C.blue, '予定', E.todays.length ? (ended ? 'あと' + E.left.length + '件' : E.todays.length + '件') : '', colW);
   if (!E.left.length) text(col, '今日の予定はありません', 11, C.muted);
-  E.left.slice(0, 5).forEach(e => evRow(col, e, E.t0, !e.allDay && e.s <= E.nowMs && E.nowMs < e.e));
-  if (E.left.length > 5) text(col, 'ほか' + (E.left.length - 5) + '件', 10, C.muted);
+  E.left.slice(0, 4).forEach(e => evRow(col, e, E.t0, !e.allDay && e.s <= E.nowMs && E.nowMs < e.e));
+  if (E.left.length > 4) text(col, 'ほか' + (E.left.length - 4) + '件', 10, C.muted);
   const first = E.tomorrow[0];
   col.addSpacer(1);
   text(col, first ? '明日 ' + eventTime(first, E.t1) + ' ' + first.title : '明日の予定はありません', 10, C.muted, { scale: 0.75 });
@@ -491,20 +565,20 @@ function drawTasks(col, r, now, colW) {
   if (night && s.tomorrow) {
     // 夜：今日の残り（3つまで）と、明日の分
     if (!s.ready.length) empty();
-    s.ready.slice(0, 3).forEach(t => taskRow(col, t));
-    const rest = s.ready.length - Math.min(3, s.ready.length);
+    s.ready.slice(0, 2).forEach(t => taskRow(col, t));
+    const rest = s.ready.length - Math.min(2, s.ready.length);
     if (rest || s.wait) text(col, [rest ? 'ほか' + rest + '件' : '', s.wait ? '待ち' + s.wait + '件' : ''].filter(Boolean).join('・'), 10, C.muted);
     col.addSpacer(3);
     heading(col, null, '明日', s.tomorrowCount + '件', colW);
-    const n = Math.max(2, 5 - Math.min(3, Math.max(1, s.ready.length)));
+    const n = 2;
     if (!s.tomorrow.length) text(col, s.tomorrowCount ? '待ちのタスクだけです' : '明日のタスクはありません', 11, C.muted);
     s.tomorrow.slice(0, n).forEach(t => taskRow(col, t));
     return;
   }
   if (!s.ready.length) empty();
-  s.ready.slice(0, 5).forEach(t => taskRow(col, t));
+  s.ready.slice(0, 4).forEach(t => taskRow(col, t));
   const more = [];
-  if (s.ready.length > 5) more.push('ほか' + (s.ready.length - 5) + '件');
+  if (s.ready.length > 4) more.push('ほか' + (s.ready.length - 4) + '件');
   if (s.wait) more.push('待ち' + s.wait + '件');
   if (s.tomorrowCount != null) more.push('明日' + s.tomorrowCount + '件');
   if (more.length) text(col, more.join('・'), 10, C.muted);
@@ -661,7 +735,7 @@ function build(family, S, configured) {
 // サイズごとに要る読み先だけ読む（アプリの中で実行したときは全部）
 const family = config.runsInWidget ? (config.widgetFamily || 'medium') : 'preview';
 const NEED = {
-  large: ['weather', 'routine', 'task'], extraLarge: ['weather', 'routine', 'task'],
+  large: ['weather', 'routine', 'task', 'wanko'], extraLarge: ['weather', 'routine', 'task', 'wanko'],
   medium: ['routine', 'wanko'], small: ['routine', 'task'],
   preview: ['weather', 'routine', 'task', 'wanko'],
 };
@@ -688,8 +762,7 @@ saveCache(fresh);
 if (config.runsInWidget) {
   Script.setWidget(build(family, S, configured));
 } else {
-  // アプリの中で実行したとき：大と中の見本を続けて出す
+  // アプリの中で実行したとき：大の見本を出す（ホーム画面には大1つで全部が入る）
   await build('large', S, configured).presentLarge();
-  await build('medium', S, configured).presentMedium();
 }
 Script.complete();
