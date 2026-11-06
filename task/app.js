@@ -18,7 +18,9 @@
     bad_actual: '実働は 0〜24 の数字で', server: 'スプシ側でエラーが起きました',
     bad_wait: '待ち相手は40文字までで', bad_slot: '時間帯は朝・昼・夕・移動・なし、または時刻で', bad_pre: '前提は一覧から選んでください（自分自身は選べません）', used_as_pre: 'ほかのタスクの前提になっているので削除できません',
     no_wait_column: 'スプシに「👤」の列が見つかりません', no_pre_column: 'スプシに「前提」の列が見つかりません',
-    bad_action: 'スクリプトが古いままです。デプロイを新しい版にしてください'
+    bad_action: 'スクリプトが古いままです。デプロイを新しい版にしてください',
+    no_recur_sheet: 'スプシに「_定期タスク」の表が見つかりません', recur_changed: 'この定期タスクの行がスプシで変わっています。読み込み直します',
+    bad_type: '繰り返しを選んでください', bad_when: '曜日・日を選んでください', bad_range: '終了日は開始日より後にしてください'
   };
   var $ = function (id) { return document.getElementById(id); };
   var state = { tasks: [], projects: [], today: '', actualColumn: false, loaded: false, preOptions: [], people: [], waitColumn: true, preColumn: true };
@@ -266,7 +268,7 @@
     clearInterval(tick); tick = setInterval(drawTimer, 500);
     $('shDone').focus();
   }
-  function closeSheet() { clearInterval(tick); $('dim').hidden = true; $('sheet').hidden = true; $('conf').hidden = true; $('wsheet').hidden = true; document.documentElement.classList.remove('noscroll'); stopScan(); cur = null; wcur = null; render(); }
+  function closeSheet() { clearInterval(tick); $('dim').hidden = true; $('sheet').hidden = true; $('conf').hidden = true; $('wsheet').hidden = true; $('rsheet').hidden = true; document.documentElement.classList.remove('noscroll'); stopScan(); cur = null; wcur = null; render(); }
 
   // ---------- 待ちの設定（👤・前提） ----------
   var wcur = null, wpre = '', wslot0 = '', wslot = '', preOpen = false;
@@ -499,6 +501,159 @@
     render();
     load();
   }
+
+
+  // ---------- 定期タスク（スプシの「_定期タスク」表） ----------
+  var WD = '月火水木金土日';
+  var rules = [], redit = null, rslot = '', rtype = '平日', rwd = {}, rmd = {};
+  function ruleDesc(r) {
+    var when = r.type === '毎週' ? r.when : r.type === '毎月' ? r.when.split(',').map(function (x) { return x === '末' ? '末日' : x + '日'; }).join('・') : '';
+    var slotTxt = '';
+    for (var k in SLOT_EMOJI) if (SLOT_EMOJI[k] === r.time) slotTxt = r.time + ' ' + k;
+    var bits = [r.type + (when ? ' ' + when : ''), slotTxt || (r.time ? '⏰ ' + r.time : ''), r.ko != null ? h(r.ko) : '', r.pj];
+    if (r.from && r.from > (state.today || localYmd())) bits.push(md(r.from) + 'から');
+    if (r.to) bits.push(md(r.to) + 'まで');
+    return bits.filter(Boolean).join(' ・ ');
+  }
+  function openRecur() {
+    $('dim').hidden = false; $('rsheet').hidden = false; $('rsheet').scrollTop = 0;
+    document.documentElement.classList.add('noscroll');
+    showRecurList(); drawRules();
+    $('rsEmpty').hidden = true; $('rsEmpty').textContent = '読み込み中…'; $('rsEmpty').hidden = !!rules.length;
+    api('recurList').then(function (d) { rules = d.rules || []; $('rsEmpty').textContent = '定期タスクはまだありません。'; drawRules(); },
+      function (e) { $('rsEmpty').textContent = errText(e); $('rsEmpty').hidden = false; });
+  }
+  function showRecurList() { $('rsListView').hidden = false; $('rsForm').hidden = true; $('rsTitle').textContent = '🔁 定期タスク'; }
+  function drawRules() {
+    var on = rules.filter(function (r) { return r.on; }), off = rules.filter(function (r) { return !r.on; });
+    [[$('rsList'), on], [$('rsOff'), off]].forEach(function (pair) {
+      var box = pair[0]; box.innerHTML = '';
+      pair[1].forEach(function (r) {
+        var row = el('div', 'rule' + (r.on ? '' : ' off'));
+        var body = el('div', 'body'); body.setAttribute('role', 'button'); body.tabIndex = 0; body.setAttribute('aria-label', '直す：' + r.todo);
+        body.appendChild(el('div', 'tt', r.todo)); body.appendChild(el('div', 'meta', ruleDesc(r)));
+        body.addEventListener('click', function () { openRuleForm(r); });
+        body.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRuleForm(r); } });
+        var sw = el('button', 'sw'); sw.type = 'button'; sw.setAttribute('role', 'switch'); sw.setAttribute('aria-checked', String(r.on));
+        sw.setAttribute('aria-label', (r.on ? '止める：' : '再開する：') + r.todo);
+        sw.addEventListener('click', function () {
+          row.classList.add('busy');
+          api('recurToggle', { row: r.row, pj: r.pj, todo: r.todo, on: !r.on }).then(function (d) {
+            toast(d.rule.on ? '再開しました（翌朝8時から入ります）' : '止めました（もう入っている分は残ります）');
+            rules = rules.map(function (x) { return x.row === r.row ? d.rule : x; }); drawRules();
+          }, function (e) { row.classList.remove('busy'); toast(errText(e), true); if (e.code === 'recur_changed') openRecur(); });
+        });
+        row.appendChild(body); row.appendChild(sw); box.appendChild(row);
+      });
+    });
+    $('rsOffLbl').hidden = !off.length;
+    $('rsEmpty').hidden = !!rules.length;
+  }
+  function chipGrid(box, labels, sel) {
+    box.innerHTML = '';
+    labels.forEach(function (l) {
+      var b = el('button', '', l); b.type = 'button'; b.setAttribute('aria-pressed', String(!!sel[l]));
+      b.addEventListener('click', function () { sel[l] = !sel[l]; b.setAttribute('aria-pressed', String(sel[l])); drawToday(); });
+      box.appendChild(b);
+    });
+  }
+  function drawRuleForm() {
+    Array.prototype.forEach.call($('rSlot').querySelectorAll('button'), function (b) {
+      var on = b.getAttribute('data-s') === rslot; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); b.setAttribute('role', 'radio');
+    });
+    $('rTime').value = /^\d{1,2}:\d{2}$/.test(rslot) ? ('0' + rslot).slice(-5) : '';
+    Array.prototype.forEach.call($('rType').querySelectorAll('button'), function (b) {
+      var on = b.getAttribute('data-t') === rtype; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); b.setAttribute('role', 'radio');
+    });
+    $('rWdBox').hidden = rtype !== '毎週'; $('rMdBox').hidden = rtype !== '毎月';
+    $('rTypeNote').textContent = rtype === '平日' ? '土日・祝日は入りません' : rtype === '毎月' ? '「末」は月の最後の日' : '';
+    drawToday();
+  }
+  function whenText() {
+    if (rtype === '毎週') return WD.split('').filter(function (c) { return rwd[c]; }).join('');
+    if (rtype === '毎月') { var a = []; for (var i = 1; i <= 31; i++) if (rmd[String(i)]) a.push(String(i)); if (rmd['末']) a.push('末'); return a.join(','); }
+    return '';
+  }
+  // 今日に当たるか（スプシ側と同じ判定。祝日だけはスプシ側で確かめる）
+  function hitsToday() {
+    var t = state.today || localYmd(), p = t.split('-').map(Number), d = new Date(p[0], p[1] - 1, p[2]), wd = d.getDay() || 7;
+    var from = $('rFrom').value, to = $('rTo').value;
+    if ((from && t < from) || (to && t > to)) return false;
+    if (rtype === '毎日') return true;
+    if (rtype === '平日') return wd <= 5;
+    if (rtype === '毎週') return !!rwd[WD.charAt(wd - 1)];
+    if (rtype === '毎月') return !!rmd[String(p[2])] || (!!rmd['末'] && new Date(p[0], p[1] - 1, p[2] + 1).getDate() === 1);
+    return false;
+  }
+  function drawToday() {
+    var t = state.today || localYmd(), hit = hitsToday() && (!redit || redit.on);
+    $('rTodayBox').hidden = !hit;
+    $('rTodayLbl').textContent = '今日（' + md(t) + ' ' + dow(t) + '）の分もすぐ入れる';
+  }
+  function openRuleForm(r) {
+    redit = r || null;
+    $('rsListView').hidden = true; $('rsForm').hidden = false; $('rsheet').scrollTop = 0;
+    $('rsTitle').textContent = r ? '定期タスクを直す' : '定期タスクを追加';
+    $('rSave').textContent = r ? '保存' : '追加する';
+    $('rEditNote').hidden = !r;
+    $('rTodo').value = r ? r.todo : ''; $('rPj').value = r ? r.pj : (prefs().pj || '');
+    $('rKo').value = r && r.ko != null ? r.ko : '0.5';
+    $('rDetail').value = r ? r.detail : ''; $('rFrom').value = r ? r.from : ''; $('rTo').value = r ? r.to : '';
+    rslot = '';
+    if (r) { for (var k in SLOT_EMOJI) if (SLOT_EMOJI[k] === r.time) rslot = k; var tm = /^(\d{1,2}):(\d{2})/.exec(r.time); if (!rslot && tm) rslot = Number(tm[1]) + ':' + tm[2]; }
+    else rslot = '朝';
+    rtype = r ? r.type : '平日';
+    rwd = {}; rmd = {};
+    if (r && r.type === '毎週') r.when.split('').forEach(function (c) { rwd[c] = true; });
+    if (r && r.type === '毎月') r.when.split(',').forEach(function (c) { rmd[c] = true; });
+    chipGrid($('rWd'), WD.split(''), rwd);
+    var mds = []; for (var i = 1; i <= 31; i++) mds.push(String(i)); mds.push('末');
+    chipGrid($('rMd'), mds, rmd);
+    $('rToday').checked = !r;
+    drawRuleForm();
+    $('rTodo').focus();
+  }
+  function saveRule(e) {
+    e.preventDefault();
+    var todo = $('rTodo').value.replace(/[\r\n]+/g, ' ').trim();
+    if (!todo) { toast(ERR.no_todo, true); $('rTodo').focus(); return; }
+    var ko = parseFloat($('rKo').value);
+    if (!isFinite(ko) || ko < 0 || ko > 24) { toast(ERR.bad_ko, true); return; }
+    var when = whenText();
+    if ((rtype === '毎週' || rtype === '毎月') && !when) { toast(ERR.bad_when, true); return; }
+    var rule = { pj: $('rPj').value.trim(), todo: todo, ko: ko, time: rslot, type: rtype, when: when,
+      from: $('rFrom').value, to: $('rTo').value, detail: $('rDetail').value.trim() };
+    var p = { reqId: reqId(), rule: rule, today: !$('rTodayBox').hidden && $('rToday').checked };
+    if (redit) { p.row = redit.row; p.pj = redit.pj; p.todo = redit.todo; }
+    var btn = $('rSave'), label = btn.textContent; btn.disabled = true; btn.textContent = '保存中…';
+    var send = function (tries) {
+      return api('recurSave', p).catch(function (err) {
+        if (tries > 0 && (err.code === 'network' || err.code === 'timeout' || err.code === 'busy')) return send(tries - 1);   // reqId が同じなので二重にならない
+        throw err;
+      });
+    };
+    send(1).then(function (d) {
+      var msg = redit ? '保存しました' : '追加しました';
+      if (d.todayAdded) msg += '（今日の分もタスクに入れました）';
+      else if (p.today && d.todayNote === 'already') msg += '（今日の分はもう入っています）';
+      else if (p.today && d.todayNote === 'not_today') msg += '（今日は祝日などで当たらないため、入れていません）';
+      else msg += '（翌朝8時から入ります）';
+      toast(msg);
+      if (d.rule) { var hit = false; rules = rules.map(function (x) { if (x.row === d.rule.row) { hit = true; return d.rule; } return x; }); if (!hit) rules.push(d.rule); }
+      showRecurList(); drawRules();
+      if (d.todayAdded) load(true);
+    }, function (err) { toast(errText(err) + '（入力内容は残しています）', true); if (err.code === 'recur_changed') openRecur(); })
+      .then(function () { btn.disabled = false; btn.textContent = label; });
+  }
+  $('recurBtn').addEventListener('click', function () { if (conn()) openRecur(); else $('scanBtn').focus(); });
+  $('rsClose').addEventListener('click', closeSheet);
+  $('rsNew').addEventListener('click', function () { openRuleForm(null); });
+  $('rCancel').addEventListener('click', function () { showRecurList(); drawRules(); });
+  $('rsForm').addEventListener('submit', saveRule);
+  $('rSlot').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; rslot = b.getAttribute('data-s'); drawRuleForm(); });
+  $('rTime').addEventListener('change', function () { if (this.value) { rslot = this.value; drawRuleForm(); } });
+  $('rType').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; rtype = b.getAttribute('data-t'); drawRuleForm(); });
+  ['rFrom', 'rTo'].forEach(function (id) { $(id).addEventListener('change', drawToday); });
 
   $('addForm').addEventListener('submit', submitAdd);
   ['aTodo', 'aPj', 'aParent', 'aKo', 'aDate'].forEach(function (id) { $(id).addEventListener('input', renderQuickMeta); });

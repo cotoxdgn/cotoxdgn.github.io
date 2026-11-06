@@ -261,4 +261,84 @@ t('remove：No と ToDo が合う1行だけ削除。前提にされている未�
   assert.deepStrictEqual(after, before.filter((x, i) => i !== t13.row - 1), 'その行だけ消えて、ほかは同じ');
   assert.ok(!ctx.taskApi_readAll(sh, ctx.taskApi_cols(sh)).some(x => x.no === 13));
 });
+
+// ---------- 定期タスク ----------
+const rs = makeGas.fillRecur(ctx.SpreadsheetApp.openById('1all9BRCbemXapdhjBidydCAjPbw26pNmmyi0wbxk66Q'));
+const rsnap = () => rs.rows.map(row => JSON.stringify(row.map(x => [x.v instanceof Date ? x.v.toISOString() : x.v, x.dv])));
+t('recurList：表を読むだけ（例の行は止めた状態で出る）', () => {
+  const before = rsnap(); rs.writes.length = 0;
+  const r = call({ key: KEY, action: 'recurList' });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.strictEqual(r.rules.length, 1);
+  assert.deepStrictEqual([r.rules[0].row, r.rules[0].on, r.rules[0].todo, r.rules[0].time, r.rules[0].type, r.rules[0].when], [2, false, 'タスクを整理する', '9:30', '毎週', '日']);
+  assert.deepStrictEqual(rsnap(), before); assert.strictEqual(rs.writes.length, 0);
+});
+t('recurSave：入力の確かめ（書く前に断る）', () => {
+  const before = rsnap();
+  const base = { pj: '例）案件A', todo: 'メール返信', ko: 0.5, time: '朝', type: '平日', when: '' };
+  const bad = (o, code) => assert.strictEqual(call({ key: KEY, action: 'recurSave', rule: Object.assign({}, base, o) }).error, code, JSON.stringify(o));
+  bad({ todo: ' ' }, 'no_todo'); bad({ ko: 30 }, 'bad_ko'); bad({ time: '25:00' }, 'bad_slot'); bad({ time: '夜' }, 'bad_slot');
+  bad({ type: '隔週' }, 'bad_type'); bad({ type: '毎週', when: '' }, 'bad_when'); bad({ type: '毎週', when: '月x' }, 'bad_when');
+  bad({ type: '毎月', when: '32' }, 'bad_when'); bad({ from: '2026-11-10', to: '2026-11-01' }, 'bad_range');
+  assert.deepStrictEqual(rsnap(), before);
+});
+let r1;
+t('recurSave（追加）：空いている一番上の行（3行目）に書く。ほかの行は変えない。日次には書かない', () => {
+  const before = rsnap(), dBefore = snap();
+  r1 = call({ key: KEY, action: 'recurSave', reqId: 'recur-0001-ab', rule: { pj: '例）案件A', todo: 'メール返信', ko: 0.5, time: '朝', type: '平日', when: '', detail: 'メモ' } });
+  assert.ok(r1.ok, JSON.stringify(r1));
+  assert.strictEqual(r1.rule.row, 3); assert.strictEqual(r1.rule.on, true); assert.strictEqual(r1.rule.time, '🌅');
+  assert.strictEqual(r1.todayAdded, false);
+  const after = rsnap();
+  after.forEach((x, i) => { if (i !== 2) assert.strictEqual(x, before[i], (i + 1) + '行目が変わった'); });
+  assert.strictEqual(rs.peek(3, 5).nf, '@');
+  assert.deepStrictEqual(snap(), dBefore, '日次ガントは変えない（書き出しは毎朝8時の仕組み）');
+  // 同じ reqId の再送で二重にならない
+  const again = call({ key: KEY, action: 'recurSave', reqId: 'recur-0001-ab', rule: { pj: '例）案件A', todo: 'メール返信', ko: 0.5, time: '朝', type: '平日' } });
+  assert.strictEqual(again.rule.row, 3); assert.strictEqual(call({ key: KEY, action: 'recurList' }).rules.length, 2);
+});
+t('recurSave（今日の分もすぐ）：10/30(金) に当たる毎週金を足すと、今日の1件だけ日次に入り、ログに残る。2回目は入らない', () => {
+  const dBefore = snap();
+  const r = call({ key: KEY, action: 'recurSave', today: true, rule: { pj: '例）案件B', todo: '週報', ko: 1, time: '13:30', type: '毎週', when: '金' } });
+  assert.ok(r.ok, JSON.stringify(r)); assert.strictEqual(r.todayAdded, true);
+  assert.strictEqual(r.task.date, '2026-10-30'); assert.strictEqual(r.task.todo, '週報'); assert.strictEqual(r.task.slotRaw, '13.5');
+  assert.strictEqual(snap().length, dBefore.length + 1);
+  dBefore.slice(4).forEach(x => assert.ok(snap().includes(x), '既存の行が変わった'));
+  const lg = ctx.SpreadsheetApp.openById('1all9BRCbemXapdhjBidydCAjPbw26pNmmyi0wbxk66Q').getSheetByName('_定期ログ');
+  assert.ok(lg && lg.hidden); assert.strictEqual(lg.peek(1, 1).v, '例）案件B|週報|2026-10-30');
+  const again = call({ key: KEY, action: 'recurSave', row: r.rule.row, pj: '例）案件B', todo: '週報', today: true, rule: { pj: '例）案件B', todo: '週報', ko: 1, time: '13:30', type: '毎週', when: '金' } });
+  assert.ok(again.ok); assert.strictEqual(again.todayAdded, false); assert.strictEqual(again.todayNote, 'already');
+  // 今日に当たらない決まり
+  const no = call({ key: KEY, action: 'recurSave', today: true, rule: { pj: '', todo: '月初の請求', ko: 1, time: '', type: '毎月', when: '1' } });
+  assert.strictEqual(no.todayAdded, false); assert.strictEqual(no.todayNote, 'not_today');
+});
+t('recurSave（直す）：行番号と元の PJ・ToDo が合わなければ断る。名前を変えると、入っている今日以降の分をログに足す', () => {
+  assert.strictEqual(call({ key: KEY, action: 'recurSave', row: 3, pj: '例）案件A', todo: '違う', rule: { todo: 'x', ko: 1, type: '毎日' } }).error, 'recur_changed');
+  const row = call({ key: KEY, action: 'recurList' }).rules.find(x => x.todo === '週報').row;
+  const r = call({ key: KEY, action: 'recurSave', row: row, pj: '例）案件B', todo: '週報', rule: { pj: '例）案件B', todo: '週報を書く', ko: 1, time: '13:30', type: '毎週', when: '金' } });
+  assert.ok(r.ok, JSON.stringify(r)); assert.strictEqual(r.rule.todo, '週報を書く'); assert.strictEqual(r.rule.on, true);
+  const lg = ctx.SpreadsheetApp.openById('1all9BRCbemXapdhjBidydCAjPbw26pNmmyi0wbxk66Q').getSheetByName('_定期ログ');
+  assert.strictEqual(lg.peek(2, 1).v, '例）案件B|週報を書く|2026-10-30');
+});
+t('recurToggle：有効だけ書き換える（行は消さない）。止めた決まりは今日の分も入れない', () => {
+  const before = rsnap();
+  const r = call({ key: KEY, action: 'recurToggle', row: 3, pj: '例）案件A', todo: 'メール返信', on: false });
+  assert.ok(r.ok); assert.strictEqual(r.rule.on, false);
+  const after = rsnap();
+  assert.strictEqual(after.length, before.length);
+  after.forEach((x, i) => { if (i !== 2) assert.strictEqual(x, before[i]); });
+  assert.strictEqual(rs.peek(3, 2).v, '例）案件A');
+  assert.strictEqual(call({ key: KEY, action: 'recurToggle', row: 3, pj: 'x', todo: 'メール返信', on: true }).error, 'recur_changed');
+  const s = call({ key: KEY, action: 'recurSave', row: 3, pj: '例）案件A', todo: 'メール返信', today: true, rule: { pj: '例）案件A', todo: 'メール返信', ko: 0.5, time: '朝', type: '毎日' } });
+  assert.strictEqual(s.todayAdded, false); assert.strictEqual(s.rule.on, false);
+});
+t('祝日と判定（定期タスク.gs と同じ）', () => {
+  const H = (y, m, d) => ctx.taskApi_isHoliday(new Date(y, m - 1, d));
+  assert.ok(H(2026, 11, 3)); assert.ok(H(2026, 11, 23)); assert.ok(H(2026, 9, 22), '国民の休日'); assert.ok(H(2026, 5, 6), '振替休日');
+  assert.ok(!H(2026, 11, 6));
+  const m = (rule, ymd) => ctx.taskApi_recurMatch(Object.assign({ from: '', to: '', when: '' }, rule), ymd);
+  assert.ok(!m({ type: '平日' }, '2026-11-03')); assert.ok(m({ type: '平日' }, '2026-11-04')); assert.ok(!m({ type: '平日' }, '2026-11-07'));
+  assert.ok(m({ type: '毎月', when: '末' }, '2026-11-30')); assert.ok(!m({ type: '毎月', when: '末' }, '2026-11-29'));
+  assert.ok(m({ type: '毎週', when: '月水' }, '2026-11-04')); assert.ok(!m({ type: '毎日', from: '2026-11-10' }, '2026-11-09'));
+});
 console.log(`\n${passed} passed`);
