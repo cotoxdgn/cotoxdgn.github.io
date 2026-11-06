@@ -22,6 +22,7 @@
       <span class="d" id="today"></span>
     </div>
     <div class="top-btns">
+      <button type="button" class="icon-btn" id="recurBtn" aria-label="定期タスク">🔁</button>
       <button type="button" class="icon-btn" id="reload" aria-label="読み込み直す">↻</button>
       <button type="button" class="icon-btn" id="settings" aria-label="接続の設定">⚙</button>
     </div>
@@ -205,6 +206,89 @@
     <button type="button" class="btn ghost" id="wsClose">閉じる</button>
     <button type="button" class="btn" id="wsSave">保存</button>
   </div>
+</div>
+
+<!-- 定期タスク：スプシの「_定期タスク」表。毎朝8時に今日から2週間分が日次ガントに入る（スプシ側の仕組み） -->
+<div class="sheet" id="rsheet" role="dialog" aria-modal="true" aria-labelledby="rsTitle" hidden>
+  <span class="grab"></span>
+  <h3 id="rsTitle">🔁 定期タスク</h3>
+  <div id="rsListView">
+    <div class="list" id="rsList"></div>
+    <p class="empty" id="rsEmpty" hidden>定期タスクはまだありません。</p>
+    <p class="lbl rsofflbl" id="rsOffLbl" hidden>止めているもの</p>
+    <div class="list" id="rsOff"></div>
+    <p class="note">押すと直せます。右のスイッチで止める／再開。毎朝8時に、今日から2週間分がタスクに入ります。</p>
+    <div class="sheetfoot">
+      <button type="button" class="btn ghost" id="rsClose">閉じる</button>
+      <button type="button" class="btn" id="rsNew">＋ 定期タスクを追加</button>
+    </div>
+  </div>
+  <form id="rsForm" autocomplete="off" hidden>
+    <div class="f">
+      <label for="rTodo">ToDo</label>
+      <input id="rTodo" maxlength="200" placeholder="例）メールの返信">
+    </div>
+    <div class="two">
+      <div class="f">
+        <label for="rPj">PJ</label>
+        <input id="rPj" list="pjList" maxlength="60" placeholder="空欄でも可">
+      </div>
+      <div class="f">
+        <label for="rKo">工（h）</label>
+        <input id="rKo" type="number" inputmode="decimal" step="0.25" min="0" max="24" value="0.5">
+      </div>
+    </div>
+    <div class="f">
+      <span class="flabel">⏰ 時間帯</span>
+      <div class="seg" id="rSlot" role="radiogroup" aria-label="時間帯">
+        <button type="button" data-s="朝">🌅 朝</button>
+        <button type="button" data-s="昼">☀️ 昼</button>
+        <button type="button" data-s="夕">🌙 夕</button>
+        <button type="button" data-s="移動">🚃</button>
+        <button type="button" data-s="">なし</button>
+      </div>
+      <div class="timepick"><label for="rTime">時刻で指定</label><input id="rTime" type="time" step="900"></div>
+    </div>
+    <div class="f">
+      <span class="flabel">繰り返し</span>
+      <div class="seg" id="rType" role="radiogroup" aria-label="繰り返し">
+        <button type="button" data-t="毎日">毎日</button>
+        <button type="button" data-t="平日">平日</button>
+        <button type="button" data-t="毎週">毎週</button>
+        <button type="button" data-t="毎月">毎月</button>
+      </div>
+      <p class="note" id="rTypeNote"></p>
+    </div>
+    <div class="f" id="rWdBox" hidden>
+      <span class="flabel">曜日（いくつでも）</span>
+      <div class="chips7" id="rWd"></div>
+    </div>
+    <div class="f" id="rMdBox" hidden>
+      <span class="flabel">日（いくつでも）</span>
+      <div class="chips7" id="rMd"></div>
+    </div>
+    <div class="two">
+      <div class="f">
+        <label for="rFrom">開始日</label>
+        <input id="rFrom" type="date">
+      </div>
+      <div class="f">
+        <label for="rTo">終了日</label>
+        <input id="rTo" type="date">
+      </div>
+    </div>
+    <p class="note">空欄なら、開始は今日から・終了はなし。</p>
+    <div class="f">
+      <label for="rDetail">詳細（メモ・リンク）</label>
+      <input id="rDetail" maxlength="300" placeholder="空欄でも可">
+    </div>
+    <label class="chk" id="rTodayBox"><input type="checkbox" id="rToday" checked> <span id="rTodayLbl">今日の分もすぐ入れる</span></label>
+    <p class="note" id="rEditNote" hidden>直しても止めても、もうタスクに入っている2週間分はそのまま残ります（いらない分はタスクの方で削除）。</p>
+    <div class="sheetfoot">
+      <button type="button" class="btn ghost" id="rCancel">やめる</button>
+      <button type="submit" class="btn" id="rSave">追加する</button>
+    </div>
+  </form>
 </div>
 
 <!-- 接続の設定 -->

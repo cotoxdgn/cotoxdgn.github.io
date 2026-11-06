@@ -21,6 +21,9 @@
  *   4) タスクの設定：その行の「ToDo」「📅」「⏰」「👤」「前提」のセルだけを書く（setWait）
  *   5) タスクの削除：No と ToDo が一致する1行を削除する（remove。アプリで2回確かめてから送る）
  *      ほかの未完了タスクの「前提」に入っているタスクは消さない（消すと相手がずっと前提待ちになるため）
+ *   6) 定期タスク（2026-11-06）：スプシの「_定期タスク」表に、決まりを1行足す・直す・有効を外す（recurSave / recurToggle）。行は消さない
+ *      日次ガントへの書き出しは、スプシに付いている「定期タスク.gs」の毎朝8時の仕組みのまま（このファイルでは変えない）
+ *      「今日の分もすぐ入れる」のときだけ、今日の1件を 1) と同じ方法で足し、「_定期ログ」に記録する（翌朝の自動追加と重ならない）
  *
  * 準備（約5分）
  *  1) script.google.com を直接開いて［新しいプロジェクト］→ このコードを貼り付けて保存
@@ -31,7 +34,8 @@
  *
  * 通信の形：POST（Content-Type: text/plain）で JSON → JSON。text/plain なので CORS の事前確認が起きない。
  *  { key, action, ... } → { ok: true, ... } / { ok: false, error }
- *  action: ping / list / add / done / undone / actual / setWait（📅・⏰・👤・前提を書く）
+ *  action: ping / list / add / done / undone / actual / setWait（📅・⏰・👤・前提を書く）/ remove
+ *          recurList / recurSave / recurToggle（定期タスクの表）
  *          widget（iPhone のホーム画面のウィジェット用。今日と明日の未完了タスクだけ。見るだけ用の合言葉でも使える）
  *
  * 見るだけ用の合言葉（ウィジェット用）
@@ -67,7 +71,9 @@ var TASKAPI = {
   SLOTS: { '朝': '🌅', '昼': '☀️', '夕': '🌙', '移動': '🚃' },
   PROP_KEY: 'TASK_API_KEY',
   PROP_VIEW_KEY: 'TASK_VIEW_KEY',   // 見るだけ用の合言葉（ウィジェット用。widget だけ）
-  MAX_TEXT: 500
+  MAX_TEXT: 500,
+  // 定期タスクの表（スプシに付いている「定期タスク.gs」と同じ名前・列）
+  RECUR: { SHEET: '_定期タスク', LOG: '_定期ログ', TYPES: ['毎週', '毎日', '平日', '毎月'], WIDTH: 10, WDAYS: '月火水木金土日' }
 };
 
 // ---------- 準備 ----------
@@ -206,6 +212,9 @@ function taskApi_handle(req) {
       case 'actual': res = taskApi_actual(sh, req); break;
       case 'setWait': res = taskApi_setWait(sh, req); break;
       case 'remove': res = taskApi_remove(sh, req); break;
+      case 'recurList': res = taskApi_recurList(); break;
+      case 'recurSave': res = taskApi_recurSave(sh, req); break;
+      case 'recurToggle': res = taskApi_recurToggle(req); break;
       default: res = { error: 'bad_action' };
     }
     if (res.error) return res.detail ? { ok: false, error: res.error, detail: res.detail } : { ok: false, error: res.error };
@@ -627,6 +636,245 @@ function taskApi_writeActual(sh, c, row, value) {
   if (!c.actual) return { saved: false };
   sh.getRange(row, c.actual).setValue(n);
   return { saved: true };
+}
+
+// ---------- 定期タスク（「_定期タスク」表。列は 定期タスク.gs と同じ） ----------
+//  有効 / PJ / ToDo / 工 / ⏰ / 繰り返し / 曜日・日 / 開始日 / 終了日 / 詳細
+
+function taskApi_recurSheet() { return SpreadsheetApp.openById(TASKAPI.SPREADSHEET_ID).getSheetByName(TASKAPI.RECUR.SHEET); }
+
+function taskApi_recurRead(rs) {
+  var last = rs.getLastRow();
+  if (last < 2) return [];
+  var rg = rs.getRange(2, 1, last - 1, TASKAPI.RECUR.WIDTH), v = rg.getValues(), d = rg.getDisplayValues(), out = [];
+  for (var i = 0; i < v.length; i++) {
+    var pj = String(v[i][1] || '').trim(), todo = String(v[i][2] || '').trim();
+    if (!pj && !todo) continue;
+    out.push({
+      row: i + 2, on: v[i][0] === true, pj: pj, todo: todo, ko: taskApi_num(v[i][3]),
+      time: String(d[i][4] || '').trim(), type: String(v[i][5] || '').trim() || '毎週',
+      when: String(d[i][6] || '').normalize('NFKC').trim(),
+      from: v[i][7] instanceof Date ? taskApi_ymd(v[i][7]) : '', to: v[i][8] instanceof Date ? taskApi_ymd(v[i][8]) : '',
+      detail: String(v[i][9] || '')
+    });
+  }
+  return out;
+}
+
+function taskApi_recurList() {
+  var rs = taskApi_recurSheet();
+  if (!rs) return { error: 'no_recur_sheet' };
+  return { rules: taskApi_recurRead(rs).slice(0, 200) };
+}
+
+// 送られてきた決まりを確かめて、表に書く形（10列）にする
+function taskApi_recurParse(r) {
+  r = r || {};
+  var todo = taskApi_text(r.todo), pj = taskApi_text(r.pj).slice(0, 60);
+  if (!todo) return { error: 'no_todo' };
+  var ko = taskApi_num(r.ko);
+  if (ko === null || ko < 0 || ko > 24) return { error: 'bad_ko' };
+  var time = String(r.time || '').trim(), timeCell = '';
+  if (TASKAPI.SLOTS[time]) timeCell = TASKAPI.SLOTS[time];
+  else if (/^\d{1,2}:\d{2}$/.test(time)) {
+    var hm = time.split(':').map(Number);
+    if (hm[0] > 23 || hm[1] > 59) return { error: 'bad_slot' };
+    timeCell = hm[0] + ':' + ('0' + hm[1]).slice(-2);
+  } else if (time) return { error: 'bad_slot' };
+  var type = String(r.type || '');
+  if (TASKAPI.RECUR.TYPES.indexOf(type) < 0) return { error: 'bad_type' };
+  var when = String(r.when || '').normalize('NFKC').replace(/\s/g, '');
+  if (type === '毎週') {
+    var wd = ''; TASKAPI.RECUR.WDAYS.split('').forEach(function (ch) { if (when.indexOf(ch) >= 0) wd += ch; });
+    if (!wd || wd.length !== when.replace(/[,、]/g, '').length) return { error: 'bad_when' };
+    when = wd;
+  } else if (type === '毎月') {
+    var parts = when.split(/[,、]/).filter(String), seen = {}, ok = parts.length > 0;
+    parts.forEach(function (x) { if (x === '末') return; var n = Number(x); if (!/^\d{1,2}$/.test(x) || n < 1 || n > 31) ok = false; });
+    if (!ok) return { error: 'bad_when' };
+    when = parts.filter(function (x) { if (seen[x]) return false; seen[x] = true; return true; }).join(',');
+  } else when = '';
+  var dates = {};
+  ['from', 'to'].forEach(function (k) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(r[k] || ''));
+    dates[k] = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : '';
+    if (!m && r[k]) dates.bad = true;
+  });
+  if (dates.bad || (dates.from && dates.to && dates.to < dates.from)) return { error: 'bad_range' };
+  var detail = taskApi_text(r.detail);
+  return { cells: [pj, todo, ko, timeCell, type, when, dates.from, dates.to, detail],
+    rule: { pj: pj, todo: todo, ko: ko, time: timeCell, type: type, when: when,
+      from: dates.from ? taskApi_ymd(dates.from) : '', to: dates.to ? taskApi_ymd(dates.to) : '', detail: detail } };
+}
+
+// 行番号＋PJ・ToDo が一致するか（PCで表を並べ替えた・消したときに別の行を書き換えないため）
+function taskApi_recurAt(rs, req) {
+  var row = Number(req.row);
+  if (!(row >= 2 && row <= rs.getLastRow() && row === Math.floor(row))) return null;
+  var v = rs.getRange(row, 1, 1, 3).getValues()[0];
+  if (String(v[1] || '').trim() !== String(req.pj || '').trim() || String(v[2] || '').trim() !== String(req.todo || '').trim()) return null;
+  return row;
+}
+
+function taskApi_recurWrite(rs, row, cells, on) {
+  // ⏰・曜日・日は文字のまま書く（「9:30」が時刻、「15」が数字に変わらないように）。日付の2列は m/d
+  rs.getRange(row, 5).setNumberFormat('@');
+  rs.getRange(row, 7).setNumberFormat('@');
+  rs.getRange(row, 8, 1, 2).setNumberFormat('m/d');
+  rs.getRange(row, 2, 1, 9).setValues([cells]);
+  if (on !== undefined) {
+    var a = rs.getRange(row, 1);
+    if (!a.getDataValidation()) a.insertCheckboxes();
+    a.setValue(on);
+  }
+}
+
+function taskApi_recurSave(sh, req) {
+  var reqId = /^[A-Za-z0-9_-]{8,64}$/.test(String(req.reqId || '')) ? String(req.reqId) : '';
+  var prev = taskApi_seen(reqId);
+  if (prev) return prev;
+  var rs = taskApi_recurSheet();
+  if (!rs) return { error: 'no_recur_sheet' };
+  var p = taskApi_recurParse(req.rule);
+  if (p.error) return p;
+  var row, renamed = null;
+  if (req.row !== undefined && req.row !== null && req.row !== '') {
+    row = taskApi_recurAt(rs, req);
+    if (!row) return { error: 'recur_changed' };
+    if (String(req.pj || '').trim() !== p.rule.pj || String(req.todo || '').trim() !== p.rule.todo) renamed = { pj: String(req.pj || '').trim(), todo: String(req.todo || '').trim() };
+    taskApi_recurWrite(rs, row, p.cells);
+  } else {
+    // 空いている行（PJもToDoも空）の一番上。なければ一番下に1行足す
+    var last = rs.getLastRow(), max = rs.getMaxRows(), free = 0;
+    if (max >= 2) {
+      var v = rs.getRange(2, 2, max - 1, 2).getValues();
+      for (var i = 0; i < v.length; i++) if (String(v[i][0]).trim() === '' && String(v[i][1]).trim() === '') { free = i + 2; break; }
+    }
+    if (!free) { rs.insertRowsAfter(Math.max(max, 1), 1); free = Math.max(max, 1) + 1; }
+    row = free;
+    taskApi_recurWrite(rs, row, p.cells, req.rule.on !== false);
+  }
+  var res = { rule: null, todayAdded: false, todayNote: '' };
+  // 名前（PJ・ToDo）を変えたとき：もう日次に入っている今日以降の分は、新しい名前でも「入れた」ことにする（翌朝に二重に入らないように）
+  if (renamed) taskApi_recurCarryLog(sh, renamed, p.rule);
+  var all = taskApi_recurRead(rs);
+  for (var k = 0; k < all.length; k++) if (all[k].row === row) res.rule = all[k];
+  if (req.today && res.rule && res.rule.on) {   // 止めている決まりは今日の分も入れない
+    var t = taskApi_recurToday(sh, p.rule);
+    res.todayAdded = t.added; res.todayNote = t.note || ''; if (t.task) res.task = t.task;
+  }
+  taskApi_remember(reqId, res);
+  return res;
+}
+
+function taskApi_recurToggle(req) {
+  var rs = taskApi_recurSheet();
+  if (!rs) return { error: 'no_recur_sheet' };
+  var row = taskApi_recurAt(rs, req);
+  if (!row) return { error: 'recur_changed' };
+  var a = rs.getRange(row, 1);
+  if (!a.getDataValidation()) a.insertCheckboxes();
+  a.setValue(req.on === true);
+  var all = taskApi_recurRead(rs), rule = null;
+  for (var k = 0; k < all.length; k++) if (all[k].row === row) rule = all[k];
+  return { rule: rule };
+}
+
+function taskApi_recurKey(pj, todo, ymd) { return [pj, todo, ymd].join('|'); }
+
+function taskApi_recurLogSheet() {
+  var ss = SpreadsheetApp.openById(TASKAPI.SPREADSHEET_ID);
+  var lg = ss.getSheetByName(TASKAPI.RECUR.LOG);
+  if (!lg) { lg = ss.insertSheet(TASKAPI.RECUR.LOG); lg.hideSheet(); }
+  return lg;
+}
+function taskApi_recurLogged(lg) {
+  var o = {}, n = lg.getLastRow();
+  if (n >= 1) lg.getRange(1, 1, n, 1).getValues().forEach(function (r) { o[String(r[0])] = true; });
+  return o;
+}
+function taskApi_recurLog(lg, keys) {
+  if (!keys.length) return;
+  lg.getRange(lg.getLastRow() + 1, 1, keys.length, 2).setValues(keys.map(function (k) { return [k, new Date()]; }));
+}
+
+// 日次ガントの今日以降で、PJ・ToDo が同じ行の日付
+function taskApi_recurDays(sh, pj, todo) {
+  var c = taskApi_cols(sh), today = taskApi_ymd(new Date()), out = [];
+  taskApi_readAll(sh, c).forEach(function (t) { if (t.date && t.date >= today && t.pj.trim() === pj && t.todo.trim() === todo) out.push(t.date); });
+  return out;
+}
+
+function taskApi_recurCarryLog(sh, from, rule) {
+  var days = taskApi_recurDays(sh, from.pj, from.todo);
+  if (!days.length) return;
+  var lg = taskApi_recurLogSheet(), logged = taskApi_recurLogged(lg);
+  taskApi_recurLog(lg, days.map(function (d) { return taskApi_recurKey(rule.pj, rule.todo, d); }).filter(function (k) { return !logged[k]; }));
+}
+
+// 今日の1件：決まりが今日に当たり、まだ入っていなければ add と同じ方法で足す
+function taskApi_recurToday(sh, rule) {
+  var today = taskApi_ymd(new Date());
+  if (!taskApi_recurMatch(rule, today)) return { added: false, note: 'not_today' };
+  var key = taskApi_recurKey(rule.pj, rule.todo, today);
+  var lg = taskApi_recurLogSheet();
+  if (taskApi_recurLogged(lg)[key] || taskApi_recurDays(sh, rule.pj, rule.todo).indexOf(today) >= 0) return { added: false, note: 'already' };
+  var slot = '';
+  for (var k in TASKAPI.SLOTS) if (TASKAPI.SLOTS[k] === rule.time) slot = k;
+  var r = taskApi_add(sh, { todo: rule.todo, pj: rule.pj, ko: rule.ko, date: today, slot: slot, detail: rule.detail });
+  if (r.error) return { added: false, note: r.error };
+  if (/^\d{1,2}:\d{2}$/.test(rule.time)) {   // 時刻は setWait と同じ「数値の時刻」で書く
+    var hm = rule.time.split(':').map(Number), c = taskApi_cols(sh);
+    sh.getRange(r.task.row, c.slot).setValue(hm[0] + hm[1] / 60);
+    r.task = taskApi_rowToTask(r.task.row, sh.getRange(r.task.row, 1, 1, c.width).getValues()[0], c, today);
+  }
+  taskApi_recurLog(lg, [key]);
+  return { added: true, task: r.task };
+}
+
+// 定期タスク.gs の ruleMatchesDay_ と同じ判定（平日は土日祝を除く）
+function taskApi_recurMatch(rule, ymd) {
+  if (rule.from && ymd < rule.from) return false;
+  if (rule.to && ymd > rule.to) return false;
+  var p = ymd.split('-').map(Number), d = new Date(p[0], p[1] - 1, p[2]), wd = d.getDay() || 7;
+  switch (rule.type) {
+    case '毎日': return true;
+    case '平日': return wd <= 5 && !taskApi_isHoliday(d);
+    case '毎週': return rule.when.indexOf(TASKAPI.RECUR.WDAYS.charAt(wd - 1)) >= 0;
+    case '毎月': {
+      var parts = rule.when.split(','), next = new Date(p[0], p[1] - 1, p[2] + 1);
+      return parts.indexOf(String(p[2])) >= 0 || (parts.indexOf('末') >= 0 && next.getDate() === 1);
+    }
+  }
+  return false;
+}
+
+// 祝日（定期タスク.gs の buildJapaneseHolidays_ と同じ計算）
+function taskApi_isHoliday(d) {
+  var y = d.getFullYear(), map = {};
+  var key = function (x) { return x.getFullYear() + '-' + x.getMonth() + '-' + x.getDate(); };
+  var add = function (x) { map[key(x)] = x; };
+  var nthMon = function (m, n) { var f = new Date(y, m - 1, 1); return new Date(y, m - 1, 1 + (1 - f.getDay() + 7) % 7 + (n - 1) * 7); };
+  var yy = y - 1980;
+  add(new Date(y, 0, 1)); add(nthMon(1, 2)); add(new Date(y, 1, 11)); add(new Date(y, 1, 23));
+  add(new Date(y, 2, Math.floor(20.8431 + 0.242194 * yy - Math.floor(yy / 4))));
+  add(new Date(y, 3, 29)); add(new Date(y, 4, 3)); add(new Date(y, 4, 4)); add(new Date(y, 4, 5));
+  add(nthMon(7, 3)); add(new Date(y, 7, 11)); add(nthMon(9, 3));
+  add(new Date(y, 8, Math.floor(23.2488 + 0.242194 * yy - Math.floor(yy / 4))));
+  add(nthMon(10, 2)); add(new Date(y, 10, 3)); add(new Date(y, 10, 23));
+  Object.keys(map).forEach(function (k) {   // 振替休日
+    var x = map[k]; if (x.getDay() !== 0) return;
+    var n = new Date(x.getFullYear(), x.getMonth(), x.getDate() + 1);
+    while (map[key(n)]) n = new Date(n.getFullYear(), n.getMonth(), n.getDate() + 1);
+    map[key(n)] = n;
+  });
+  var days = Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return a - b; });
+  for (var i = 0; i < days.length - 1; i++) {   // 国民の休日
+    if ((days[i + 1] - days[i]) / 86400000 !== 2) continue;
+    var mid = new Date(days[i].getFullYear(), days[i].getMonth(), days[i].getDate() + 1);
+    if (mid.getDay() !== 0 && !map[key(mid)]) map[key(mid)] = mid;
+  }
+  return !!map[key(d)];
 }
 
 function taskApi_out(obj) {

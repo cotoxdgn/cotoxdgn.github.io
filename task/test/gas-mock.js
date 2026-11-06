@@ -32,6 +32,7 @@ class Sheet {
   getMaxRows() { return Math.max(this.rows.length, this.getLastRow()); }
   insertRowsAfter(r, n) { for (let i = 0; i < n; i++) this.rows.push([]); this.writes.push(['insertRowsAfter', r, n]); }
   getFilter() { return null; }
+  hideSheet() { this.hidden = true; return this; }
   insertColumnsAfter(c, n) { this.maxCols += n; }
   deleteRow(r) { this.rows.splice(r - 1, 1); this.writes.push(['deleteRow', r]); }
   insertRowBefore(r) {
@@ -54,6 +55,13 @@ class Range {
     return o;
   }
   getValue() { return this.sh.peek(this.r, this.c).v; }
+  // 表示の文字（日付は m/d、真偽は TRUE/FALSE。本物に近い程度）
+  getDisplayValues() {
+    return this.getValues().map(row => row.map(v => v instanceof Date ? (v.getMonth() + 1) + '/' + v.getDate() : v === true ? 'TRUE' : v === false ? 'FALSE' : String(v == null ? '' : v)));
+  }
+  setNumberFormat(f) { this.each((r, c) => { this.sh.cell(r, c).nf = f; }); this.sh.writes.push(['setNumberFormat', this.r, this.c]); return this; }
+  getDataValidation() { return this.sh.peek(this.r, this.c).dv || null; }
+  insertCheckboxes() { this.each((r, c) => { const x = this.sh.cell(r, c); x.dv = 'checkbox'; if (x.v === '') x.v = false; }); this.sh.writes.push(['insertCheckboxes', this.r, this.c]); return this; }
   getFormulasR1C1() {
     const o = [];
     for (let i = 0; i < this.nr; i++) { const row = []; for (let j = 0; j < this.nc; j++) row.push(this.sh.peek(this.r + i, this.c + j).f); o.push(row); }
@@ -101,7 +109,8 @@ class Range {
 
 module.exports = function makeGas(opts) {
   opts = opts || {};
-  const ss = { name: '_タスク管理2026.09.15~', sheets: {}, getName() { return this.name; }, getSheetByName(n) { return this.sheets[n] || null; } };
+  const ss = { name: '_タスク管理2026.09.15~', sheets: {}, getName() { return this.name; }, getSheetByName(n) { return this.sheets[n] || null; },
+    insertSheet(n) { const x = new Sheet(n, ss); ss.sheets[n] = x; return x; } };
   const sh = new Sheet('_日次ガントチャート', ss);
   ss.sheets[sh.name] = sh;
   const props = {};
@@ -164,4 +173,13 @@ module.exports.fillExample = function (sh) {
   row(7, [10, true, '例）案件C', 'メール返信 | 協力会社', 0.5, D(10, 30), '', '☀️', '', '', '']);
   row(8, [9, false, '例）案件A', '現場写真の整理', 2, D(11, 2), '', '🌙', '', '', '']);
   row(9, [8, true, '例）案件A', '古い完了タスク', 1, D(10, 20), '', '🌅', '', '', '']);
+};
+
+// 「_定期タスク」表（定期タスク.gs の setupRecurringSheet と同じ形：見出し＋100行のチェックボックス＋2行目に止めた記入例）
+module.exports.fillRecur = function (ss, Sheet) {
+  const rs = ss.insertSheet('_定期タスク');
+  ['有効', 'PJ', 'ToDo', '工', '⏰', '繰り返し', '曜日・日', '開始日', '終了日', '詳細'].forEach((h, i) => { rs.cell(1, i + 1).v = h; });
+  for (let r = 2; r <= 101; r++) { const a = rs.cell(r, 1); a.v = false; a.dv = 'checkbox'; rs.cell(r, 6).dv = 'list'; }
+  [false, '', 'タスクを整理する', 1, '9:30', '毎週', '日', '', '', ''].forEach((v, i) => { rs.cell(2, i + 1).v = v; });
+  return rs;
 };
