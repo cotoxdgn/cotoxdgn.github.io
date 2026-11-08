@@ -47,6 +47,32 @@
     <p class="msg" id="connectMsg" aria-live="polite"></p>
   </section>
 
+  <div class="tabs" id="tabs" role="tablist" hidden>
+    <button type="button" role="tab" id="tabToday" aria-selected="true" class="on">今日</button>
+    <button type="button" role="tab" id="tabPj" aria-selected="false">案件</button>
+  </div>
+
+  <!-- 案件ごとのガント（集計はアプリの中。スプシには何も足さない） -->
+  <div id="pjView" hidden>
+    <div id="pjListView">
+      <p class="lbl" id="pjActiveLbl">進行中</p>
+      <div class="list" id="pjList"></div>
+      <p class="empty" id="pjEmpty" hidden>案件（PJ）の入ったタスクがまだありません。</p>
+      <p class="lbl" id="pjDoneLbl" hidden>終わった案件</p>
+      <div class="list" id="pjDone"></div>
+      <p class="note foot" id="pjStatus"></p>
+    </div>
+    <div id="pjDetail" hidden>
+      <div class="pjtop"><button type="button" class="icon-btn" id="pjBack" aria-label="案件の一覧へ戻る">←</button><h2 id="pjName"></h2></div>
+      <div class="hero" id="pjHero"></div>
+      <div class="gw" id="pjGw"><div class="g" id="pjGantt"></div></div>
+      <p class="note">横にすべらせると前後の週。名前を押すと中のタスクが開きます。赤い縦線が今日。</p>
+      <div class="card sub" id="pjGroupBox" hidden><p class="lbl" id="pjGroupLbl"></p><div id="pjGroupList"></div></div>
+      <div class="card sub" id="pjNextBox" hidden></div>
+      <div class="card sub" id="pjMsBox" hidden></div>
+    </div>
+  </div>
+
   <div id="app" hidden>
     <div class="sum" id="sum">
       <span>未完了<strong id="sOpen">–</strong></span>
@@ -170,6 +196,11 @@
   <div class="f">
     <label for="wsTodo">📝 タスク名（D列）</label>
     <input id="wsTodo" maxlength="200" autocomplete="off">
+  </div>
+  <div class="f">
+    <label for="wsDetail">🗒 詳細（L列：メモ・リンク）</label>
+    <textarea id="wsDetail" rows="2" maxlength="500" placeholder="空欄でも可"></textarea>
+    <p class="note" id="wsDetailNote" hidden>「⛓」から始まる印は工程表とつなぐためのものです。消さずに残してください。</p>
   </div>
   <div class="f">
     <label for="wsDate">📅 作業日（G列）</label>
@@ -301,12 +332,32 @@
     <button type="button" class="btn ghost" id="pingBtn">確認</button>
   </div>
   <div class="qr" id="qrBox" hidden></div>
+  <div class="f">
+    <span class="flabel">シートの重さ（日次ガントの 行×列）</span>
+    <div class="meter"><div class="bar"><i id="wBar" style="width:0"></i></div><span class="pct" id="wPct">–</span></div>
+    <p class="note" id="wNote">読み込み中…</p>
+    <button type="button" class="btn ghost sm" id="arcBtn" hidden>完了の古い行を移す</button>
+    <div id="arcBox" hidden>
+      <p class="note" id="arcLead"></p>
+      <div class="arclist" id="arcList"></div>
+      <div class="delask" id="arcAsk"></div>
+    </div>
+  </div>
   <details>
     <summary>接続を外す</summary>
     <p class="note">この端末の接続設定だけを消します。スプシのデータは消えません。</p>
     <button type="button" class="btn danger" id="discBtn">この端末の接続を外す</button>
   </details>
   <button type="button" class="btn ghost" id="confClose">閉じる</button>
+</div>
+
+<!-- 完了にした瞬間：その案件が進んだことを見せる -->
+<div class="pop" id="pop" role="status" hidden>
+  <b id="popTitle"></b>
+  <div class="bar"><i id="popBar"></i></div>
+  <span id="popMs"></span>
+  <span class="popnext" id="popNext"></span>
+  <div class="row2"><button type="button" class="btn sm" id="popDo">次も今日やる</button><button type="button" class="btn ghost sm" id="popClose">閉じる</button></div>
 </div>
 
 <div class="toast" id="toast" role="status" hidden></div>

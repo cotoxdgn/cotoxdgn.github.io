@@ -170,6 +170,53 @@ try:
         pg.click('#rsClose')
         pg.wait_for_selector('#todayList .task:has-text("日報を書く")')
         check('閉じると今日に日報が出ている', True)
+
+        # 詳細の編集
+        pg.locator('#todayList .task .body').first.click()
+        pg.wait_for_selector('#wsheet:not([hidden])')
+        pg.fill('#wsDetail', 'メモ https://example.com/a')
+        pg.click('#wsSave')
+        pg.wait_for_selector('#toast:has-text("保存しました")')
+        check('詳細がシートに入る', any(r and len(r) > 10 and r[10] == 'メモ https://example.com/a' for r in sheet()))
+
+        # 案件：一覧 → ガント → 次の一歩
+        pg.click('#tabPj')
+        pg.wait_for_selector('#pjList .pjc')
+        check('案件の一覧が出る（今日の画面は隠れる）', pg.locator('#pjList .pjc').count() >= 1 and not pg.locator('#app').is_visible())
+        check('作業時間（h）を出さない', 'h' not in pg.inner_text('#pjList').replace('ToDo', ''))
+        pg.screenshot(path=OUT.replace('.png', '-pj.png'))
+        pg.locator('#pjList .pjc', has_text='例）案件A').click()
+        pg.wait_for_selector('#pjDetail:not([hidden]) .gb, #pjDetail:not([hidden]) .dia')
+        check('ガントに棒と今日の線', pg.locator('#pjGantt .gb').count() >= 1 and pg.locator('#pjGantt .todayln').count() >= 1)
+        check('ガントは中だけ横にすべる（ページは横にはみ出さない）', pg.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+        pg.locator('#pjGantt .nm').first.click()
+        check('名前を押すと中のタスクが開く', pg.locator('#pjGroupBox').is_visible() and pg.locator('#pjGroupList .gt').count() >= 1)
+        pg.screenshot(path=OUT.replace('.png', '-pj-gantt.png'), full_page=True)
+        if pg.locator('#pjNextBox').is_visible():
+            pg.locator('#pjNextBox button', has_text='今日やる').click()
+            pg.wait_for_selector('#toast:has-text("今日のタスクに入れました")')
+            check('今日やる で📅が今日になる', True)
+        pg.click('#pjBack')
+        check('戻ると一覧', pg.locator('#pjListView').is_visible())
+        pg.click('#tabToday')
+        pg.wait_for_selector('#todayList .task')
+
+        # 完了にすると、その案件が何%進んだか出る
+        tk = pg.locator('#todayList .task:not(.locked):not(.waiting)').first
+        tk.locator('.cb').click()
+        pg.wait_for_selector('#sheet:not([hidden])')
+        pg.click('#shDone')
+        pg.wait_for_selector('#pop:not([hidden])', timeout=8000)
+        check('完了の瞬間に「○% → ○% に進みました」', '% に進みました' in pg.inner_text('#popTitle'))
+        pg.wait_for_timeout(1600)
+        pg.screenshot(path=OUT.replace('.png', '-pop.png'))
+        pg.click('#popClose')
+
+        # 設定：シートの重さ
+        pg.click('#settings')
+        pg.wait_for_selector('#wNote:has-text("行 ×")')
+        check('シートの重さが出る', '%' in pg.inner_text('#wPct'))
+        pg.click('#confClose')
         check('横スクロールなし', pg.evaluate('document.documentElement.scrollWidth <= innerWidth'))
         check('JS エラーなし', not errs)
         pg.wait_for_timeout(2600)

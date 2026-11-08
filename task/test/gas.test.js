@@ -3,7 +3,7 @@
 'use strict';
 const assert = require('assert');
 const makeGas = require('./gas-mock');
-const { ctx, sh, call } = makeGas();
+const { ctx, sh, call, clockBox } = makeGas();
 makeGas.fillExample(sh);
 
 let passed = 0;
@@ -340,5 +340,47 @@ t('祝日と判定（定期タスク.gs と同じ）', () => {
   assert.ok(!m({ type: '平日' }, '2026-11-03')); assert.ok(m({ type: '平日' }, '2026-11-04')); assert.ok(!m({ type: '平日' }, '2026-11-07'));
   assert.ok(m({ type: '毎月', when: '末' }, '2026-11-30')); assert.ok(!m({ type: '毎月', when: '末' }, '2026-11-29'));
   assert.ok(m({ type: '毎週', when: '月水' }, '2026-11-04')); assert.ok(!m({ type: '毎日', from: '2026-11-10' }, '2026-11-09'));
+});
+
+// ---------- 案件のガント・重さ・アーカイブ・詳細 ----------
+t('setWait：詳細を書き換える。工程表連動の⛓印は消させない', () => {
+  const all = ctx.taskApi_readAll(sh, ctx.taskApi_cols(sh));
+  const x = all.find(y => !y.done);
+  const r = call({ key: KEY, action: 'setWait', no: x.no, todo: x.todo, detail: '新しいメモ\nhttps://example.com' });
+  assert.ok(r.ok, JSON.stringify(r)); assert.strictEqual(r.task.detail, '新しいメモ https://example.com');
+  sh.cell(x.row, 11).v = '📋工程表 ⛓1_kvC8TW:12';
+  assert.strictEqual(call({ key: KEY, action: 'setWait', no: x.no, todo: x.todo, detail: 'メモだけ' }).error, 'keep_link');
+  assert.ok(call({ key: KEY, action: 'setWait', no: x.no, todo: x.todo, detail: 'メモ 📋工程表 ⛓1_kvC8TW:12' }).ok);
+  sh.cell(x.row, 11).v = '';
+});
+t('pj：読むだけ。ガントの日付列は読まない（必要な列まで）', () => {
+  const before = snap(); sh.writes.length = 0;
+  const r = call({ key: KEY, action: 'pj' });
+  assert.ok(r.ok); assert.ok(r.tasks.length >= 5);
+  assert.ok(r.tasks.every(x => 'pj' in x && 'todo' in x && 'done' in x && !('row' in x)));
+  assert.deepStrictEqual(snap(), before); assert.strictEqual(sh.writes.length, 0);
+  const cc = ctx.taskApi_cols(sh);
+  assert.strictEqual(cc.width, Math.max(11, cc.actual || 0), '使う列の一番右まで（ガントの日付列は、使う列より右なら読まない）');
+});
+t('weight：行×列と、移せる行の数', () => {
+  clockBox.t = Date.parse('2026-11-25T03:00:00.000Z');   // 日本時間 11/25（10/20 の完了から30日より後）
+  const r = call({ key: KEY, action: 'weight' });
+  assert.ok(r.ok); assert.strictEqual(r.cells, r.rows * r.cols); assert.strictEqual(r.limit, 200000);
+  assert.strictEqual(r.archiveCandidates, 1, '10/20 の古い完了（No.8）だけ。10/30 の完了はまだ30日たっていない');
+});
+t('archivePreview → archiveRun：写してから消す。見ていない行・前提の行は移さない', () => {
+  const p = call({ key: KEY, action: 'archivePreview' });
+  assert.deepStrictEqual(p.items.map(x => x.no), [8]);
+  assert.strictEqual(call({ key: KEY, action: 'archiveRun', items: [{ no: 10, todo: 'メール返信 | 協力会社' }] }).moved, 0, '30日たっていない行は送られても移さない');
+  const before = snap(), n0 = before.length;
+  const row8 = ctx.taskApi_readAll(sh, ctx.taskApi_cols(sh)).find(x => x.no === 8).row;
+  const r = call({ key: KEY, action: 'archiveRun', items: p.items });
+  assert.ok(r.ok); assert.strictEqual(r.moved, 1);
+  assert.deepStrictEqual(snap(), before.filter((x, i) => i !== row8 - 1), 'その行だけ消えて、ほかは同じ');
+  const ar = ctx.SpreadsheetApp.openById('1all9BRCbemXapdhjBidydCAjPbw26pNmmyi0wbxk66Q').getSheetByName('_完了アーカイブ');
+  assert.strictEqual(ar.peek(1, 4).v, 'ToDo｜未完了・日付順'); assert.strictEqual(ar.peek(2, 1).v, 8); assert.strictEqual(ar.peek(2, 4).v, '古い完了タスク');
+  assert.strictEqual(snap().length, n0 - 1);
+  const pj = call({ key: KEY, action: 'pj' });
+  assert.ok(pj.tasks.some(x => x.no === 8 && x.arc === 1), 'アーカイブの行も案件の集計に入る');
 });
 console.log(`\n${passed} passed`);

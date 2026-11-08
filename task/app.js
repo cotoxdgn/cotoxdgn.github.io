@@ -20,6 +20,7 @@
     no_wait_column: 'スプシに「👤」の列が見つかりません', no_pre_column: 'スプシに「前提」の列が見つかりません',
     bad_action: 'スクリプトが古いままです。デプロイを新しい版にしてください',
     no_recur_sheet: 'スプシに「_定期タスク」の表が見つかりません', recur_changed: 'この定期タスクの行がスプシで変わっています。読み込み直します',
+    keep_link: '詳細の「⛓」の印は工程表とつなぐためのものです。消さずに残してください',
     bad_type: '繰り返しを選んでください', bad_when: '曜日・日を選んでください', bad_range: '終了日は開始日より後にしてください'
   };
   var $ = function (id) { return document.getElementById(id); };
@@ -289,6 +290,7 @@
     wcur = t; wpre = t.pre || '';
     wslot0 = t.slot || slotTime(t.slotRaw) || ''; wslot = wslot0;
     $('wsTodo').value = t.todo || '';
+    $('wsDetail').value = t.detail || ''; $('wsDetailNote').hidden = (t.detail || '').indexOf('⛓') < 0;
     delStep = 0; drawDel();
     $('wsDate').value = t.date || ''; drawSlot();
     $('wsTitle').textContent = t.todo;
@@ -367,13 +369,15 @@
     var nt = $('wsTodo').value.replace(/[\r\n]+/g, ' ').trim();
     if (!nt) { toast('タスク名を空にはできません', true); $('wsTodo').focus(); return; }
     if (nt !== t.todo) params.newTodo = nt;
+    var dt0 = $('wsDetail').value.replace(/[\r\n]+/g, ' ').trim();
+    if (dt0 !== (t.detail || '').trim()) params.detail = dt0;
     var dt = $('wsDate').value;
     if (dt && dt !== (t.date || '')) params.date = dt;
     if (wslot !== wslot0) params.slot = wslot;
     var who = $('wsWho').value.trim();
     if (state.waitColumn && who !== (t.wait || '')) params.wait = who;
     if (state.preColumn && wpre !== (t.pre || '')) params.pre = wpre;
-    if (params.newTodo === undefined && params.wait === undefined && params.pre === undefined && params.date === undefined && params.slot === undefined) { closeSheet(); return; }
+    if (params.newTodo === undefined && params.detail === undefined && params.wait === undefined && params.pre === undefined && params.date === undefined && params.slot === undefined) { closeSheet(); return; }
     var btn = $('wsSave'); btn.disabled = true; btn.textContent = '保存中…';
     api('setWait', params).then(function () {
       if (params.newTodo) {   // 名前を変えたら、動いているタイマーも新しい名前に付け替える
@@ -406,6 +410,7 @@
       if (!d.actualSaved) t.actualLocal = true;
       toast(d.actualSaved ? '完了にしました（実働 ' + h(d.task.actual) + '）' : '完了にしました');
       closeSheet();
+      showProgress(t);
     }, function (e) {
       toast(errText(e), true);
       if (e.code === 'not_found') { closeSheet(); load(true); }
@@ -465,6 +470,7 @@
     $('confName').textContent = 'つながっています：' + (c.name || 'スプレッドシート');
     $('qrBox').hidden = true; $('qrBox').innerHTML = '';
     $('dim').hidden = false; $('conf').hidden = false;
+    loadWeight();
   }
   function showQr() {
     (window.qrcode ? Promise.resolve() : loadScript(LIB + 'qrcode.js')).then(function () {
@@ -485,7 +491,7 @@
   }
   function start() {
     var c = conn();
-    $('connect').hidden = !!c; $('app').hidden = !c;
+    $('connect').hidden = !!c; $('app').hidden = !c; $('tabs').hidden = !c; $('pjView').hidden = true;
     if (!c) { $('iosHint').hidden = !(/iP(hone|ad|od)/.test(navigator.userAgent) && !navigator.standalone); return; }
     var cache = lsGet(CACHE_KEY);
     if (cache && cache.tasks) {
@@ -500,8 +506,278 @@
     if (!$('aPj').value) $('aPj').value = prefs().pj || '';
     render();
     load();
+    var lastTab = ''; try { lastTab = localStorage.getItem('task.tab') || ''; } catch (e) { /* なし */ }
+    if (lastTab === 'pj') showTab('pj');
   }
 
+
+
+  // ---------- 案件ごとのガント（集計はすべてアプリの中。スプシは文字の列を読むだけ） ----------
+  // 作業時間ではなく「成果までの距離」（% と、次の◆までの残り件数）を見せる
+  var pjData = null, pjCur = '', pjOpenGroup = '';
+  function isMs(t) { return /^\s*(◆|【確認】)/.test(t.todo); }
+  function wgt(t) { return isMs(t) ? 0 : (t.ko > 0 ? t.ko : 0.5); }   // 工が空・0のタスクも少しは進みに数える
+  function parentOf(t) { var i = t.todo.indexOf(' | '); return i > 0 ? t.todo.slice(0, i) : (isMs(t) ? t.todo : 'そのほか'); }
+  function childOf(t) { var i = t.todo.indexOf(' | '); return i > 0 ? t.todo.slice(i + 3) : t.todo; }
+  function ymdAdd(ymd, n) { var p = ymd.split('-').map(Number); return localYmd(new Date(p[0], p[1] - 1, p[2] + n)); }
+  function dayDiff(a, b) { var x = a.split('-').map(Number), y = b.split('-').map(Number); return Math.round((new Date(y[0], y[1] - 1, y[2]) - new Date(x[0], x[1] - 1, x[2])) / 86400000); }
+  function weekStart(ymd) { var p = ymd.split('-').map(Number), d = new Date(p[0], p[1] - 1, p[2]); return ymdAdd(ymd, -((d.getDay() + 6) % 7)); }
+  function pct(n) { return Math.round(n * 100); }
+  // 1つの案件の集計。tasks はその案件の全タスク（アーカイブ含む）
+  function pjCalc(name, tasks, today) {
+    var total = 0, doneW = 0, wk = 0, ws = weekStart(today), undoneNo = {};
+    tasks.forEach(function (t) { if (!t.done && t.no != null) undoneNo[t.no] = true; });
+    tasks.forEach(function (t) { var w = wgt(t); total += w; if (t.done) { doneW += w; if (t.date && t.date >= ws) wk += w; } });
+    var work = tasks.filter(function (t) { return !isMs(t); });
+    var ms = tasks.filter(isMs).filter(function (t) { return !t.done; }).sort(function (a, b) { return (a.date || '9') < (b.date || '9') ? -1 : 1; })[0] || null;
+    var remain = [];
+    if (ms) remain = work.filter(function (t) { return !t.done && (!ms.date || (t.date && t.date <= ms.date)); });
+    var lateList = work.filter(function (t) { return !t.done && t.date && t.date < today; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    var preWait = function (t) { var m = /^\s*(?:No)?(\d+)/.exec(t.pre || ''); return !!(m && undoneNo[Number(m[1])]); };
+    var next = work.filter(function (t) { return !t.done && !t.arc && !preWait(t) && (!t.date || t.date > today); })
+      .sort(function (a, b) { return (a.date || '9') < (b.date || '9') ? -1 : (a.date || '9') > (b.date || '9') ? 1 : (a.no || 0) - (b.no || 0); })[0] || null;
+    var fin = tasks.length > 0 && tasks.every(function (t) { return t.done; });
+    var dates = tasks.map(function (t) { return t.date; }).filter(Boolean).sort();
+    var lastMs = tasks.filter(isMs).sort(function (a, b) { return (a.date || '') < (b.date || '') ? -1 : 1; }).pop();
+    return { name: name, tasks: tasks, total: total, pct: total ? doneW / total : 0, wkPct: total ? wk / total : 0,
+      doneN: work.filter(function (t) { return t.done; }).length, n: work.length, ms: ms, remain: remain,
+      late: lateList.length ? { days: dayDiff(lateList[0].date, today), task: lateList[0] } : null, next: next,
+      fin: fin, finDate: dates.length ? dates[dates.length - 1] : '', lastMs: lastMs ? lastMs.todo.replace(/^\s*(◆|【確認】)\s*/, '') : '' };
+  }
+  function pjAll() {
+    var today = state.today || localYmd(), by = {};
+    (pjData || []).forEach(function (t) { if (!t.pj || !t.todo) return; (by[t.pj] = by[t.pj] || []).push(t); });
+    return Object.keys(by).map(function (k) { return pjCalc(k, by[k], today); });
+  }
+  function msName(t) { return t.todo.replace(/^\s*(◆|【確認】)\s*/, ''); }
+  function loadPj(quiet) {
+    if (!quiet) $('pjStatus').textContent = '読み込み中…';
+    return api('pj').then(function (d) { pjData = d.tasks || []; lsSet('task.pj.v1', { tasks: pjData, at: Date.now() }); $('pjStatus').textContent = ''; return pjData; },
+      function (e) { $('pjStatus').textContent = errText(e) + (pjData ? '（前回の内容を表示中）' : ''); throw e; });
+  }
+  function showTab(which) {
+    var pj = which === 'pj';
+    $('tabToday').classList.toggle('on', !pj); $('tabPj').classList.toggle('on', pj);
+    $('tabToday').setAttribute('aria-selected', String(!pj)); $('tabPj').setAttribute('aria-selected', String(pj));
+    $('app').hidden = pj; $('pjView').hidden = !pj; $('title').textContent = pj ? '案件' : '今日';
+    try { localStorage.setItem('task.tab', pj ? 'pj' : 'today'); } catch (e) { /* なし */ }
+    if (pj) {
+      if (!pjData) { var c = lsGet('task.pj.v1'); if (c && c.tasks) pjData = c.tasks; }
+      drawPjList(); if (pjCur) drawPjDetail();
+      loadPj(!!pjData).then(function () { drawPjList(); if (pjCur) drawPjDetail(); }, function () {});
+    }
+  }
+  function drawPjList() {
+    var all = pjAll(), act = all.filter(function (p) { return !p.fin; }), fin = all.filter(function (p) { return p.fin; });
+    act.sort(function (a, b) {   // おくれている案件 → 次の◆が近い案件 の順
+      var d = (b.late ? 1 : 0) - (a.late ? 1 : 0); if (d) return d;
+      var x = (a.ms && a.ms.date) || '9', y = (b.ms && b.ms.date) || '9'; return x < y ? -1 : x > y ? 1 : 0;
+    });
+    fin.sort(function (a, b) { return a.finDate < b.finDate ? 1 : -1; });
+    $('pjActiveLbl').textContent = '進行中 ' + act.length + '件';
+    $('pjEmpty').hidden = !!all.length || !pjData;
+    var box = $('pjList'); box.innerHTML = '';
+    act.forEach(function (p) {
+      var b = el('button', 'pjc'); b.type = 'button';
+      var hd = el('div', 'pjh'); hd.appendChild(el('b', '', p.name)); hd.appendChild(el('span', 'pct', pct(p.pct) + '%')); b.appendChild(hd);
+      var bar = el('div', 'bar'); var i1 = el('i'); i1.style.width = pct(p.pct - p.wkPct) + '%'; var i2 = el('i', 'wk'); i2.style.width = pct(p.wkPct) + '%';
+      bar.appendChild(i1); bar.appendChild(i2); b.appendChild(bar);
+      var ch = el('div', 'chips');
+      if (p.wkPct > 0) ch.appendChild(el('span', 'chip ok', '今週 +' + Math.max(1, pct(p.wkPct)) + '%'));
+      ch.appendChild(p.late ? el('span', 'chip', p.late.days + '日おくれ') : el('span', 'chip ac', '予定どおり'));
+      if (p.ms) ch.appendChild(el('span', 'chip ms', '◆ ' + msName(p.ms).slice(0, 14) + 'まで 残り' + p.remain.length + '件'));
+      b.appendChild(ch);
+      b.appendChild(el('p', 'pjfoot', '完了 ' + p.doneN + ' / ' + p.n + '件' + (p.late ? ' ・ おくれは「' + childOf(p.late.task).slice(0, 20) + '」' : (p.next ? ' ・ 次の一歩：' + childOf(p.next).slice(0, 20) : ''))));
+      b.addEventListener('click', function () { pjCur = p.name; pjOpenGroup = ''; drawPjDetail(); });
+      box.appendChild(b);
+    });
+    var fb = $('pjDone'); fb.innerHTML = ''; $('pjDoneLbl').hidden = !fin.length;
+    fin.slice(0, 8).forEach(function (p) {
+      var b = el('button', 'pjc fin'); b.type = 'button';
+      var hd = el('div', 'pjh'); hd.appendChild(el('b', '', p.name)); hd.appendChild(el('span', 'pct', '100%')); b.appendChild(hd);
+      b.appendChild(el('p', 'pjfoot', (p.finDate ? md(p.finDate) + ' 完了' : '完了') + (p.lastMs ? ' ・ ◆ ' + p.lastMs : ' ・ ' + p.n + '件')));
+      b.addEventListener('click', function () { pjCur = p.name; pjOpenGroup = ''; drawPjDetail(); });
+      fb.appendChild(b);
+    });
+    $('pjListView').hidden = !!pjCur; $('pjDetail').hidden = !pjCur;
+  }
+  function ring(p) {
+    var C = 2 * Math.PI * 26, a = C * (p.pct - p.wkPct), w = C * p.wkPct;
+    var ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 64 64'); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', '進み具合 ' + pct(p.pct) + '%');
+    [['var(--line)', C, 0], ['var(--accent)', a, 0], ['var(--ok)', w, -a]].forEach(function (x) {
+      var c = document.createElementNS(ns, 'circle'); c.setAttribute('cx', 32); c.setAttribute('cy', 32); c.setAttribute('r', 26); c.setAttribute('fill', 'none');
+      c.setAttribute('stroke', x[0]); c.setAttribute('stroke-width', 8); c.setAttribute('stroke-dasharray', x[1] + ' ' + C); c.setAttribute('stroke-dashoffset', x[2]);
+      c.setAttribute('transform', 'rotate(-90 32 32)'); svg.appendChild(c);
+    });
+    var tx = document.createElementNS(ns, 'text'); tx.setAttribute('x', 32); tx.setAttribute('y', 37); tx.setAttribute('text-anchor', 'middle'); tx.setAttribute('font-size', 15);
+    tx.setAttribute('font-weight', 700); tx.setAttribute('fill', 'var(--ink)'); tx.setAttribute('font-family', 'ui-monospace,Menlo,monospace'); tx.textContent = pct(p.pct) + '%';
+    svg.appendChild(tx); return svg;
+  }
+  function drawPjDetail() {
+    var p = pjAll().filter(function (x) { return x.name === pjCur; })[0];
+    if (!p) { pjCur = ''; drawPjList(); return; }
+    $('pjListView').hidden = true; $('pjDetail').hidden = false; $('pjName').textContent = p.name;
+    var today = state.today || localYmd();
+    var hero = $('pjHero'); hero.innerHTML = ''; hero.appendChild(ring(p));
+    var t = el('div', 't');
+    t.appendChild(el('b', '', p.fin ? '完了しました' : (p.wkPct > 0 ? '今週 ' + pct(p.pct - p.wkPct) + '% → ' + pct(p.pct) + '% に進みました' : 'いま ' + pct(p.pct) + '%')));
+    if (!p.fin) t.appendChild(el('span', '', p.late ? p.late.days + '日おくれ（「' + childOf(p.late.task).slice(0, 24) + '」）' : '予定どおりです'));
+    if (p.ms) t.appendChild(el('span', 'note', '◆ ' + msName(p.ms) + (p.ms.date ? '（' + md(p.ms.date) + '）' : '') + 'まで 残り' + p.remain.length + '件'));
+    hero.appendChild(t);
+    // ガント：親タスクごとの棒（◆は菱形）
+    var groups = {}, order = [];
+    p.tasks.forEach(function (x) { var g = parentOf(x); if (!groups[g]) { groups[g] = []; order.push(g); } groups[g].push(x); });
+    var info = order.map(function (g) {
+      var ts = groups[g], ds = ts.map(function (x) { return x.date; }).filter(Boolean).sort(), tw = 0, dw = 0;
+      ts.forEach(function (x) { var w = wgt(x) || 1; tw += w; if (x.done) dw += w; });
+      return { g: g, ts: ts, s: ds[0] || '', e: ds[ds.length - 1] || '', r: tw ? dw / tw : 0, ms: ts.every(isMs), fin: ts.every(function (x) { return x.done; }),
+        late: ts.some(function (x) { return !x.done && x.date && x.date < today; }), dn: ts.filter(function (x) { return x.done; }).length };
+    }).sort(function (a, b) { return (a.s || '9') < (b.s || '9') ? -1 : (a.s || '9') > (b.s || '9') ? 1 : 0; });
+    var starts = info.map(function (x) { return x.s; }).filter(Boolean).sort(), ends = info.map(function (x) { return x.e; }).filter(Boolean).sort();
+    var from = weekStart(starts[0] && starts[0] < ymdAdd(today, -14) ? starts[0] : ymdAdd(today, -14));
+    var to = ends.length && ends[ends.length - 1] > ymdAdd(today, 28) ? ends[ends.length - 1] : ymdAdd(today, 28);
+    var weeks = Math.min(26, Math.ceil((dayDiff(from, to) + 1) / 7));
+    if (Math.ceil((dayDiff(from, to) + 1) / 7) > 26) from = weekStart(ymdAdd(to, -26 * 7 + 1));
+    var WK = 34, px = function (ymd) { return Math.max(0, Math.min(weeks * WK, dayDiff(from, ymd) * WK / 7)); };
+    var g = $('pjGantt'); g.innerHTML = ''; g.style.gridTemplateColumns = '92px ' + weeks * WK + 'px';
+    var head = el('div', 'track'); head.style.height = '14px';
+    var prevM = '';
+    for (var w = 0; w < weeks; w++) {   // 週の頭の日。月が変わる週だけ「11/2」、ほかは「9」
+      var wd = ymdAdd(from, w * 7), mm = wd.slice(5, 7), lb = el('span', 'wk', mm !== prevM ? md(wd) : String(Number(wd.slice(8))));
+      prevM = mm; lb.style.position = 'absolute'; lb.style.left = (w * WK) + 'px'; head.appendChild(lb);
+    }
+    var tlb = el('span', 'todaylbl', '今日'); tlb.style.left = px(today) + 'px'; head.appendChild(tlb);
+    g.appendChild(el('span')); g.appendChild(head);
+    var grid = 'repeating-linear-gradient(90deg, transparent 0 ' + (WK - 1) + 'px, var(--line) ' + (WK - 1) + 'px ' + WK + 'px)';
+    info.forEach(function (x, idx) {
+      var nm = el('button', 'nm'); nm.type = 'button'; nm.setAttribute('aria-expanded', String(pjOpenGroup === x.g));
+      nm.appendChild(document.createTextNode(x.ms ? '◆ ' + msName(x.ts[0]) : x.g));
+      nm.appendChild(el('small', '', x.ms ? (x.s ? md(x.s) : '日付なし') : (x.fin ? x.ts.length + '/' + x.ts.length + ' 完了' : x.dn + '/' + x.ts.length)));
+      nm.addEventListener('click', function () { pjOpenGroup = pjOpenGroup === x.g ? '' : x.g; drawPjDetail(); });
+      var tr = el('div', 'track'); tr.style.background = grid;
+      if (x.s) {
+        if (x.ms) { var dm = el('span', 'dia' + (x.fin ? ' fin' : '')); dm.style.left = px(x.s) + 'px'; tr.appendChild(dm); }
+        else {
+          var gb = el('span', 'gb' + (x.fin ? ' fin' : (x.late ? ' late' : ''))); gb.style.left = px(x.s) + 'px'; gb.style.width = Math.max(6, px(ymdAdd(x.e, 1)) - px(x.s)) + 'px';
+          var fi = el('i'); fi.style.width = pct(x.r) + '%'; gb.appendChild(fi); tr.appendChild(gb);
+        }
+      }
+      var tl = el('span', 'todayln'); tl.style.left = px(today) + 'px'; tr.appendChild(tl);
+      g.appendChild(nm); g.appendChild(tr);
+    });
+    var gw = $('pjGw'); gw.scrollLeft = Math.max(0, px(today) - 120);
+    // 押した親タスクの中身
+    var gbx = $('pjGroupBox'), open = info.filter(function (x) { return x.g === pjOpenGroup; })[0];
+    gbx.hidden = !open;
+    if (open) {
+      $('pjGroupLbl').textContent = open.ms ? '◆ マイルストーン' : open.g + '（' + open.dn + '/' + open.ts.length + '）';
+      var gl = $('pjGroupList'); gl.innerHTML = '';
+      open.ts.slice().sort(function (a, b) { return (a.date || '9') < (b.date || '9') ? -1 : 1; }).forEach(function (x) {
+        var r = el('div', 'gt' + (x.done ? ' done' : '')); r.appendChild(el('span', '', x.done ? '✓' : '・'));
+        r.appendChild(el('span', 'n', childOf(x))); r.appendChild(el('span', 'd', x.date ? md(x.date) : '–')); gl.appendChild(r);
+      });
+    }
+    // 次の一歩
+    var nb = $('pjNextBox'); nb.innerHTML = ''; nb.hidden = !p.next;
+    if (p.next) {
+      nb.appendChild(el('p', 'lbl', '次の一歩'));
+      var row = el('div', 'nextrow'), tx = el('span');
+      tx.appendChild(el('b', '', p.next.todo)); tx.appendChild(el('br'));
+      tx.appendChild(el('span', 'note', [p.next.ko != null ? h(p.next.ko) : '', p.next.date ? '📅 ' + md(p.next.date) : '📅 未定'].filter(Boolean).join(' ・ ')));
+      var bt = el('button', 'btn sm', '今日やる'); bt.type = 'button';
+      bt.addEventListener('click', function () { doToday(p.next, bt); });
+      row.appendChild(tx); row.appendChild(bt); nb.appendChild(row);
+    }
+    // 次の◆までに残っているもの
+    var mb = $('pjMsBox'); mb.innerHTML = ''; mb.hidden = !p.ms;
+    if (p.ms) {
+      mb.appendChild(el('p', 'lbl', '◆ ' + msName(p.ms) + (p.ms.date ? '（' + md(p.ms.date) + '）' : '') + 'までに残っているもの'));
+      var cnt = {}; p.remain.forEach(function (x) { var k = parentOf(x); cnt[k] = (cnt[k] || 0) + 1; });
+      mb.appendChild(el('p', 'pjfoot', Object.keys(cnt).map(function (k) { return k + ' ' + cnt[k] + '件'; }).join(' ・ ') || '残りなし。◆を完了にできます'));
+      var need = p.tasks.filter(function (x) { return !isMs(x) && (!p.ms.date || (x.date && x.date <= p.ms.date)); });
+      var bar = el('div', 'bar'), bi = el('i'); bi.style.width = (need.length ? pct((need.length - p.remain.length) / need.length) : 100) + '%'; bar.appendChild(bi); mb.appendChild(bar);
+      mb.appendChild(el('p', 'pjfoot', '◆に必要な' + need.length + '件のうち' + (need.length - p.remain.length) + '件が済んでいます'));
+    }
+  }
+  // 「今日やる」：📅を今日にする（setWait）
+  function doToday(t, btn) {
+    if (t.no == null) { toast(ERR.not_found, true); return; }
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    return api('setWait', { no: t.no, todo: t.todo, date: state.today || localYmd() }).then(function () {
+      toast('今日のタスクに入れました'); t.date = state.today || localYmd();
+      hidePop(); load(true); if (!$('pjView').hidden) { drawPjList(); if (pjCur) drawPjDetail(); }
+    }, function (e) { toast(errText(e), true); if (btn) { btn.disabled = false; btn.textContent = '今日やる'; } });
+  }
+  // 完了にした瞬間：その案件が何%進んだか・次の◆まで残り何件か
+  var popTimer = 0, popNext = null;
+  function hidePop() { clearTimeout(popTimer); $('pop').hidden = true; popNext = null; }
+  function showProgress(t) {
+    if (!t.pj) return;
+    loadPj(true).then(function (tasks) {
+      var mine = tasks.filter(function (x) { return x.pj === t.pj; });
+      var me = mine.filter(function (x) { return x.no === t.no && x.todo === t.todo; })[0];
+      if (!me) return;
+      var today = state.today || localYmd(), after = pjCalc(t.pj, mine, today);
+      me.done = false; var before = pjCalc(t.pj, mine, today); me.done = true;
+      if (pct(after.pct) === pct(before.pct) && !before.ms) return;
+      $('popTitle').textContent = t.pj + ' が ' + pct(before.pct) + '% → ' + pct(after.pct) + '% に進みました';
+      var bar = $('popBar'); bar.style.transition = 'none'; bar.style.width = pct(before.pct) + '%';
+      $('popMs').textContent = after.ms ? '◆ ' + msName(after.ms) + 'まで 残り' + after.remain.length + '件になりました' : (after.fin ? '全部完了しました' : '');
+      popNext = after.next;
+      $('popNext').textContent = after.next ? '次の一歩：' + after.next.todo + (after.next.ko != null ? '（' + h(after.next.ko) + '）' : '') : '';
+      $('popDo').hidden = !after.next;
+      $('pop').hidden = false;
+      requestAnimationFrame(function () { requestAnimationFrame(function () { bar.style.transition = ''; bar.style.width = pct(after.pct) + '%'; }); });
+      clearTimeout(popTimer); popTimer = setTimeout(hidePop, 9000);
+      if (!$('pjView').hidden) { drawPjList(); if (pjCur) drawPjDetail(); }
+    }, function () {});
+  }
+  $('tabToday').addEventListener('click', function () { showTab('today'); });
+  $('tabPj').addEventListener('click', function () { showTab('pj'); });
+  $('pjBack').addEventListener('click', function () { pjCur = ''; drawPjList(); });
+  $('popClose').addEventListener('click', hidePop);
+  $('popDo').addEventListener('click', function () { if (popNext) doToday(popNext, $('popDo')); });
+
+  // ---------- シートの重さ・完了の古い行の移動 ----------
+  var arcItems = [], arcStep = 0;
+  function loadWeight() {
+    $('wNote').textContent = '読み込み中…'; $('arcBtn').hidden = true; $('arcBox').hidden = true; arcStep = 0;
+    api('weight').then(function (d) {
+      var r = d.cells / d.limit; $('wBar').style.width = Math.min(100, pct(r)) + '%'; $('wBar').className = r >= 0.8 ? 'hi' : '';
+      $('wPct').textContent = pct(r) + '%';
+      $('wNote').textContent = d.rows + '行 × ' + d.cols + '列（タスク ' + d.tasks + '件・うち完了 ' + d.doneTasks + '件）。' +
+        (r >= 0.8 ? '重くなる手前です。完了の古い行を移すと軽くなります。' : '目安の' + pct(r) + '%です。') +
+        (d.lastArchive ? ' 前回の移動：' + md(d.lastArchive) : '');
+      $('arcBtn').hidden = !d.archiveCandidates; $('arcBtn').textContent = '完了の古い行を移す（' + d.archiveCandidates + '件）';
+    }, function (e) { $('wNote').textContent = errText(e); });
+  }
+  function drawArc() {
+    var ask = $('arcAsk'); ask.innerHTML = '';
+    if (!arcStep) return;
+    ask.appendChild(el('span', '', arcStep === 1 ? arcItems.length + '件を「_完了アーカイブ」シートへ移しますか？（日次ガントからは消えます）' : 'ほんとに大丈夫？！ 移した行は日次ガントに戻りません（アーカイブのシートには残ります）。'));
+    var r = el('div', 'row2');
+    var no = el('button', 'btn ghost sm', 'やめる'); no.type = 'button'; no.addEventListener('click', function () { arcStep = 0; $('arcBox').hidden = true; $('arcBtn').hidden = false; });
+    var yes = el('button', 'btn danger sm', arcStep === 1 ? '移す' : 'ほんとに移す'); yes.type = 'button';
+    yes.addEventListener('click', function () {
+      if (arcStep === 1) { arcStep = 2; drawArc(); return; }
+      yes.disabled = true; yes.textContent = '移動中…';
+      api('archiveRun', { items: arcItems.map(function (x) { return { no: x.no, todo: x.todo }; }) }).then(function (d) {
+        toast(d.moved + '件を移しました'); pjData = null; loadWeight(); load(true);
+      }, function (e) { toast(errText(e), true); arcStep = 0; drawArc(); });
+    });
+    r.appendChild(no); r.appendChild(yes); ask.appendChild(r);
+  }
+  $('arcBtn').addEventListener('click', function () {
+    $('arcBtn').hidden = true; $('arcBox').hidden = false; $('arcLead').textContent = '読み込み中…'; $('arcList').innerHTML = ''; arcStep = 0; drawArc();
+    api('archivePreview').then(function (d) {
+      arcItems = d.items || [];
+      $('arcLead').textContent = '完了して📅から' + d.days + '日たった行です（前提にされている行・工程表連動の行は除いています）。案件のガントでは移したあとも数えます。';
+      var l = $('arcList'); l.innerHTML = '';
+      arcItems.forEach(function (x) { var r = el('div', 'gt done'); r.appendChild(el('span', 'n', (x.no != null ? x.no + '. ' : '') + x.todo)); r.appendChild(el('span', 'd', (x.pj ? x.pj.slice(0, 10) + ' ' : '') + md(x.date))); l.appendChild(r); });
+      if (arcItems.length) { arcStep = 1; drawArc(); } else $('arcLead').textContent = '移せる行はありません。';
+    }, function (e) { $('arcLead').textContent = errText(e); });
+  });
 
   // ---------- 定期タスク（スプシの「_定期タスク」表） ----------
   var WD = '月火水木金土日';
