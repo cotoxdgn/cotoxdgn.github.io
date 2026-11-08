@@ -932,6 +932,13 @@
   ['rFrom', 'rTo'].forEach(function (id) { $(id).addEventListener('change', drawToday); });
 
   $('addForm').addEventListener('submit', submitAdd);
+  // PC：入力中に Ctrl+Enter（Mac は ⌘+Enter）で追加する
+  $('addForm').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) {
+      e.preventDefault();
+      if (!$('addBtn').disabled) { if ($('addForm').requestSubmit) $('addForm').requestSubmit(); else $('addBtn').click(); }
+    }
+  });
   ['aTodo', 'aPj', 'aParent', 'aKo', 'aDate'].forEach(function (id) { $(id).addEventListener('input', renderQuickMeta); });
   $('aSlot').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) setSlot(b.dataset.v); });
   $('moreBtn').addEventListener('click', function () {

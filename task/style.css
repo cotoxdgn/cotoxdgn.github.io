@@ -239,3 +239,7 @@ html.noscroll, html.noscroll body { overflow: hidden; }
 .meter .bar i.hi { background: var(--warn); }
 .arclist { max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding: 4px 10px; }
 @media (prefers-reduced-motion: reduce) { .bar i, .pop .bar i { transition: none; } }
+
+/* キーボードの案内はパソコン（マウスのある端末）だけ */
+.kbd { display: none; }
+@media (hover: hover) and (pointer: fine) { .kbd { display: block; } }

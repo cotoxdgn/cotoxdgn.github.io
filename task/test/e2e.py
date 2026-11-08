@@ -217,6 +217,12 @@ try:
         pg.wait_for_selector('#wNote:has-text("行 ×")')
         check('シートの重さが出る', '%' in pg.inner_text('#wPct'))
         pg.click('#confClose')
+
+        # PC：Ctrl+Enter で追加
+        pg.fill('#aTodo', 'キーで追加')
+        pg.press('#aTodo', 'Control+Enter')
+        pg.wait_for_selector('#toast:has-text("シートに追加しました")')
+        check('Ctrl+Enter でシートに追加', any(r and len(r) > 3 and r[3] == 'キーで追加' for r in sheet()))
         check('横スクロールなし', pg.evaluate('document.documentElement.scrollWidth <= innerWidth'))
         check('JS エラーなし', not errs)
         pg.wait_for_timeout(2600)
