@@ -536,12 +536,15 @@
     var preWait = function (t) { var m = /^\s*(?:No)?(\d+)/.exec(t.pre || ''); return !!(m && undoneNo[Number(m[1])]); };
     var next = work.filter(function (t) { return !t.done && !t.arc && !preWait(t) && (!t.date || t.date > today); })
       .sort(function (a, b) { return (a.date || '9') < (b.date || '9') ? -1 : (a.date || '9') > (b.date || '9') ? 1 : (a.no || 0) - (b.no || 0); })[0] || null;
+    var upcoming = work.filter(function (t) { return !t.done && !t.arc; })
+      .sort(function (a, b) { var x = a.date || '9', y = b.date || '9'; return x < y ? -1 : x > y ? 1 : (a.no || 0) - (b.no || 0); })
+      .slice(0, 3).map(function (t) { return { t: t, wait: preWait(t) }; });
     var fin = tasks.length > 0 && tasks.every(function (t) { return t.done; });
     var dates = tasks.map(function (t) { return t.date; }).filter(Boolean).sort();
     var lastMs = tasks.filter(isMs).sort(function (a, b) { return (a.date || '') < (b.date || '') ? -1 : 1; }).pop();
     return { name: name, tasks: tasks, total: total, pct: total ? doneW / total : 0, wkPct: total ? wk / total : 0,
       doneN: work.filter(function (t) { return t.done; }).length, n: work.length, ms: ms, remain: remain,
-      late: lateList.length ? { days: dayDiff(lateList[0].date, today), task: lateList[0] } : null, next: next,
+      late: lateList.length ? { days: dayDiff(lateList[0].date, today), task: lateList[0] } : null, next: next, upcoming: upcoming,
       fin: fin, finDate: dates.length ? dates[dates.length - 1] : '', lastMs: lastMs ? lastMs.todo.replace(/^\s*(◆|【確認】)\s*/, '') : '' };
   }
   function pjAll() {
@@ -579,7 +582,8 @@
     $('pjEmpty').hidden = !!all.length || !pjData;
     var box = $('pjList'); box.innerHTML = '';
     act.forEach(function (p) {
-      var b = el('button', 'pjc'); b.type = 'button';
+      var card = el('div', 'pjc'), b = el('div', 'pjtap');
+      b.setAttribute('role', 'button'); b.tabIndex = 0; b.setAttribute('aria-label', p.name + ' のガントを開く');
       var hd = el('div', 'pjh'); hd.appendChild(el('b', '', p.name)); hd.appendChild(el('span', 'pct', pct(p.pct) + '%')); b.appendChild(hd);
       var bar = el('div', 'bar'); var i1 = el('i'); i1.style.width = pct(p.pct - p.wkPct) + '%'; var i2 = el('i', 'wk'); i2.style.width = pct(p.wkPct) + '%';
       bar.appendChild(i1); bar.appendChild(i2); b.appendChild(bar);
@@ -589,8 +593,29 @@
       if (p.ms) ch.appendChild(el('span', 'chip ms', '◆ ' + msName(p.ms).slice(0, 14) + 'まで 残り' + p.remain.length + '件'));
       b.appendChild(ch);
       b.appendChild(el('p', 'pjfoot', '完了 ' + p.doneN + ' / ' + p.n + '件' + (p.late ? ' ・ おくれは「' + childOf(p.late.task).slice(0, 20) + '」' : (p.next ? ' ・ 次の一歩：' + childOf(p.next).slice(0, 20) : ''))));
-      b.addEventListener('click', function () { pjCur = p.name; pjOpenGroup = ''; drawPjDetail(); });
-      box.appendChild(b);
+      var go = function () { pjCur = p.name; pjOpenGroup = ''; drawPjDetail(); };
+      b.addEventListener('click', go);
+      b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+      card.appendChild(b);
+      // 直近のタスク3つ（ここから直接完了にできる）
+      if (p.upcoming.length) {
+        var ul = el('div', 'pjtasks'), today = state.today || localYmd();
+        p.upcoming.forEach(function (u) {
+          var t = u.t, row = el('div', 'pjt' + (u.wait ? ' locked' : ''));
+          var cb = el('button', 'cb'); cb.type = 'button'; cb.appendChild(el('span', ''));
+          cb.setAttribute('aria-label', u.wait ? '前提待ちのため完了にできません：' + t.todo : '完了にする：' + t.todo);
+          cb.addEventListener('click', function () {
+            if (u.wait) { toast('前提のタスクがまだ終わっていません。前提を完了にすると、完了にできます'); return; }
+            openSheet({ no: t.no, todo: t.todo, pj: t.pj, date: t.date, ko: t.ko, slot: '', done: false });
+          });
+          row.appendChild(cb);
+          row.appendChild(el('span', 'tt', childOf(t)));
+          row.appendChild(el('span', 'd' + (t.date && t.date < today ? ' late' : ''), t.date ? (t.date === today ? '今日' : md(t.date)) : '📅未定'));
+          ul.appendChild(row);
+        });
+        card.appendChild(ul);
+      }
+      box.appendChild(card);
     });
     var fb = $('pjDone'); fb.innerHTML = ''; $('pjDoneLbl').hidden = !fin.length;
     fin.slice(0, 8).forEach(function (p) {

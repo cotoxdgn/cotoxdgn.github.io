@@ -320,3 +320,16 @@ html.kmopen main { max-width: 1180px; }
 .ksegname { display: flex; align-items: center; gap: 8px; }
 .kcount { font-family: var(--num); font-size: 11px; font-weight: 700; color: var(--c); background: var(--cs); border-radius: 999px; padding: 0 8px; }
 .track .nodate { position: absolute; left: 4px; top: 0; font-size: 10px; color: var(--muted); white-space: nowrap; }
+
+/* 案件の一覧：直近のタスク3つ */
+.pjc { cursor: default; }
+.pjtap { display: flex; flex-direction: column; gap: 6px; cursor: pointer; border-radius: 8px; }
+.pjtap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pjtasks { display: flex; flex-direction: column; border-top: 1px dashed var(--line); margin-top: 2px; padding-top: 4px; }
+.pjt { display: flex; align-items: center; gap: 10px; font-size: 14px; min-height: 40px; }
+.pjt .cb { margin: 0; flex: 0 0 auto; }
+.pjt .tt { flex: 1; min-width: 0; overflow-wrap: anywhere; line-height: 1.35; }
+.pjt .d { font-family: var(--num); font-size: 11px; color: var(--muted); white-space: nowrap; }
+.pjt .d.late { color: var(--warn); font-weight: 700; }
+.pjt.locked { opacity: .45; }
+.pjt.locked .cb { border-style: dashed; cursor: not-allowed; }
