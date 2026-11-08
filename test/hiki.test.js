@@ -28,7 +28,7 @@ t('合言葉なしで読める。公開日を過ぎた完成カードだけ（�
   assert.ok(r.ok, JSON.stringify(r));
   eq(r.cards.map(c => c.no), [2, 1, 5]);
   assert.strictEqual(r.updated, '2026-11-05');
-  assert.strictEqual(r.name, 'coo', '設定がなければ coo');
+  assert.strictEqual(r.name, 'coto', '設定がなければ coto');
 });
 t('出す項目だけ（ストック・工夫点・案件名・id・ほかの項目は出さない）', () => {
   const s = JSON.stringify(pub());

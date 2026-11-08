@@ -20,7 +20,7 @@
   var GOALS = { item: 20, detail: 20, law: 12, rec: 10 };
   var BADGE = { item: '仕様の引き出し', detail: '納まりの引き出し', law: '法規の引き出し', rec: 'おすすめの引き出し' };
   var EXP = { card: 20, week: 50, streak7: 30 }, PER_LEVEL = 100;
-  var DEF = { publicName: 'coo', handle: '', worksFrom: '2027-04-01', alertFrom: '2027-04-01' };
+  var DEF = { publicName: 'coto', handle: '', worksFrom: '2027-04-01', alertFrom: '2027-04-01' };
   var WD = ['日', '月', '火', '水', '木', '金', '土'];
 
   var db = Apps.collection(APP);

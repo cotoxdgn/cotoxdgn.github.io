@@ -248,14 +248,14 @@ async function notePhoto(page) {
     // 書き出した画像そのものを1枚、目で見る用に保存
     const png = await page.evaluate(async () => {
       const c = window.__hiki.st.cards.find(x => x.no === 1);
-      const cv = HikiStory.draw(document.createElement('canvas'), c, { name: 'coo', handle: '@coo_design', illust: null });
+      const cv = HikiStory.draw(document.createElement('canvas'), c, { name: 'coto', handle: '@coto_to_design', illust: null });
       return cv.toDataURL('image/png');
     });
     fs.writeFileSync(path.join(SHOT, 'story-001.png'), Buffer.from(png.split(',')[1], 'base64'));
   });
-  await t('設定：公開名義（既定 coo）と賞の締切。過ぎた締切は翌年に仮で繰り越し。4月からは今日に要確認', async () => {
+  await t('設定：公開名義（既定 coto）と賞の締切。過ぎた締切は翌年に仮で繰り越し。4月からは今日に要確認', async () => {
     await go(page, '#settings');
-    assert.strictEqual(await page.inputValue('#sName'), 'coo');
+    assert.strictEqual(await page.inputValue('#sName'), 'coto');
     assert.ok(of('award').filter(r => /^aw-seed-/.test(r.id)).length === 5 && all().some(r => r.id === 'aw-seeded'), '最初の5つの賞が入っている');
     await page.fill('#aName', 'テストの賞'); await page.fill('#aDate', '2026-11-20'); await page.fill('#aUrl', 'https://example.com/a');
     await page.click('#aSave');

@@ -76,9 +76,11 @@
     var by = py + ph - 70;
     ctx.fillStyle = K.color; ctx.beginPath(); ctx.arc(x + 48, by, 48, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#FFFFFF'; ctx.font = '700 32px ' + DISP; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(String(o.name || 'coo').slice(0, 3), x + 48, by + 2);
+    var mark = String(o.name || 'coto').slice(0, 4);
+    if (ctx.measureText(mark).width > 80) ctx.font = '700 ' + Math.floor(32 * 80 / ctx.measureText(mark).width) + 'px ' + DISP;   // 4文字でも丸に納まるよう縮める
+    ctx.fillText(mark, x + 48, by + 2);
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#2E2A26'; ctx.font = '700 32px ' + BODY; ctx.fillText('二級建築士 ' + (o.name || 'coo'), x + 120, o.handle ? by - 20 : by);
+    ctx.fillStyle = '#2E2A26'; ctx.font = '700 32px ' + BODY; ctx.fillText('二級建築士 ' + (o.name || 'coto'), x + 120, o.handle ? by - 20 : by);
     if (o.handle) { ctx.fillStyle = '#6B645B'; ctx.font = '400 28px ' + BODY; ctx.fillText(o.handle, x + 120, by + 24); }
     // 下：HPへの案内（画像の中に入れる）
     ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center';
