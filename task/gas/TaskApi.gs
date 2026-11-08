@@ -26,6 +26,10 @@
  *      「今日の分もすぐ入れる」のときだけ、今日の1件を 1) と同じ方法で足し、「_定期ログ」に記録する（翌朝の自動追加と重ならない）
  *   7) 完了の古い行の移動（2026-11-08）：アプリで一覧を見て2回確かめたときだけ。完了して📅から30日たった行を
  *      「_完了アーカイブ」シートの下に写してから、日次ガントの行を消す。前提にされている行・工程表連動（⛓）の行は移さない
+ *   8) 工程の組み立て（2026-11-08）：アプリで変更点の一覧を見て2回確かめたときだけ。タスク表（＝工程表）の
+ *      📅・ToDo・工・詳細を書き換え、行を足す。「外す」は行を消さず、📅を空にして詳細に「🚫外す」を付ける（集計から外れる）
+ *      工程表のスプシと連動している行（詳細に⛓）は、工程表の 開始日・終了日・集計対象 もそろえる（数式のセルは書かない）
+ *      「_ひな形」シート（非表示・値だけ）に工程のひな形を保存する。同じ名前の上書きはアプリで2回確かめてから
  *
  * 準備（約5分）
  *  1) script.google.com を直接開いて［新しいプロジェクト］→ このコードを貼り付けて保存
@@ -40,6 +44,7 @@
  *          recurList / recurSave / recurToggle（定期タスクの表）
  *          pj（案件ごとのガント用：全タスクの No・完了・PJ・ToDo・工・📅・前提だけ。アーカイブも含む）
  *          weight（シートの重さ）／ archivePreview・archiveRun（完了して30日たった行を「_完了アーカイブ」へ移す）
+ *          tmplList・tmplSave（工程のひな形「_ひな形」シート）／ kumitate（工程の組み立ての反映）
  *          widget（iPhone のホーム画面のウィジェット用。今日と明日の未完了タスクだけ。見るだけ用の合言葉でも使える）
  *
  * 見るだけ用の合言葉（ウィジェット用）
@@ -77,6 +82,10 @@ var TASKAPI = {
   PROP_VIEW_KEY: 'TASK_VIEW_KEY',   // 見るだけ用の合言葉（ウィジェット用。widget だけ）
   MAX_TEXT: 500,
   // 定期タスクの表（スプシに付いている「定期タスク.gs」と同じ名前・列）
+  TMPL: { SHEET: '_ひな形', HEAD: ['ひな形', '順番', '親タスク', '詳細', '工', '必要な◆', '依頼の待ち日数', 'メモ'], PROP_PJ: 'TASK_PJ_TMPL' },
+  // 工程表連動（⛓キー）の工程表スプシ：キーの頭8文字 → スプレッドシートID（案件連動.gs の KL_FILES と同じもの）
+  KOUTEI: { FILES: { '1_kvC8TW': '1_kvC8TWc3dJ2w2uPX2g1NUjP8UZBUNRpL-ZfW45x4m8' }, SHEET: '工程表', HEAD_ROW: 7 },
+  EXCLUDE_TAG: '🚫外す',
   ARCHIVE: { SHEET: '_完了アーカイブ', DAYS: 30, PROP_LAST: 'TASK_ARCHIVE_LAST' },
   WEIGHT_CELLS: 200000,   // シートの重さの目安（日次ガントの 行×列）。これを100%として表示する
   RECUR: { SHEET: '_定期タスク', LOG: '_定期ログ', TYPES: ['毎週', '毎日', '平日', '毎月'], WIDTH: 10, WDAYS: '月火水木金土日' }
@@ -225,6 +234,9 @@ function taskApi_handle(req) {
       case 'weight': res = taskApi_weight(sh); break;
       case 'archivePreview': res = taskApi_archivePreview(sh); break;
       case 'archiveRun': res = taskApi_archiveRun(sh, req); break;
+      case 'tmplList': res = taskApi_tmplList(); break;
+      case 'tmplSave': res = taskApi_tmplSave(req); break;
+      case 'kumitate': res = taskApi_kumitate(sh, req); break;
       default: res = { error: 'bad_action' };
     }
     if (res.error) return res.detail ? { ok: false, error: res.error, detail: res.detail } : { ok: false, error: res.error };
@@ -664,7 +676,7 @@ function taskApi_writeActual(sh, c, row, value) {
 // 全タスク（日次ガント＋アーカイブ）の、ガントに要る列だけを返す。集計はアプリ側で行う
 function taskApi_pj(sh) {
   var c = taskApi_cols(sh);
-  var slim = function (t, arc) { return { no: t.no, done: t.done, pj: t.pj.slice(0, 60), todo: t.todo.slice(0, 120), ko: t.ko, date: t.date, pre: t.pre, arc: arc || undefined }; };
+  var slim = function (t, arc) { return { no: t.no, done: t.done, pj: t.pj.slice(0, 60), todo: t.todo.slice(0, 120), ko: t.ko, date: t.date, pre: t.pre, wait: t.wait ? 1 : 0, detail: t.detail.slice(0, 200), arc: arc || undefined }; };
   var out = taskApi_readAll(sh, c).map(function (t) { return slim(t); });
   var ar = taskApi_archiveSheet(false);
   if (ar) {
@@ -726,6 +738,155 @@ function taskApi_archiveRun(sh, req) {
   for (var i = rows.length - 1; i >= 0; i--) sh.deleteRow(rows[i]);   // 下の行から消す（上の行番号がずれないように）
   PropertiesService.getScriptProperties().setProperty(TASKAPI.ARCHIVE.PROP_LAST, taskApi_ymd(new Date()));
   return { moved: rows.length };
+}
+
+// ---------- 工程のひな形（「_ひな形」シート：非表示・値だけ） ----------
+function taskApi_tmplSheet(create) {
+  var ss = SpreadsheetApp.openById(TASKAPI.SPREADSHEET_ID);
+  var t = ss.getSheetByName(TASKAPI.TMPL.SHEET);
+  if (!t && create) {
+    t = ss.insertSheet(TASKAPI.TMPL.SHEET);
+    t.getRange(1, 1, 1, TASKAPI.TMPL.HEAD.length).setValues([TASKAPI.TMPL.HEAD]);
+    t.hideSheet();
+  }
+  return t;
+}
+function taskApi_tmplRows(t) {
+  var last = t ? t.getLastRow() : 0;
+  if (last < 2) return [];
+  return t.getRange(2, 1, last - 1, TASKAPI.TMPL.HEAD.length).getValues().map(function (r, i) {
+    return { row: i + 2, name: String(r[0] || '').trim(), order: taskApi_num(r[1]), parent: String(r[2] || '').trim(), child: String(r[3] || '').trim(),
+      ko: taskApi_num(r[4]), need: String(r[5] || '').trim(), wait: taskApi_num(r[6]), memo: String(r[7] || '') };
+  }).filter(function (x) { return x.name && (x.parent || x.child); });
+}
+function taskApi_tmplList() {
+  var rows = taskApi_tmplRows(taskApi_tmplSheet(false)), by = {};
+  rows.forEach(function (x) { (by[x.name] = by[x.name] || []).push(x); });
+  Object.keys(by).forEach(function (k) { by[k].sort(function (a, b) { return (a.order || 0) - (b.order || 0); }); by[k].forEach(function (x) { delete x.row; }); });
+  var map = {};
+  try { map = JSON.parse(PropertiesService.getScriptProperties().getProperty(TASKAPI.TMPL.PROP_PJ) || '{}'); } catch (e) { map = {}; }
+  return { templates: by, pjTemplate: map };
+}
+// 同じ名前があれば overwrite のときだけ置き換える（古い行を消してから下に書く）
+function taskApi_tmplSave(req) {
+  var name = taskApi_text(req.name).slice(0, 40);
+  if (!name) return { error: 'no_tmpl_name' };
+  var items = (Array.isArray(req.rows) ? req.rows : []).slice(0, 300);
+  if (!items.length) return { error: 'no_tmpl_rows' };
+  var t = taskApi_tmplSheet(true);
+  var old = taskApi_tmplRows(t).filter(function (x) { return x.name === name; });
+  if (old.length && req.overwrite !== true) return { error: 'tmpl_exists' };
+  var vals = items.map(function (x, i) {
+    var ko = taskApi_num(x.ko), wait = taskApi_num(x.wait);
+    return [name, i + 1, taskApi_text(x.parent).slice(0, 100), taskApi_text(x.child).slice(0, 120), ko === null ? '' : ko,
+      taskApi_text(x.need).slice(0, 60), wait === null ? '' : wait, taskApi_text(x.memo).slice(0, 200)];
+  });
+  old.map(function (x) { return x.row; }).sort(function (a, b) { return b - a; }).forEach(function (r) { t.deleteRow(r); });
+  t.getRange(Math.max(t.getLastRow(), 1) + 1, 1, vals.length, TASKAPI.TMPL.HEAD.length).setValues(vals);
+  return { saved: vals.length, replaced: old.length };
+}
+
+// ---------- 工程の組み立ての反映 ----------
+// ops：date（📅を変える）／ edit（ToDo・工・詳細）／ add（行を足す）／ exclude（外す）／ restore（外したのを戻す）
+// 先に全部確かめてから書く。対象の行は No と ToDo で探す（行番号は使わない）
+function taskApi_kumitate(sh, req) {
+  var reqId = /^[A-Za-z0-9_-]{8,64}$/.test(String(req.reqId || '')) ? String(req.reqId) : '';
+  var prev = taskApi_seen(reqId);
+  if (prev) return prev;
+  var pj = taskApi_text(req.pj).slice(0, 60);
+  if (!pj) return { error: 'no_pj' };
+  var ops = Array.isArray(req.ops) ? req.ops.slice(0, 300) : [];
+  if (!ops.length) return { error: 'no_ops' };
+  var c = taskApi_cols(sh), all = taskApi_readAll(sh, c), byKey = {};
+  all.forEach(function (t) { byKey[t.no + '|' + t.todo] = t; });
+  var ymdRe = /^(\d{4})-(\d{2})-(\d{2})$/, plan = [];
+  for (var i = 0; i < ops.length; i++) {
+    var o = ops[i] || {}, kind = String(o.op || '');
+    if (kind === 'add') {
+      if (!taskApi_text(o.todo)) return { error: 'no_todo', detail: '追加' };
+      if (o.date && !ymdRe.test(String(o.date))) return { error: 'bad_date' };
+      var ko0 = taskApi_num(o.ko); if (ko0 === null || ko0 < 0 || ko0 > 24) return { error: 'bad_ko' };
+      plan.push({ op: 'add', o: o }); continue;
+    }
+    var t = byKey[taskApi_num(o.no) + '|' + String(o.todo || '')];
+    if (!t || t.pj !== pj) return { error: 'not_found', detail: String(o.todo || '').slice(0, 40) };
+    if (t.done && kind !== 'edit') return { error: 'is_done', detail: t.todo.slice(0, 40) };
+    if ((kind === 'date' || kind === 'restore') && !ymdRe.test(String(o.date || ''))) return { error: 'bad_date' };
+    if (kind === 'edit') {
+      if (o.newTodo !== undefined && !taskApi_text(o.newTodo)) return { error: 'no_todo' };
+      if (o.ko !== undefined) { var k1 = taskApi_num(o.ko); if (k1 === null || k1 < 0 || k1 > 24) return { error: 'bad_ko' }; }
+      if (o.detail !== undefined) { var key = /⛓[\w-]+:[\w.]+/.exec(t.detail); if (key && taskApi_text(o.detail).indexOf(key[0]) < 0) return { error: 'keep_link' }; }
+    } else if (['date', 'exclude', 'restore'].indexOf(kind) < 0) return { error: 'bad_op' };
+    plan.push({ op: kind, o: o, t: t });
+  }
+  var dt = function (s) { var m = ymdRe.exec(s); return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])); };
+  var koutei = [], res = { changed: 0, added: 0, koutei: 0, kouteiSkipped: 0 };
+  plan.forEach(function (p) {
+    var t = p.t, o = p.o;
+    if (p.op === 'date') { sh.getRange(t.row, c.date).setValue(dt(o.date)); koutei.push({ t: t, date: o.date }); }
+    if (p.op === 'edit') {
+      if (o.newTodo !== undefined) sh.getRange(t.row, c.todo).setValue(taskApi_text(o.newTodo));
+      if (o.ko !== undefined) sh.getRange(t.row, c.ko).setValue(taskApi_num(o.ko));
+      if (o.detail !== undefined) sh.getRange(t.row, c.detail).setValue(taskApi_text(o.detail));
+    }
+    if (p.op === 'exclude') {
+      sh.getRange(t.row, c.date).setValue('');
+      if (t.detail.indexOf(TASKAPI.EXCLUDE_TAG) < 0) sh.getRange(t.row, c.detail).setValue((TASKAPI.EXCLUDE_TAG + ' ' + t.detail).trim());
+      koutei.push({ t: t, target: 0 });
+    }
+    if (p.op === 'restore') {
+      sh.getRange(t.row, c.date).setValue(dt(o.date));
+      sh.getRange(t.row, c.detail).setValue(t.detail.split(TASKAPI.EXCLUDE_TAG).join('').replace(/\s+/g, ' ').trim());
+      koutei.push({ t: t, target: 1, date: o.date });
+    }
+    if (p.op !== 'add') res.changed++;
+  });
+  // 足す行は最後にまとめて（add は最終行の下に足して📅順に並べ替えるので、上の書き換えの行番号に影響しないよう後で）
+  plan.filter(function (p) { return p.op === 'add'; }).forEach(function (p) {
+    var o = p.o;
+    var r = taskApi_add(sh, { todo: o.todo, parent: o.parent, pj: pj, ko: o.ko, date: o.date || taskApi_ymd(new Date()), slot: '', detail: o.detail });
+    if (!r.error) res.added++;
+  });
+  if (req.template) {   // この案件がどのひな形から作られたか（「今回だけ」の印に使う）
+    var props = PropertiesService.getScriptProperties(), map = {};
+    try { map = JSON.parse(props.getProperty(TASKAPI.TMPL.PROP_PJ) || '{}'); } catch (e) { map = {}; }
+    map[pj] = taskApi_text(req.template).slice(0, 40);
+    props.setProperty(TASKAPI.TMPL.PROP_PJ, JSON.stringify(map));
+  }
+  var kr = taskApi_kouteiSync(koutei);
+  res.koutei = kr.done; res.kouteiSkipped = kr.skipped;
+  taskApi_remember(reqId, res);
+  return res;
+}
+
+// 工程表連動（⛓）の行：工程表の 開始日・終了日（📅に合わせる）と 集計対象（外す＝0／戻す＝1）をそろえる。数式のセルは書かない
+function taskApi_kouteiSync(list) {
+  var out = { done: 0, skipped: 0 }, books = {};
+  list.forEach(function (x) {
+    var m = /⛓([\w-]+):([\w.]+)/.exec(x.t.detail);
+    if (!m) return;
+    var id = TASKAPI.KOUTEI.FILES[m[1].slice(0, 8)];
+    if (!id) { out.skipped++; return; }
+    try {
+      var b = books[id];
+      if (!b) {
+        var ks = SpreadsheetApp.openById(id).getSheetByName(TASKAPI.KOUTEI.SHEET);
+        var hr = TASKAPI.KOUTEI.HEAD_ROW, head = ks.getRange(hr, 1, 1, ks.getLastColumn()).getValues()[0].map(function (v) { return String(v).trim(); });
+        var col = function (n) { return head.indexOf(n) + 1; };
+        b = books[id] = { ks: ks, no: col('No'), s: col('開始日'), e: col('終了日'), tgt: col('集計対象') };
+        var last = ks.getLastRow();
+        b.nos = last > hr ? ks.getRange(hr + 1, b.no, last - hr, 1).getValues().map(function (r) { return String(r[0]); }) : [];
+      }
+      var idx = b.nos.indexOf(m[2]);
+      if (idx < 0) { out.skipped++; return; }
+      var row = TASKAPI.KOUTEI.HEAD_ROW + 1 + idx, wrote = false;
+      var put = function (cn, v) { if (!cn) return; var cell = b.ks.getRange(row, cn); if (cell.getFormula()) { out.skipped++; return; } cell.setValue(v); wrote = true; };
+      if (x.date) { var p = x.date.split('-').map(Number), d = new Date(p[0], p[1] - 1, p[2]); put(b.s, d); put(b.e, d); }
+      if (x.target !== undefined) put(b.tgt, x.target);
+      if (wrote) out.done++;
+    } catch (e) { out.skipped++; }
+  });
+  return out;
 }
 
 // ---------- 定期タスク（「_定期タスク」表。列は 定期タスク.gs と同じ） ----------

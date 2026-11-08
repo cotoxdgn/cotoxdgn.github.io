@@ -383,4 +383,74 @@ t('archivePreview → archiveRun：写してから消す。見ていない行・
   const pj = call({ key: KEY, action: 'pj' });
   assert.ok(pj.tasks.some(x => x.no === 8 && x.arc === 1), 'アーカイブの行も案件の集計に入る');
 });
+
+// ---------- 工程の組み立て・ひな形 ----------
+t('tmplSave / tmplList：非表示の「_ひな形」に値だけで保存。同じ名前は overwrite のときだけ置き換える', () => {
+  const rows = [{ parent: '診断の設問', child: 'テイストの聞き方', ko: 2, need: '藤井さんへ提案' }, { parent: '仕様書テンプレ', child: '表紙', ko: 1, need: '藤井さんへ提案' }, { parent: 'プレゼン資料', child: 'デモ動画の撮影', ko: 2, wait: '' }];
+  const r = call({ key: KEY, action: 'tmplSave', name: '標準仕様書', rows });
+  assert.ok(r.ok, JSON.stringify(r)); assert.strictEqual(r.saved, 3);
+  const ts = ctx.SpreadsheetApp.openById('1all9BRCbemXapdhjBidydCAjPbw26pNmmyi0wbxk66Q').getSheetByName('_ひな形');
+  assert.ok(ts.hidden); assert.strictEqual(ts.peek(1, 6).v, '必要な◆');
+  assert.ok(ts.rows.every(row => row.every(x => !x.f)), '数式は入れない');
+  assert.strictEqual(call({ key: KEY, action: 'tmplSave', name: '標準仕様書', rows }).error, 'tmpl_exists');
+  const r2 = call({ key: KEY, action: 'tmplSave', name: '標準仕様書', rows: rows.slice(0, 2), overwrite: true });
+  assert.strictEqual(r2.replaced, 3); assert.strictEqual(r2.saved, 2);
+  const l = call({ key: KEY, action: 'tmplList' });
+  assert.deepStrictEqual(l.templates['標準仕様書'].map(x => x.child), ['テイストの聞き方', '表紙']);
+  assert.strictEqual(l.templates['標準仕様書'][0].need, '藤井さんへ提案');
+});
+t('kumitate：📅・名前・外す・戻す・足す。ほかの案件・完了の行は変えない。外すは行を消さない', () => {
+  const all = ctx.taskApi_readAll(sh, ctx.taskApi_cols(sh));
+  const a = all.filter(x => x.pj === '例）案件A' && !x.done);
+  assert.ok(a.length >= 1);
+  const other = all.filter(x => x.pj !== '例）案件A').map(x => x.no + '|' + x.todo + '|' + x.date).sort();
+  // 別の案件の行は断る
+  const ob = all.find(x => x.pj !== '例）案件A' && !x.done);
+  assert.strictEqual(call({ key: KEY, action: 'kumitate', pj: '例）案件A', ops: [{ op: 'date', no: ob.no, todo: ob.todo, date: '2026-12-01' }] }).error, 'not_found');
+  const n0 = sh.getLastRow();
+  const r = call({ key: KEY, action: 'kumitate', pj: '例）案件A', reqId: 'kumi-0001-ab', template: '標準仕様書', ops: [
+    { op: 'date', no: a[0].no, todo: a[0].todo, date: '2026-12-02' },
+    { op: 'edit', no: a[0].no, todo: a[0].todo, ko: 1.5, detail: 'メモ →◆藤井さんへ提案' },
+    { op: 'add', parent: '仕様書テンプレ', todo: '再販向けの注意書き', ko: 1.5, date: '2026-12-03', detail: '今回だけ' }
+  ] });
+  assert.ok(r.ok, JSON.stringify(r)); assert.strictEqual(r.changed, 2); assert.strictEqual(r.added, 1);
+  const after = ctx.taskApi_readAll(sh, ctx.taskApi_cols(sh));
+  const x = after.find(y => y.no === a[0].no);
+  assert.strictEqual(x.date, '2026-12-02'); assert.strictEqual(x.ko, 1.5); assert.strictEqual(x.detail, 'メモ →◆藤井さんへ提案');
+  const nw = after.find(y => y.todo === '仕様書テンプレ | 再販向けの注意書き');
+  assert.ok(nw && nw.pj === '例）案件A' && nw.date === '2026-12-03');
+  assert.deepStrictEqual(after.filter(y => y.pj !== '例）案件A').map(y => y.no + '|' + y.todo + '|' + y.date).sort(), other, 'ほかの案件は変わらない');
+  // 同じ reqId は二重にしない
+  assert.strictEqual(call({ key: KEY, action: 'kumitate', pj: '例）案件A', reqId: 'kumi-0001-ab', ops: [{ op: 'add', todo: 'x', ko: 1 }] }).added, 1);
+  assert.strictEqual(ctx.taskApi_readAll(sh, ctx.taskApi_cols(sh)).filter(y => y.todo === 'x').length, 0);
+  // 外す → 行は残り、📅が空になって詳細に印。戻すと元に
+  const ex = call({ key: KEY, action: 'kumitate', pj: '例）案件A', ops: [{ op: 'exclude', no: nw.no, todo: nw.todo }] });
+  assert.ok(ex.ok, JSON.stringify(ex));
+  let y = ctx.taskApi_readAll(sh, ctx.taskApi_cols(sh)).find(z => z.no === nw.no);
+  assert.ok(y, '行は消さない'); assert.strictEqual(y.date, ''); assert.ok(y.detail.startsWith('🚫外す'));
+  call({ key: KEY, action: 'kumitate', pj: '例）案件A', ops: [{ op: 'restore', no: nw.no, todo: nw.todo, date: '2026-12-04' }] });
+  y = ctx.taskApi_readAll(sh, ctx.taskApi_cols(sh)).find(z => z.no === nw.no);
+  assert.strictEqual(y.date, '2026-12-04'); assert.strictEqual(y.detail, '今回だけ');
+  assert.strictEqual(call({ key: KEY, action: 'tmplList' }).pjTemplate['例）案件A'], '標準仕様書');
+  // ⛓の印は消させない
+  sh.cell(x.row, 11).v = '📋工程表 ⛓1_kvC8TW:12';
+  assert.strictEqual(call({ key: KEY, action: 'kumitate', pj: '例）案件A', ops: [{ op: 'edit', no: x.no, todo: x.todo, detail: 'なし' }] }).error, 'keep_link');
+});
+t('kumitate：工程表連動（⛓）の行は、工程表の開始日・終了日・集計対象もそろえる（数式のセルは書かない）', () => {
+  const ss = ctx.SpreadsheetApp.openById('1all9BRCbemXapdhjBidydCAjPbw26pNmmyi0wbxk66Q');
+  const kb = { sheets: {}, getSheetByName(n) { return this.sheets[n] || null; } };
+  const ks = new (makeGas.SheetClass || ss.sheets['_日次ガントチャート'].constructor)('工程表', kb); kb.sheets['工程表'] = ks;
+  ['No', '親タスク', '詳細', '担当', '期間(週)', '開始日', '終了日', '福田工数(h)', '集計対象'].forEach((h, i) => { ks.cell(7, i + 1).v = h; });
+  [[11, '設問', 'a', '福田', 1, '', '', 2, 1], [12, '設問', 'b', '福田', 1, '', '', 1, 1]].forEach((r, j) => r.forEach((v, i) => { ks.cell(8 + j, i + 1).v = v; }));
+  ks.cell(9, 7).f = '=F9+7';   // 終了日が数式の行
+  const real = ctx.SpreadsheetApp.openById;
+  ctx.SpreadsheetApp.openById = id => id === '1_kvC8TWc3dJ2w2uPX2g1NUjP8UZBUNRpL-ZfW45x4m8' ? kb : real(id);
+  const x = ctx.taskApi_readAll(sh, ctx.taskApi_cols(sh)).find(z => z.detail.indexOf('⛓1_kvC8TW:12') >= 0);
+  const r = call({ key: KEY, action: 'kumitate', pj: x.pj, ops: [{ op: 'date', no: x.no, todo: x.todo, date: '2026-12-08' }] });
+  ctx.SpreadsheetApp.openById = real;
+  assert.ok(r.ok, JSON.stringify(r)); assert.strictEqual(r.koutei, 1); assert.strictEqual(r.kouteiSkipped, 1, '数式の終了日は書かない');
+  assert.strictEqual(ctx.Utilities.formatDate(ks.peek(9, 6).v, 'Asia/Tokyo', 'yyyy-MM-dd'), '2026-12-08');
+  assert.strictEqual(ks.peek(9, 7).f, '=F9+7'); assert.strictEqual(ks.peek(8, 6).v, '', 'ほかの行は変えない');
+  sh.cell(x.row, 11).v = '';
+});
 console.log(`\n${passed} passed`);

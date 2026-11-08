@@ -1,6 +1,6 @@
 /* このアプリをオフラインでも開けるようにする仕組み。CACHE の名前はアプリごとに変え、更新のたびに番号を上げる */
-var CACHE = 'task-v21';
-var SHELL = ['./', 'index.html', 'app.js', 'style.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png',
+var CACHE = 'task-v22';
+var SHELL = ['./', 'index.html', 'app.js', 'kumitate.js', 'style.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png',
   '../shared/lib/qrcode.js', '../shared/lib/jsQR.js'];
 
 self.addEventListener('install', function (e) {

@@ -546,7 +546,7 @@
   }
   function pjAll() {
     var today = state.today || localYmd(), by = {};
-    (pjData || []).forEach(function (t) { if (!t.pj || !t.todo) return; (by[t.pj] = by[t.pj] || []).push(t); });
+    (pjData || []).forEach(function (t) { if (!t.pj || !t.todo || (t.detail || '').indexOf('🚫外す') >= 0) return; (by[t.pj] = by[t.pj] || []).push(t); });
     return Object.keys(by).map(function (k) { return pjCalc(k, by[k], today); });
   }
   function msName(t) { return t.todo.replace(/^\s*(◆|【確認】)\s*/, ''); }
@@ -557,6 +557,7 @@
   }
   function showTab(which) {
     var pj = which === 'pj';
+    if (window.KumiUI && window.KumiUI.isOpen()) window.KumiUI.close();
     $('tabToday').classList.toggle('on', !pj); $('tabPj').classList.toggle('on', pj);
     $('tabToday').setAttribute('aria-selected', String(!pj)); $('tabPj').setAttribute('aria-selected', String(pj));
     $('app').hidden = pj; $('pjView').hidden = !pj; $('title').textContent = pj ? '案件' : '今日';
@@ -715,7 +716,7 @@
   function showProgress(t) {
     if (!t.pj) return;
     loadPj(true).then(function (tasks) {
-      var mine = tasks.filter(function (x) { return x.pj === t.pj; });
+      var mine = tasks.filter(function (x) { return x.pj === t.pj && (x.detail || '').indexOf('🚫外す') < 0; });
       var me = mine.filter(function (x) { return x.no === t.no && x.todo === t.todo; })[0];
       if (!me) return;
       var today = state.today || localYmd(), after = pjCalc(t.pj, mine, today);
@@ -733,6 +734,17 @@
       if (!$('pjView').hidden) { drawPjList(); if (pjCur) drawPjDetail(); }
     }, function () {});
   }
+  // kumitate.js（工程の組み立て）から使う窓口
+  window.TaskApp = {
+    api: api, el: el, toast: toast, errText: errText, md: md, dow: dow, h: h, reqId: reqId,
+    today: function () { return state.today || localYmd(); },
+    pjTasks: function () { return pjData; },
+    refreshPj: function (pj) { pjCur = pj; showTab('pj'); load(true); }
+  };
+  $('pjKumi').addEventListener('click', function () {
+    if (!window.KumiUI || !pjCur) return;
+    (pjData ? Promise.resolve() : loadPj(true)).then(function () { window.KumiUI.open(pjCur); }, function () { toast('読み込めませんでした。電波のある所でもう一度', true); });
+  });
   $('tabToday').addEventListener('click', function () { showTab('today'); });
   $('tabPj').addEventListener('click', function () { showTab('pj'); });
   $('pjBack').addEventListener('click', function () { pjCur = ''; drawPjList(); });

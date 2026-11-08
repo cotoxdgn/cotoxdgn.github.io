@@ -55,6 +55,7 @@ class Range {
     return o;
   }
   getValue() { return this.sh.peek(this.r, this.c).v; }
+  getFormula() { return this.sh.peek(this.r, this.c).f || ''; }
   // 表示の文字（日付は m/d、真偽は TRUE/FALSE。本物に近い程度）
   getDisplayValues() {
     return this.getValues().map(row => row.map(v => v instanceof Date ? (v.getMonth() + 1) + '/' + v.getDate() : v === true ? 'TRUE' : v === false ? 'FALSE' : String(v == null ? '' : v)));

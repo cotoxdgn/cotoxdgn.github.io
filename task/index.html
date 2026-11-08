@@ -63,13 +63,57 @@
       <p class="note foot" id="pjStatus"></p>
     </div>
     <div id="pjDetail" hidden>
-      <div class="pjtop"><button type="button" class="icon-btn" id="pjBack" aria-label="案件の一覧へ戻る">←</button><h2 id="pjName"></h2></div>
+      <div class="pjtop"><button type="button" class="icon-btn" id="pjBack" aria-label="案件の一覧へ戻る">←</button><h2 id="pjName"></h2><button type="button" class="btn ghost sm" id="pjKumi">🛤 組み立てる</button></div>
       <div class="hero" id="pjHero"></div>
       <div class="gw" id="pjGw"><div class="g" id="pjGantt"></div></div>
       <p class="note">横にすべらせると前後の週。名前を押すと中のタスクが開きます。赤い縦線が今日。</p>
       <div class="card sub" id="pjGroupBox" hidden><p class="lbl" id="pjGroupLbl"></p><div id="pjGroupList"></div></div>
       <div class="card sub" id="pjNextBox" hidden></div>
       <div class="card sub" id="pjMsBox" hidden></div>
+    </div>
+  </div>
+
+  <!-- 工程の組み立て（路線図）。下書きのまま動かし、「反映」でタスク表に書く -->
+  <div id="kmView" hidden>
+    <div class="kmbar">
+      <div class="kmttl"><h2 id="kmTitle"></h2><span class="kmpill" id="kmPill"></span></div>
+      <div class="kmbtns"><button type="button" class="btn ghost sm" id="kmUndo">元に戻す</button><button type="button" class="btn ghost sm" id="kmCancel">やめる</button><button type="button" class="btn sm" id="kmApply">反映…</button></div>
+    </div>
+    <div class="kmsplit">
+      <div class="kmcol">
+        <div class="card sub">
+          <p class="lbl">工程（⋮⋮ をつまんで動かす ・ 押すと直せる）</p>
+          <p class="note" id="kmDone"></p>
+          <div class="kroute" id="kmRoute"></div>
+          <div class="krow">
+            <button type="button" class="btn ghost sm" id="kmAdd">＋ 駅を足す</button>
+            <button type="button" class="btn ghost sm" id="kmAddMs">＋ ◆を足す</button>
+            <select id="kmTmplSel" class="ksel" aria-label="ひな形から足す"></select>
+          </div>
+          <datalist id="kmParents"></datalist>
+        </div>
+        <div class="card sub" id="kmExBox" hidden><p class="lbl">外したもの（行は消しません）</p><div id="kmEx"></div></div>
+        <div class="card sub">
+          <button type="button" class="btn ghost sm" id="kmTmplBtn">この並びをひな形として保存</button>
+          <div id="kmTmplSave" hidden>
+            <div class="f"><label for="kmTmplName">ひな形の名前</label><input id="kmTmplName" maxlength="40"></div>
+            <label class="chk"><input type="checkbox" id="kmTmplEx"> 外したものも入れる</label>
+            <div class="krow"><button type="button" class="btn ghost sm" id="kmTmplCancel">やめる</button><button type="button" class="btn sm" id="kmTmplGo">保存する</button></div>
+            <div class="delask" id="kmTmplAsk"></div>
+          </div>
+        </div>
+      </div>
+      <div class="kmcol">
+        <div class="card sub"><p class="lbl">動かす前のヒント（今の並びから見つけたもの）</p><div class="ktips" id="kmHints"></div></div>
+        <div class="card sub">
+          <p class="lbl">動かした結果</p>
+          <div id="kmMs"></div>
+          <p class="lbl">1日の工（この先の稼働日・上限7h・余白1h）</p>
+          <div class="kload" id="kmLoad"></div>
+          <div class="kloadlbl" id="kmLoadLbl"></div>
+          <p class="note"><span class="sw-mine"></span>この案件　<span class="sw-other"></span>ほかの案件</p>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -352,6 +396,17 @@
   <button type="button" class="btn ghost" id="confClose">閉じる</button>
 </div>
 
+<!-- 組み立ての反映前の確認 -->
+<div class="sheet" id="kmConf" role="dialog" aria-modal="true" aria-labelledby="kmConfTtl" hidden>
+  <span class="grab"></span>
+  <h3 id="kmConfTtl">反映の前に確認</h3>
+  <p class="note" id="kmConfLead"></p>
+  <p class="gainline" id="kmConfGain"></p>
+  <div class="chg" id="kmChg"></div>
+  <p class="note">完了済みのタスクは動かしません。「外す」は行を消さず、📅を空にして詳細に「🚫外す」を付けます。</p>
+  <div id="kmConfAsk"></div>
+</div>
+
 <!-- 完了にした瞬間：その案件が進んだことを見せる -->
 <div class="pop" id="pop" role="status" hidden>
   <b id="popTitle"></b>
@@ -363,5 +418,6 @@
 
 <div class="toast" id="toast" role="status" hidden></div>
 <script src="app.js"></script>
+<script src="kumitate.js"></script>
 </body>
 </html>
