@@ -664,6 +664,7 @@
           var fi = el('i'); fi.style.width = pct(x.r) + '%'; gb.appendChild(fi); tr.appendChild(gb);
         }
       }
+      if (!x.s) tr.appendChild(el('span', 'nodate', '📅 未定（組み立てで日付が入ります）'));
       var tl = el('span', 'todayln'); tl.style.left = px(today) + 'px'; tr.appendChild(tl);
       g.appendChild(nm); g.appendChild(tr);
     });
