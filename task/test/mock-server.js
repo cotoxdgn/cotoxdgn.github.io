@@ -8,6 +8,7 @@ makeGas.fillExample(g.sh);
 const now = new Date(); const D = n => new Date(now.getFullYear(), now.getMonth(), now.getDate() + n);
 [[5, -2], [6, 0], [7, 0], [8, 3], [9, -10]].forEach(([r, n]) => { g.sh.cell(r, 6).v = D(n); });
 const rs = makeGas.fillRecur(g.ss);
+const wk = g.ss.insertSheet('_週次ガントチャート'); ['例）案件C', '例）案件B', '例）案件A'].forEach((v, i) => { wk.cell(5 + i, 1).v = v; });
 g.ctx.taskApiSetup();
 if (process.argv[3] === 'actual') g.ctx.taskApiAddActualColumn();
 const key = g.props.TASK_API_KEY;

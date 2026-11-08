@@ -16,6 +16,7 @@ payload = base64.urlsafe_b64encode(json.dumps({'u': EXEC, 'k': key, 'n': '_タ�
 recur = lambda: json.loads(urllib.request.urlopen(f'http://127.0.0.1:{API}/__recur').read())
 sheet = lambda: json.loads(urllib.request.urlopen(f'http://127.0.0.1:{API}/__sheet').read())
 ok = 0
+APP = os.environ.get('APPDIR', 'task')   # task2 でも同じ試験を回す（APPDIR=task2）
 def check(name, cond):
     global ok
     if not cond: raise AssertionError(name)
@@ -37,14 +38,14 @@ try:
         errs = []
         pg.on('pageerror', lambda e: errs.append(str(e)))
 
-        pg.goto(f'http://127.0.0.1:{WEB}/task/')
+        pg.goto(f'http://127.0.0.1:{WEB}/{APP}/')
         check('未接続なら接続画面', pg.locator('#connect').is_visible() and not pg.locator('#app').is_visible())
 
-        pg.goto(f'http://127.0.0.1:{WEB}/task/#t={payload}')
+        pg.goto(f'http://127.0.0.1:{WEB}/{APP}/#t={payload}')
         pg.wait_for_selector('#todayList .task')
         check('接続後 #t= が URL から消える', '#t=' not in pg.url)
         check('接続設定は task.conn.v1 に保存（共通の apps.conn.v1 には入れない）',
-              pg.evaluate("!!localStorage.getItem('task.conn.v1') && !localStorage.getItem('apps.conn.v1')"))
+              pg.evaluate("!!localStorage.getItem('" + APP + ".conn.v1') && !localStorage.getItem('apps.conn.v1')"))
         check('持ち越し1件', pg.locator('#carry .task').count() == 1)
         check('今日の未完了1件', pg.locator('#todayList .task').count() == 1)
         check('今日完了1件', pg.locator('#doneList .task').count() == 1)
@@ -192,6 +193,8 @@ try:
         check('案件の一覧が出る（今日の画面は隠れる）', pg.locator('#pjList .pjc').count() >= 1 and not pg.locator('#app').is_visible())
         check('作業時間（h）を出さない', 'h' not in pg.inner_text('#pjList').replace('ToDo', ''))
         pg.screenshot(path=OUT.replace('.png', '-pj.png'))
+        names = [n.strip() for n in pg.locator('#pjList .pjc .pjh b').all_inner_texts()]
+        check('案件は週次シートA列の順（優先順）', names[:3] == ['例）案件C', '例）案件B', '例）案件A'])
         check('案件の棒の下に直近のタスク（3つまで）', 1 <= pg.locator('#pjList .pjc').first.locator('.pjt').count() <= 3)
         tcard = pg.locator('#pjList .pjc', has_text='例）案件C')
         if tcard.locator('.pjt:not(.locked) .cb').count():

@@ -462,4 +462,13 @@ t('list withPj：案件のガント用の全タスクを同じ読み込みで返
   assert.deepStrictEqual(snap(), before); assert.strictEqual(sh.writes.length, 0);
   assert.strictEqual(call({ key: KEY, action: 'list' }).all, undefined, 'withPj なしでは付けない');
 });
+
+t('案件の並び順：週次シートのA列（5行目から）の順を返す', () => {
+  const ss = ctx.SpreadsheetApp.openById('1all9BRCbemXapdhjBidydCAjPbw26pNmmyi0wbxk66Q');
+  const w = ss.insertSheet('_週次ガントチャート');
+  w.cell(4, 1).v = '案件名'; ['例）案件C', '例）案件A', '', '例）案件A', '例）案件B'].forEach((v, i) => { w.cell(5 + i, 1).v = v; });
+  const r = call({ key: KEY, action: 'list', withPj: true });
+  assert.deepStrictEqual(r.pjOrder, ['例）案件C', '例）案件A', '例）案件B']);
+  assert.deepStrictEqual(call({ key: KEY, action: 'pj' }).pjOrder, ['例）案件C', '例）案件A', '例）案件B']);
+});
 console.log(`\n${passed} passed`);

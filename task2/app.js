@@ -24,6 +24,7 @@
     bad_type: '繰り返しを選んでください', bad_when: '曜日・日を選んでください', bad_range: '終了日は開始日より後にしてください'
   };
   var $ = function (id) { return document.getElementById(id); };
+  var lastLoad = 0, pjAt = 0, pjOrder = null;   // pjOrder：週次シートA列の案件の順（上ほど優先）   // 最後に読み込んだ時刻（同じものを何度も取りに行かない）
   var state = { tasks: [], projects: [], today: '', actualColumn: false, loaded: false, preOptions: [], people: [], waitColumn: true, preColumn: true };
 
   // ---------- 端末内の保存（失敗しても動く） ----------
@@ -185,7 +186,10 @@
 
   function load(quiet) {
     if (!quiet) $('status').textContent = '読み込み中…';
-    return api('list').then(function (d) {
+    lastLoad = Date.now();
+    return api('list', { withPj: true }).then(function (d) {
+      if (d.pjOrder) { pjOrder = d.pjOrder; lsSet('task2.pjorder.v1', pjOrder); }
+      if (d.all) { pjData = d.all; pjAt = Date.now(); lsSet('task2.pj.v1', { tasks: pjData, at: pjAt }); if (!$('pjView').hidden) { drawPjList(); if (pjCur) drawPjDetail(); } }
       state.tasks = d.tasks || []; state.projects = d.projects || []; state.actualColumn = !!d.actualColumn; state.loaded = true;
       state.preOptions = d.preOptions || []; state.people = d.people || [];
       state.tomorrow = d.tomorrow || []; state.tomorrowDate = d.tomorrowDate || '';
@@ -539,12 +543,15 @@
     var preWait = function (t) { var m = /^\s*(?:No)?(\d+)/.exec(t.pre || ''); return !!(m && undoneNo[Number(m[1])]); };
     var next = work.filter(function (t) { return !t.done && !t.arc && !preWait(t) && (!t.date || t.date > today); })
       .sort(function (a, b) { return (a.date || '9') < (b.date || '9') ? -1 : (a.date || '9') > (b.date || '9') ? 1 : (a.no || 0) - (b.no || 0); })[0] || null;
+    var upcoming = work.filter(function (t) { return !t.done && !t.arc; })
+      .sort(function (a, b) { var x = a.date || '9', y = b.date || '9'; return x < y ? -1 : x > y ? 1 : (a.no || 0) - (b.no || 0); })
+      .slice(0, 3).map(function (t) { return { t: t, wait: preWait(t) }; });
     var fin = tasks.length > 0 && tasks.every(function (t) { return t.done; });
     var dates = tasks.map(function (t) { return t.date; }).filter(Boolean).sort();
     var lastMs = tasks.filter(isMs).sort(function (a, b) { return (a.date || '') < (b.date || '') ? -1 : 1; }).pop();
     return { name: name, tasks: tasks, total: total, pct: total ? doneW / total : 0, wkPct: total ? wk / total : 0,
       doneN: work.filter(function (t) { return t.done; }).length, n: work.length, ms: ms, remain: remain,
-      late: lateList.length ? { days: dayDiff(lateList[0].date, today), task: lateList[0] } : null, next: next,
+      late: lateList.length ? { days: dayDiff(lateList[0].date, today), task: lateList[0] } : null, next: next, upcoming: upcoming,
       fin: fin, finDate: dates.length ? dates[dates.length - 1] : '', lastMs: lastMs ? lastMs.todo.replace(/^\s*(◆|【確認】)\s*/, '') : '' };
   }
   function pjAll() {
@@ -555,7 +562,7 @@
   function msName(t) { return t.todo.replace(/^\s*(◆|【確認】)\s*/, ''); }
   function loadPj(quiet) {
     if (!quiet) $('pjStatus').textContent = '読み込み中…';
-    return api('pj').then(function (d) { pjData = d.tasks || []; lsSet('task2.pj.v1', { tasks: pjData, at: Date.now() }); $('pjStatus').textContent = ''; return pjData; },
+    return api('pj').then(function (d) { pjData = d.tasks || []; pjAt = Date.now(); if (d.pjOrder) { pjOrder = d.pjOrder; lsSet('task2.pjorder.v1', pjOrder); } lsSet('task2.pj.v1', { tasks: pjData, at: pjAt }); $('pjStatus').textContent = ''; return pjData; },
       function (e) { $('pjStatus').textContent = errText(e) + (pjData ? '（前回の内容を表示中）' : ''); throw e; });
   }
   function showTab(which) {
@@ -568,21 +575,26 @@
     if (pj) {
       if (!pjData) { var c = lsGet('task2.pj.v1'); if (c && c.tasks) pjData = c.tasks; }
       drawPjList(); if (pjCur) drawPjDetail();
-      loadPj(!!pjData).then(function () { drawPjList(); if (pjCur) drawPjDetail(); }, function () {});
+      if (!pjData || Date.now() - pjAt > 60000) loadPj(!!pjData).then(function () { drawPjList(); if (pjCur) drawPjDetail(); }, function () {});
     }
   }
   function drawPjList() {
     var all = pjAll(), act = all.filter(function (p) { return !p.fin; }), fin = all.filter(function (p) { return p.fin; });
-    act.sort(function (a, b) {   // おくれている案件 → 次の◆が近い案件 の順
+    if (!pjOrder) pjOrder = lsGet('task2.pjorder.v1') || [];
+    act.sort(function (a, b) {   // 週次シートA列の順（優先順位）→ 載っていない案件は、おくれている → 次の◆が近い の順
+      var ia = pjOrder.indexOf(a.name), ib = pjOrder.indexOf(b.name);
+      if (ia < 0) ia = 1e6; if (ib < 0) ib = 1e6;
+      if (ia !== ib) return ia - ib;
       var d = (b.late ? 1 : 0) - (a.late ? 1 : 0); if (d) return d;
       var x = (a.ms && a.ms.date) || '9', y = (b.ms && b.ms.date) || '9'; return x < y ? -1 : x > y ? 1 : 0;
     });
     fin.sort(function (a, b) { return a.finDate < b.finDate ? 1 : -1; });
-    $('pjActiveLbl').textContent = '進行中 ' + act.length + '件';
+    $('pjActiveLbl').textContent = '進行中 ' + act.length + '件' + (pjOrder.length ? '（週次シートの順＝優先順）' : '');
     $('pjEmpty').hidden = !!all.length || !pjData;
     var box = $('pjList'); box.innerHTML = '';
     act.forEach(function (p) {
-      var b = el('button', 'pjc'); b.type = 'button';
+      var card = el('div', 'pjc'), b = el('div', 'pjtap');
+      b.setAttribute('role', 'button'); b.tabIndex = 0; b.setAttribute('aria-label', p.name + ' のガントを開く');
       var hd = el('div', 'pjh'); hd.appendChild(el('b', '', p.name)); hd.appendChild(el('span', 'pct', pct(p.pct) + '%')); b.appendChild(hd);
       var bar = el('div', 'bar'); var i1 = el('i'); i1.style.width = pct(p.pct - p.wkPct) + '%'; var i2 = el('i', 'wk'); i2.style.width = pct(p.wkPct) + '%';
       bar.appendChild(i1); bar.appendChild(i2); b.appendChild(bar);
@@ -592,8 +604,29 @@
       if (p.ms) ch.appendChild(el('span', 'chip ms', '◆ ' + msName(p.ms).slice(0, 14) + 'まで 残り' + p.remain.length + '件'));
       b.appendChild(ch);
       b.appendChild(el('p', 'pjfoot', '完了 ' + p.doneN + ' / ' + p.n + '件' + (p.late ? ' ・ おくれは「' + childOf(p.late.task).slice(0, 20) + '」' : (p.next ? ' ・ 次の一歩：' + childOf(p.next).slice(0, 20) : ''))));
-      b.addEventListener('click', function () { pjCur = p.name; pjOpenGroup = ''; drawPjDetail(); });
-      box.appendChild(b);
+      var go = function () { pjCur = p.name; pjOpenGroup = ''; drawPjDetail(); };
+      b.addEventListener('click', go);
+      b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+      card.appendChild(b);
+      // 直近のタスク3つ（ここから直接完了にできる）
+      if (p.upcoming.length) {
+        var ul = el('div', 'pjtasks'), today = state.today || localYmd();
+        p.upcoming.forEach(function (u) {
+          var t = u.t, row = el('div', 'pjt' + (u.wait ? ' locked' : ''));
+          var cb = el('button', 'cb'); cb.type = 'button'; cb.appendChild(el('span', ''));
+          cb.setAttribute('aria-label', u.wait ? '前提待ちのため完了にできません：' + t.todo : '完了にする：' + t.todo);
+          cb.addEventListener('click', function () {
+            if (u.wait) { toast('前提のタスクがまだ終わっていません。前提を完了にすると、完了にできます'); return; }
+            openSheet({ no: t.no, todo: t.todo, pj: t.pj, date: t.date, ko: t.ko, slot: '', done: false });
+          });
+          row.appendChild(cb);
+          row.appendChild(el('span', 'tt', childOf(t)));
+          row.appendChild(el('span', 'd' + (t.date && t.date < today ? ' late' : ''), t.date ? (t.date === today ? '今日' : md(t.date)) : '📅未定'));
+          ul.appendChild(row);
+        });
+        card.appendChild(ul);
+      }
+      box.appendChild(card);
     });
     var fb = $('pjDone'); fb.innerHTML = ''; $('pjDoneLbl').hidden = !fin.length;
     fin.slice(0, 8).forEach(function (p) {
@@ -719,7 +752,8 @@
   function hidePop() { clearTimeout(popTimer); $('pop').hidden = true; popNext = null; }
   function showProgress(t) {
     if (!t.pj) return;
-    loadPj(true).then(function (tasks) {
+    (pjData ? Promise.resolve(pjData) : loadPj(true)).then(function (tasks) {
+      tasks.forEach(function (x) { if (x.no === t.no && x.todo === t.todo) x.done = true; });   // 手元の分を完了にする（通信しない）
       var mine = tasks.filter(function (x) { return x.pj === t.pj && (x.detail || '').indexOf('🚫外す') < 0; });
       var me = mine.filter(function (x) { return x.no === t.no && x.todo === t.todo; })[0];
       if (!me) return;
@@ -743,7 +777,7 @@
     api: api, el: el, toast: toast, errText: errText, md: md, dow: dow, h: h, reqId: reqId,
     today: function () { return state.today || localYmd(); },
     pjTasks: function () { return pjData; },
-    refreshPj: function (pj) { pjCur = pj; showTab('pj'); load(true); }
+    refreshPj: function (pj) { pjCur = pj; pjAt = Date.now(); showTab('pj'); load(true); }
   };
   $('pjKumi').addEventListener('click', function () {
     if (!window.KumiUI || !pjCur) return;
@@ -979,7 +1013,7 @@
   $('wsSlot').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; wslot = b.getAttribute('data-s'); drawSlot(); });
   $('wsTime').addEventListener('change', function () { if (this.value) { wslot = this.value; drawSlot(); } });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('dim').hidden) closeSheet(); });
-  $('reload').addEventListener('click', function () { if (conn()) load(); });
+  $('reload').addEventListener('click', function () { if (conn()) { pjAt = 0; load(); } });
   $('settings').addEventListener('click', function () { if (conn()) openConf(); else $('scanBtn').focus(); });
   $('confClose').addEventListener('click', closeSheet);
   $('qrBtn').addEventListener('click', showQr);
@@ -991,7 +1025,7 @@
   $('photoBtn').addEventListener('click', function () { $('photo').click(); });
   $('photo').addEventListener('change', fromPhoto);
   $('pasteBtn').addEventListener('click', function () { finishConnect(parseConnect($('paste').value)); });
-  document.addEventListener('visibilitychange', function () { if (!document.hidden && conn() && $('sheet').hidden) load(true); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && conn() && $('sheet').hidden && Date.now() - lastLoad > 60000) load(true); });
 
   window.addEventListener('hashchange', function () { if (consumeHash()) { start(); toast('この端末をつなぎました'); } });
   var hashed = consumeHash();

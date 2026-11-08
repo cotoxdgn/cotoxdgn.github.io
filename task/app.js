@@ -24,7 +24,7 @@
     bad_type: '繰り返しを選んでください', bad_when: '曜日・日を選んでください', bad_range: '終了日は開始日より後にしてください'
   };
   var $ = function (id) { return document.getElementById(id); };
-  var lastLoad = 0, pjAt = 0;   // 最後に読み込んだ時刻（同じものを何度も取りに行かない）
+  var lastLoad = 0, pjAt = 0, pjOrder = null;   // pjOrder：週次シートA列の案件の順（上ほど優先）   // 最後に読み込んだ時刻（同じものを何度も取りに行かない）
   var state = { tasks: [], projects: [], today: '', actualColumn: false, loaded: false, preOptions: [], people: [], waitColumn: true, preColumn: true };
 
   // ---------- 端末内の保存（失敗しても動く） ----------
@@ -186,6 +186,7 @@
     if (!quiet) $('status').textContent = '読み込み中…';
     lastLoad = Date.now();
     return api('list', { withPj: true }).then(function (d) {
+      if (d.pjOrder) { pjOrder = d.pjOrder; lsSet('task.pjorder.v1', pjOrder); }
       if (d.all) { pjData = d.all; pjAt = Date.now(); lsSet('task.pj.v1', { tasks: pjData, at: pjAt }); if (!$('pjView').hidden) { drawPjList(); if (pjCur) drawPjDetail(); } }
       state.tasks = d.tasks || []; state.projects = d.projects || []; state.actualColumn = !!d.actualColumn; state.loaded = true;
       state.preOptions = d.preOptions || []; state.people = d.people || [];
@@ -558,7 +559,7 @@
   function msName(t) { return t.todo.replace(/^\s*(◆|【確認】)\s*/, ''); }
   function loadPj(quiet) {
     if (!quiet) $('pjStatus').textContent = '読み込み中…';
-    return api('pj').then(function (d) { pjData = d.tasks || []; pjAt = Date.now(); lsSet('task.pj.v1', { tasks: pjData, at: pjAt }); $('pjStatus').textContent = ''; return pjData; },
+    return api('pj').then(function (d) { pjData = d.tasks || []; pjAt = Date.now(); if (d.pjOrder) { pjOrder = d.pjOrder; lsSet('task.pjorder.v1', pjOrder); } lsSet('task.pj.v1', { tasks: pjData, at: pjAt }); $('pjStatus').textContent = ''; return pjData; },
       function (e) { $('pjStatus').textContent = errText(e) + (pjData ? '（前回の内容を表示中）' : ''); throw e; });
   }
   function showTab(which) {
@@ -576,12 +577,16 @@
   }
   function drawPjList() {
     var all = pjAll(), act = all.filter(function (p) { return !p.fin; }), fin = all.filter(function (p) { return p.fin; });
-    act.sort(function (a, b) {   // おくれている案件 → 次の◆が近い案件 の順
+    if (!pjOrder) pjOrder = lsGet('task.pjorder.v1') || [];
+    act.sort(function (a, b) {   // 週次シートA列の順（優先順位）→ 載っていない案件は、おくれている → 次の◆が近い の順
+      var ia = pjOrder.indexOf(a.name), ib = pjOrder.indexOf(b.name);
+      if (ia < 0) ia = 1e6; if (ib < 0) ib = 1e6;
+      if (ia !== ib) return ia - ib;
       var d = (b.late ? 1 : 0) - (a.late ? 1 : 0); if (d) return d;
       var x = (a.ms && a.ms.date) || '9', y = (b.ms && b.ms.date) || '9'; return x < y ? -1 : x > y ? 1 : 0;
     });
     fin.sort(function (a, b) { return a.finDate < b.finDate ? 1 : -1; });
-    $('pjActiveLbl').textContent = '進行中 ' + act.length + '件';
+    $('pjActiveLbl').textContent = '進行中 ' + act.length + '件' + (pjOrder.length ? '（週次シートの順＝優先順）' : '');
     $('pjEmpty').hidden = !!all.length || !pjData;
     var box = $('pjList'); box.innerHTML = '';
     act.forEach(function (p) {

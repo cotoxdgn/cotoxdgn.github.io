@@ -59,6 +59,8 @@ var TASKAPI = {
   SPREADSHEET_ID: '1all9BRCbemXapdhjBidydCAjPbw26pNmmyi0wbxk66Q',
   SHEET_NAME: '_日次ガントチャート',
   APP_URL: 'https://cotoxdgn.github.io/task/',
+  APP_TITLE: '',        // アプリの上に出す名前（空ならスプシの名前）。公開するコードには名前を書かず、デプロイ先でここに入れる
+  ARCHIVE_OFF: false,   // true：完了行の移動（アーカイブ）をしない（スプシ側の別の仕組みに任せる表のとき）
   TZ: 'Asia/Tokyo',
   HEADER_ROW: 1,   // 見出し行
   INSERT_ROW: 4,   // 旧方式の挿入行（2026-11-05 以降は使っていない）
@@ -87,6 +89,7 @@ var TASKAPI = {
   KOUTEI: { FILES: { '1_kvC8TW': '1_kvC8TWc3dJ2w2uPX2g1NUjP8UZBUNRpL-ZfW45x4m8' }, SHEET: '工程表', HEAD_ROW: 7 },
   EXCLUDE_TAG: '🚫外す',
   ARCHIVE: { SHEET: '_完了アーカイブ', DAYS: 30, PROP_LAST: 'TASK_ARCHIVE_LAST' },
+  WEEKLY: { SHEET: '_週次ガントチャート', FIRST_ROW: 5 },   // 案件の並び順＝週次シートのA列の順（上ほど優先）
   WEIGHT_CELLS: 200000,   // シートの重さの目安（日次ガントの 行×列）。これを100%として表示する
   RECUR: { SHEET: '_定期タスク', LOG: '_定期ログ', TYPES: ['毎週', '毎日', '平日', '毎月'], WIDTH: 10, WDAYS: '月火水木金土日' }
 };
@@ -179,7 +182,7 @@ function taskApi_connectLink() {
   try { url = ScriptApp.getService().getUrl() || ''; } catch (e) { url = ''; }
   if (!/\/exec$/.test(url) && TASKAPI.EXEC_URL) url = String(TASKAPI.EXEC_URL).trim();
   if (!key || !/\/exec$/.test(url)) return '';
-  var payload = JSON.stringify({ u: url, k: key, n: SpreadsheetApp.openById(TASKAPI.SPREADSHEET_ID).getName() });
+  var payload = JSON.stringify({ u: url, k: key, n: TASKAPI.APP_TITLE || SpreadsheetApp.openById(TASKAPI.SPREADSHEET_ID).getName() });
   return TASKAPI.APP_URL + '#t=' + Utilities.base64EncodeWebSafe(Utilities.newBlob(payload).getBytes()).replace(/=+$/, '');
 }
 
@@ -219,13 +222,13 @@ function taskApi_handle(req) {
     try {
       var rsh = taskApi_sheet(), rres;
       switch (req.action) {
-        case 'ping': rres = { name: rsh.getParent().getName(), actualColumn: !!taskApi_findCol(taskApi_heads(rsh), TASKAPI.ACTUAL_HEADER, true) }; break;
+        case 'ping': rres = { name: TASKAPI.APP_TITLE || rsh.getParent().getName(), actualColumn: !!taskApi_findCol(taskApi_heads(rsh), TASKAPI.ACTUAL_HEADER, true) }; break;
         case 'list': rres = taskApi_list(rsh, req.withPj === true); break;
         case 'pj': rres = taskApi_pj(rsh); break;
         case 'weight': rres = taskApi_weight(rsh); break;
         case 'recurList': rres = taskApi_recurList(); break;
         case 'tmplList': rres = taskApi_tmplList(); break;
-        case 'archivePreview': rres = taskApi_archivePreview(rsh); break;
+        case 'archivePreview': rres = TASKAPI.ARCHIVE_OFF ? { items: [], total: 0, days: TASKAPI.ARCHIVE.DAYS } : taskApi_archivePreview(rsh); break;
       }
       if (rres.error) return rres.detail ? { ok: false, error: rres.error, detail: rres.detail } : { ok: false, error: rres.error };
       rres.ok = true; rres.today = taskApi_ymd(new Date());
@@ -241,7 +244,7 @@ function taskApi_handle(req) {
     var sh = taskApi_sheet();
     var res;
     switch (req.action) {
-      case 'ping': res = { name: sh.getParent().getName(), actualColumn: !!taskApi_findCol(taskApi_heads(sh), TASKAPI.ACTUAL_HEADER, true) }; break;
+      case 'ping': res = { name: TASKAPI.APP_TITLE || sh.getParent().getName(), actualColumn: !!taskApi_findCol(taskApi_heads(sh), TASKAPI.ACTUAL_HEADER, true) }; break;
       case 'list': res = taskApi_list(sh); break;
       case 'add': res = taskApi_add(sh, req); break;
       case 'done': res = taskApi_setDone(sh, req, true); break;
@@ -254,8 +257,8 @@ function taskApi_handle(req) {
       case 'recurToggle': res = taskApi_recurToggle(req); break;
       case 'pj': res = taskApi_pj(sh); break;
       case 'weight': res = taskApi_weight(sh); break;
-      case 'archivePreview': res = taskApi_archivePreview(sh); break;
-      case 'archiveRun': res = taskApi_archiveRun(sh, req); break;
+      case 'archivePreview': res = TASKAPI.ARCHIVE_OFF ? { items: [], total: 0, days: TASKAPI.ARCHIVE.DAYS } : taskApi_archivePreview(sh); break;
+      case 'archiveRun': res = TASKAPI.ARCHIVE_OFF ? { moved: 0 } : taskApi_archiveRun(sh, req); break;
       case 'tmplList': res = taskApi_tmplList(); break;
       case 'tmplSave': res = taskApi_tmplSave(req); break;
       case 'kumitate': res = taskApi_kumitate(sh, req); break;
@@ -420,7 +423,7 @@ function taskApi_list(sh, withPj) {
   all.forEach(function (t) { if (t.wait && !pseen[t.wait]) { pseen[t.wait] = true; people.push(t.wait); } });
   var out = { tasks: tasks, tomorrow: tomorrow, tomorrowDate: tomorrowDate, projects: pjs, actualColumn: !!c.actual, preOptions: preOptions, people: people.slice(0, 30),
     waitColumn: !!c.wait, preColumn: !!c.pre };
-  if (withPj) out.all = taskApi_pjFrom(all).tasks;   // 案件のガント用（同じ読み込みを使い回す＝もう1回通信しない）
+  if (withPj) { out.all = taskApi_pjFrom(all).tasks; out.pjOrder = taskApi_pjOrder(); }   // 案件のガント用（同じ読み込みを使い回す＝もう1回通信しない）
   return out;
 }
 
@@ -604,6 +607,7 @@ function taskApi_setDone(sh, req, done) {
   var t = taskApi_findTask(sh, c, req);
   if (!t) return { error: 'not_found' };
   sh.getRange(t.row, c.done).setValue(done);
+  taskApi_stampDoneDate_(sh, t.row, done);   // 「✔日」「完了日」の列がある表だけ、完了した日を入れる／外したら消す
   var res = { task: null, actualSaved: false };
   if (done && req.actual !== undefined && req.actual !== null && req.actual !== '') {
     var a = taskApi_writeActual(sh, c, t.row, req.actual);
@@ -681,6 +685,20 @@ function taskApi_remove(sh, req) {
   return { removed: { no: t.no, todo: t.todo } };
 }
 
+/** 「✔日」または「完了日」の列があれば、完了にした日を入れる（すでに入っていればそのまま）。完了を外したら消す。列がなければ何もしない */
+function taskApi_stampDoneDate_(sh, row, done) {
+  var heads = taskApi_heads(sh);
+  var col = taskApi_findCol(heads, '✔日', true) || taskApi_findCol(heads, '完了日', true);
+  if (!col) return;
+  var cell = sh.getRange(row, col);
+  if (done) {
+    if (cell.getValue() === '' || cell.getValue() === null) {
+      var n = new Date();
+      cell.setValue(new Date(n.getFullYear(), n.getMonth(), n.getDate()));
+    }
+  } else cell.setValue('');
+}
+
 function taskApi_actual(sh, req) {
   var c = taskApi_cols(sh);
   var t = taskApi_findTask(sh, c, req);
@@ -702,7 +720,17 @@ function taskApi_writeActual(sh, c, row, value) {
 
 // ---------- 案件ごとのガント（2026-11-08） ----------
 // 全タスク（日次ガント＋アーカイブ）の、ガントに要る列だけを返す。集計はアプリ側で行う
-function taskApi_pj(sh) { return taskApi_pjFrom(taskApi_readAll(sh, taskApi_cols(sh))); }
+function taskApi_pj(sh) { var r = taskApi_pjFrom(taskApi_readAll(sh, taskApi_cols(sh))); r.pjOrder = taskApi_pjOrder(); return r; }
+// 週次シートのA列（5行目から下）の案件名を上から順に。案件の一覧はこの順に並べる（読むだけ）
+function taskApi_pjOrder() {
+  var w = SpreadsheetApp.openById(TASKAPI.SPREADSHEET_ID).getSheetByName(TASKAPI.WEEKLY.SHEET);
+  if (!w) return [];
+  var last = w.getLastRow(), f = TASKAPI.WEEKLY.FIRST_ROW;
+  if (last < f) return [];
+  var seen = {}, out = [];
+  w.getRange(f, 1, last - f + 1, 1).getDisplayValues().forEach(function (r) { var v = String(r[0] || '').trim(); if (v && !seen[v]) { seen[v] = 1; out.push(v.slice(0, 60)); } });
+  return out.slice(0, 200);
+}
 function taskApi_pjFrom(rows) {
   var slim = function (t, arc) { return { no: t.no, done: t.done, pj: t.pj.slice(0, 60), todo: t.todo.slice(0, 120), ko: t.ko, date: t.date, pre: t.pre, wait: t.wait ? 1 : 0, detail: t.detail.slice(0, 200), arc: arc || undefined }; };
   var out = rows.map(function (t) { return slim(t); });
@@ -720,7 +748,7 @@ function taskApi_weight(sh) {
   var tasks = taskApi_readAll(sh, c);
   var last = PropertiesService.getScriptProperties().getProperty(TASKAPI.ARCHIVE.PROP_LAST) || '';
   return { rows: rows, cols: cols, cells: rows * cols, limit: TASKAPI.WEIGHT_CELLS, tasks: tasks.length,
-    doneTasks: tasks.filter(function (t) { return t.done; }).length, archiveCandidates: taskApi_archivePick(sh, c, tasks).length, lastArchive: last };
+    doneTasks: tasks.filter(function (t) { return t.done; }).length, archiveCandidates: TASKAPI.ARCHIVE_OFF ? 0 : taskApi_archivePick(sh, c, tasks).length, lastArchive: last };
 }
 
 function taskApi_archiveSheet(create) {
