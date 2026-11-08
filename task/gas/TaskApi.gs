@@ -1114,7 +1114,10 @@ function taskApi_recurLog(lg, keys) {
 // 日次ガントの今日以降で、PJ・ToDo が同じ行の日付
 function taskApi_recurDays(sh, pj, todo) {
   var c = taskApi_cols(sh), today = taskApi_ymd(new Date()), out = [];
-  taskApi_readAll(sh, c).forEach(function (t) { if (t.date && t.date >= today && t.pj.trim() === pj && t.todo.trim() === todo) out.push(t.date); });
+  taskApi_readAll(sh, c).forEach(function (t) {   // 段階の列がある表は「段階 | ToDo」で比べる（定期タスクの決まりの名前と同じ形）
+    var name = (t.stage ? t.stage + ' | ' : '') + t.todo.trim();
+    if (t.date && t.date >= today && t.pj.trim() === pj && name === todo) out.push(t.date);
+  });
   return out;
 }
 
@@ -1134,7 +1137,8 @@ function taskApi_recurToday(sh, rule) {
   if (taskApi_recurLogged(lg)[key] || taskApi_recurDays(sh, rule.pj, rule.todo).indexOf(today) >= 0) return { added: false, note: 'already' };
   var slot = '';
   for (var k in TASKAPI.SLOTS) if (TASKAPI.SLOTS[k] === rule.time) slot = k;
-  var r = taskApi_add(sh, { todo: rule.todo, pj: rule.pj, ko: rule.ko, date: today, slot: slot, detail: rule.detail });
+  var sp = rule.todo.indexOf(' | ');   // 「段階 | 子」の決まりは分けて足す（段階の列がない表では add が元の形に戻す）
+  var r = taskApi_add(sh, { todo: sp > 0 ? rule.todo.slice(sp + 3) : rule.todo, parent: sp > 0 ? rule.todo.slice(0, sp) : '', pj: rule.pj, ko: rule.ko, date: today, slot: slot, detail: rule.detail });
   if (r.error) return { added: false, note: r.error };
   if (/^\d{1,2}:\d{2}$/.test(rule.time)) {   // 時刻は setWait と同じ「数値の時刻」で書く
     var hm = rule.time.split(':').map(Number), c = taskApi_cols(sh);
