@@ -1176,7 +1176,7 @@ function hikiPublic_(ss) {
       awards.push({ name: str(d.name, 80), url: url(d.url), date: date, tentative: tentative, memo: str(d.memo, 120) });
     });
     awards.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
-    var name = str(setting.publicName, 20) || 'coo';
+    var name = str(setting.publicName, 20) || 'coto';
     return { ok: true, now: now_(), today: today, name: name, updated: updated, cards: cards, awards: awards };
   } catch (err) {
     return { ok: false, error: 'server' };
