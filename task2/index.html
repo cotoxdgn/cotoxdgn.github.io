@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="タスク2">
+<meta name="theme-color" content="#EEF1F3">
+<title>タスク2</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="main">
+  <header class="top">
+    <div>
+      <span class="appname" id="appName" hidden></span>
+      <h1 id="title">今日</h1>
+      <span class="d" id="today"></span>
+    </div>
+    <div class="top-btns">
+      <button type="button" class="icon-btn" id="recurBtn" aria-label="定期タスク">🔁</button>
+      <button type="button" class="icon-btn" id="reload" aria-label="読み込み直す">↻</button>
+      <button type="button" class="icon-btn" id="settings" aria-label="接続の設定">⚙</button>
+    </div>
+  </header>
+
+  <!-- つながっていないとき -->
+  <section id="connect" class="card" hidden>
+    <h2>この端末をつなぐ</h2>
+    <p class="note">パソコンで接続リンクを開いたあと、その画面の「他の端末を追加（QR）」を、このアプリで読み取ります。</p>
+    <p class="note" id="iosHint" hidden>iPhone では、ホーム画面に追加したアイコンから開いてつないでください（Safari でつないでも引き継がれません）。</p>
+    <div class="row">
+      <button type="button" class="btn" id="scanBtn">QRでつなぐ</button>
+      <button type="button" class="btn ghost" id="photoBtn">写真から読み取る</button>
+    </div>
+    <video id="video" playsinline muted hidden></video>
+    <input type="file" id="photo" accept="image/*" hidden>
+    <details>
+      <summary>リンクを貼り付けてつなぐ</summary>
+      <textarea id="paste" rows="2" placeholder="https://cotoxdgn.github.io/task2/#t=…"></textarea>
+      <button type="button" class="btn ghost" id="pasteBtn">つなぐ</button>
+    </details>
+    <p class="msg" id="connectMsg" aria-live="polite"></p>
+  </section>
+
+  <div class="tabs" id="tabs" role="tablist" hidden>
+    <button type="button" role="tab" id="tabToday" aria-selected="true" class="on">今日</button>
+    <button type="button" role="tab" id="tabPj" aria-selected="false">案件</button>
+  </div>
+
+  <!-- 案件ごとのガント（集計はアプリの中。スプシには何も足さない） -->
+  <div id="pjView" hidden>
+    <div id="pjListView">
+      <p class="lbl" id="pjActiveLbl">進行中</p>
+      <div class="list" id="pjList"></div>
+      <p class="empty" id="pjEmpty" hidden>案件（PJ）の入ったタスクがまだありません。</p>
+      <p class="lbl" id="pjDoneLbl" hidden>終わった案件</p>
+      <div class="list" id="pjDone"></div>
+      <p class="note foot" id="pjStatus"></p>
+    </div>
+    <div id="pjDetail" hidden>
+      <div class="pjtop"><button type="button" class="icon-btn" id="pjBack" aria-label="案件の一覧へ戻る">←</button><h2 id="pjName"></h2><button type="button" class="btn ghost sm" id="pjKumi">🛤 組み立てる</button></div>
+      <div class="hero" id="pjHero"></div>
+      <div class="gw" id="pjGw"><div class="g" id="pjGantt"></div></div>
+      <p class="note">横にすべらせると前後の週。名前を押すと中のタスクが開きます。赤い縦線が今日。</p>
+      <div class="card sub" id="pjGroupBox" hidden><p class="lbl" id="pjGroupLbl"></p><div id="pjGroupList"></div></div>
+      <div class="card sub" id="pjNextBox" hidden></div>
+      <div class="card sub" id="pjMsBox" hidden></div>
+    </div>
+  </div>
+
+  <!-- 工程の組み立て（路線図）。下書きのまま動かし、「反映」でタスク表に書く -->
+  <div id="kmView" hidden>
+    <div class="kmbar">
+      <div class="kmttl"><h2 id="kmTitle"></h2><span class="kmpill" id="kmPill"></span></div>
+      <div class="kmbtns"><button type="button" class="btn ghost sm" id="kmUndo">元に戻す</button><button type="button" class="btn ghost sm" id="kmCancel">やめる</button><button type="button" class="btn sm" id="kmApply">反映…</button></div>
+    </div>
+    <div class="kmsplit">
+      <div class="kmcol">
+        <div class="card sub">
+          <p class="lbl">工程（⋮⋮ をつまんで動かす ・ 押すと直せる）</p>
+          <p class="note" id="kmDone"></p>
+          <div class="kroute" id="kmRoute"></div>
+          <div class="krow">
+            <button type="button" class="btn ghost sm" id="kmAdd">＋ 駅を足す</button>
+            <button type="button" class="btn ghost sm" id="kmAddMs">＋ ◆を足す</button>
+            <select id="kmTmplSel" class="ksel" aria-label="ひな形から足す"></select>
+          </div>
+          <datalist id="kmParents"></datalist>
+        </div>
+        <div class="card sub" id="kmExBox" hidden><p class="lbl">外したもの（行は消しません）</p><div id="kmEx"></div></div>
+        <div class="card sub">
+          <button type="button" class="btn ghost sm" id="kmTmplBtn">この並びをひな形として保存</button>
+          <div id="kmTmplSave" hidden>
+            <div class="f"><label for="kmTmplName">ひな形の名前</label><input id="kmTmplName" maxlength="40"></div>
+            <label class="chk"><input type="checkbox" id="kmTmplEx"> 外したものも入れる</label>
+            <div class="krow"><button type="button" class="btn ghost sm" id="kmTmplCancel">やめる</button><button type="button" class="btn sm" id="kmTmplGo">保存する</button></div>
+            <div class="delask" id="kmTmplAsk"></div>
+          </div>
+        </div>
+      </div>
+      <div class="kmcol">
+        <div class="card sub"><p class="lbl">動かす前のヒント（今の並びから見つけたもの）</p><div class="ktips" id="kmHints"></div></div>
+        <div class="card sub">
+          <p class="lbl">動かした結果</p>
+          <div id="kmMs"></div>
+          <p class="lbl">1日の工（この先の稼働日・上限7h・余白1h）</p>
+          <div class="kload" id="kmLoad"></div>
+          <div class="kloadlbl" id="kmLoadLbl"></div>
+          <p class="note"><span class="sw-mine"></span>この案件　<span class="sw-other"></span>ほかの案件</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="app" hidden>
+    <div class="sum" id="sum">
+      <span>未完了<strong id="sOpen">–</strong></span>
+      <span>予定 工<strong id="sKo">–</strong></span>
+      <span>実働<strong id="sAct">–</strong></span>
+    </div>
+
+    <section id="carryBox" hidden>
+      <p class="lbl">持ち越し（昨日以前の未完了）</p>
+      <div class="list" id="carry"></div>
+    </section>
+
+    <section>
+      <p class="lbl" id="todayLbl">今日</p>
+      <div class="list" id="todayList"></div>
+      <p class="empty" id="todayEmpty" hidden>今日のタスクはありません。下の欄から追加できます。</p>
+    </section>
+
+    <section id="tmrBox" hidden>
+      <details id="tmrDet">
+        <summary class="lbl tmrsum" id="tmrLbl">明日</summary>
+        <div class="list" id="tmrList"></div>
+        <p class="empty" id="tmrEmpty" hidden>明日のタスクはありません。</p>
+      </details>
+    </section>
+
+    <section>
+      <p class="lbl">タスクを追加</p>
+      <form class="card add" id="addForm" autocomplete="off">
+        <div class="f">
+          <label for="aTodo">タスク（ToDo）</label>
+          <input id="aTodo" required maxlength="200" placeholder="例）施主へ仕様確認の連絡">
+        </div>
+        <div class="quick-meta" id="quickMeta"></div>
+        <div id="more" hidden>
+          <div class="f">
+            <label for="aPj">案件名（PJ）</label>
+            <input id="aPj" list="pjList" maxlength="60">
+            <datalist id="pjList"></datalist>
+          </div>
+          <div class="f">
+            <label for="aParent">親タスク</label>
+            <input id="aParent" maxlength="100" placeholder="空欄でも可">
+          </div>
+          <div class="f">
+            <label for="aDetail">詳細（メモ・リンク）</label>
+            <input id="aDetail" maxlength="300" placeholder="空欄でも可">
+          </div>
+          <div class="two">
+            <div class="f">
+              <label for="aKo">工（h）</label>
+              <input id="aKo" type="number" inputmode="decimal" step="0.25" min="0" max="24" value="0.5">
+            </div>
+            <div class="f">
+              <label for="aDate">作業日 📅</label>
+              <input id="aDate" type="date">
+            </div>
+          </div>
+          <div class="f">
+            <span class="flabel">時間帯 ⏰</span>
+            <div class="seg" id="aSlot" role="radiogroup" aria-label="時間帯">
+              <button type="button" data-v="朝" class="on" role="radio" aria-checked="true">🌅 朝</button>
+              <button type="button" data-v="昼" role="radio" aria-checked="false">☀️ 昼</button>
+              <button type="button" data-v="夕" role="radio" aria-checked="false">🌙 夕</button>
+              <button type="button" data-v="移動" role="radio" aria-checked="false">🚃 移動</button>
+            </div>
+          </div>
+          <p class="note" id="preview"></p>
+        </div>
+        <p class="note kbd" id="kbdHint">パソコンでは Ctrl＋Enter でも追加できます</p>
+        <div class="row">
+          <button type="button" class="btn ghost" id="moreBtn" aria-expanded="false">詳しく入力</button>
+          <button type="submit" class="btn" id="addBtn">追加する</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="doneBox" hidden>
+      <p class="lbl">今日完了</p>
+      <div class="list" id="doneList"></div>
+    </section>
+    <p class="note foot" id="status"></p>
+  </div>
+</main>
+
+<!-- 完了チェック時のシート -->
+<div class="dim" id="dim" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="shTitle" hidden>
+  <span class="grab"></span>
+  <div>
+    <h3 id="shTitle"></h3>
+    <div class="meta" id="shMeta"></div>
+  </div>
+  <div class="timer" id="shTimer">00:00:00</div>
+  <div class="row">
+    <button type="button" class="btn ghost" id="tToggle">▶ タイマー開始</button>
+    <button type="button" class="btn ghost" id="tReset">リセット</button>
+  </div>
+  <div class="cmp">
+    <div>予定（工）<strong id="shKo">–</strong></div>
+    <div>実働<strong id="shAct">–</strong></div>
+    <div id="shDiffBox">差<strong id="shDiff">–</strong></div>
+  </div>
+  <div class="steps" id="steps">
+    <button type="button" data-d="-0.5">−0.5</button>
+    <button type="button" data-d="-0.1">−0.1</button>
+    <button type="button" data-d="0.1">+0.1</button>
+    <button type="button" data-d="0.5">+0.5</button>
+  </div>
+  <button type="button" class="btn" id="shDone">完了にする</button>
+  <button type="button" class="btn ghost" id="shLater">閉じる（タイマーは続く）</button>
+  <p class="note" id="shNote"></p>
+</div>
+
+<!-- タスクの設定（タスクのチェック以外を押したとき）：📅・⏰・👤・前提 -->
+<div class="sheet" id="wsheet" role="dialog" aria-modal="true" aria-labelledby="wsTitle" hidden>
+  <span class="grab"></span>
+  <div>
+    <h3 id="wsTitle"></h3>
+    <div class="meta" id="wsMeta"></div>
+  </div>
+  <div class="f">
+    <label for="wsTodo">📝 タスク名（D列）</label>
+    <input id="wsTodo" maxlength="200" autocomplete="off">
+  </div>
+  <div class="f">
+    <label for="wsDetail">🗒 詳細（L列：メモ・リンク）</label>
+    <textarea id="wsDetail" rows="2" maxlength="500" placeholder="空欄でも可"></textarea>
+    <p class="note" id="wsDetailNote" hidden>「⛓」から始まる印は工程表とつなぐためのものです。消さずに残してください。</p>
+  </div>
+  <div class="f">
+    <label for="wsDate">📅 作業日（G列）</label>
+    <input id="wsDate" type="date">
+  </div>
+  <div class="f">
+    <span class="flabel">⏰ 時間帯（I列）</span>
+    <div class="seg" id="wsSlot" role="radiogroup" aria-label="時間帯">
+      <button type="button" data-s="朝">🌅 朝</button>
+      <button type="button" data-s="昼">☀️ 昼</button>
+      <button type="button" data-s="夕">🌙 夕</button>
+      <button type="button" data-s="移動">🚃 移動</button>
+      <button type="button" data-s="">なし</button>
+    </div>
+    <div class="timepick"><label for="wsTime">時刻で指定</label><input id="wsTime" type="time" step="900"></div>
+  </div>
+  <div class="f">
+    <label for="wsWho">👤 待ち相手（J列）</label>
+    <input id="wsWho" maxlength="40" placeholder="例）山田さん（空なら待ちなし）" autocomplete="off">
+    <div class="pick" id="wsPeople"></div>
+  </div>
+  <div class="f">
+    <label for="wsPreQ">前提のタスク（K列）</label>
+    <div class="precur" id="wsPreCur"></div>
+    <input id="wsPreQ" type="search" placeholder="番号・名前で探す（未完了のタスク）" autocomplete="off">
+    <button type="button" class="btn ghost sm" id="wsPreAll">一覧から選ぶ</button>
+    <div class="prelist" id="wsPreList"></div>
+  </div>
+  <div class="f delzone">
+    <button type="button" class="btn danger sm" id="wsDel">このタスクを削除</button>
+    <div class="delask" id="wsDelAsk" hidden></div>
+  </div>
+  <div class="sheetfoot">
+    <button type="button" class="btn ghost" id="wsClose">閉じる</button>
+    <button type="button" class="btn" id="wsSave">保存</button>
+  </div>
+</div>
+
+<!-- 定期タスク：スプシの「_定期タスク」表。毎朝8時に今日から2週間分が日次ガントに入る（スプシ側の仕組み） -->
+<div class="sheet" id="rsheet" role="dialog" aria-modal="true" aria-labelledby="rsTitle" hidden>
+  <span class="grab"></span>
+  <h3 id="rsTitle">🔁 定期タスク</h3>
+  <div id="rsListView">
+    <div class="list" id="rsList"></div>
+    <p class="empty" id="rsEmpty" hidden>定期タスクはまだありません。</p>
+    <p class="lbl rsofflbl" id="rsOffLbl" hidden>止めているもの</p>
+    <div class="list" id="rsOff"></div>
+    <p class="note">押すと直せます。右のスイッチで止める／再開。毎朝8時に、今日から2週間分がタスクに入ります。</p>
+    <div class="sheetfoot">
+      <button type="button" class="btn ghost" id="rsClose">閉じる</button>
+      <button type="button" class="btn" id="rsNew">＋ 定期タスクを追加</button>
+    </div>
+  </div>
+  <form id="rsForm" autocomplete="off" hidden>
+    <div class="f">
+      <label for="rTodo">ToDo</label>
+      <input id="rTodo" maxlength="200" placeholder="例）メールの返信">
+    </div>
+    <div class="two">
+      <div class="f">
+        <label for="rPj">PJ</label>
+        <input id="rPj" list="pjList" maxlength="60" placeholder="空欄でも可">
+      </div>
+      <div class="f">
+        <label for="rKo">工（h）</label>
+        <input id="rKo" type="number" inputmode="decimal" step="0.25" min="0" max="24" value="0.5">
+      </div>
+    </div>
+    <div class="f">
+      <span class="flabel">⏰ 時間帯</span>
+      <div class="seg" id="rSlot" role="radiogroup" aria-label="時間帯">
+        <button type="button" data-s="朝">🌅 朝</button>
+        <button type="button" data-s="昼">☀️ 昼</button>
+        <button type="button" data-s="夕">🌙 夕</button>
+        <button type="button" data-s="移動">🚃</button>
+        <button type="button" data-s="">なし</button>
+      </div>
+      <div class="timepick"><label for="rTime">時刻で指定</label><input id="rTime" type="time" step="900"></div>
+    </div>
+    <div class="f">
+      <span class="flabel">繰り返し</span>
+      <div class="seg" id="rType" role="radiogroup" aria-label="繰り返し">
+        <button type="button" data-t="毎日">毎日</button>
+        <button type="button" data-t="平日">平日</button>
+        <button type="button" data-t="毎週">毎週</button>
+        <button type="button" data-t="毎月">毎月</button>
+      </div>
+      <p class="note" id="rTypeNote"></p>
+    </div>
+    <div class="f" id="rWdBox" hidden>
+      <span class="flabel">曜日（いくつでも）</span>
+      <div class="chips7" id="rWd"></div>
+    </div>
+    <div class="f" id="rMdBox" hidden>
+      <span class="flabel">日（いくつでも）</span>
+      <div class="chips7" id="rMd"></div>
+    </div>
+    <div class="two">
+      <div class="f">
+        <label for="rFrom">開始日</label>
+        <input id="rFrom" type="date">
+      </div>
+      <div class="f">
+        <label for="rTo">終了日</label>
+        <input id="rTo" type="date">
+      </div>
+    </div>
+    <p class="note">空欄なら、開始は今日から・終了はなし。</p>
+    <div class="f">
+      <label for="rDetail">詳細（メモ・リンク）</label>
+      <input id="rDetail" maxlength="300" placeholder="空欄でも可">
+    </div>
+    <label class="chk" id="rTodayBox"><input type="checkbox" id="rToday" checked> <span id="rTodayLbl">今日の分もすぐ入れる</span></label>
+    <p class="note" id="rEditNote" hidden>直しても止めても、もうタスクに入っている2週間分はそのまま残ります（いらない分はタスクの方で削除）。</p>
+    <div class="sheetfoot">
+      <button type="button" class="btn ghost" id="rCancel">やめる</button>
+      <button type="submit" class="btn" id="rSave">追加する</button>
+    </div>
+  </form>
+</div>
+
+<!-- 接続の設定 -->
+<div class="sheet" id="conf" role="dialog" aria-modal="true" aria-labelledby="confTitle" hidden>
+  <span class="grab"></span>
+  <h3 id="confTitle">この端末の接続</h3>
+  <p id="confName"></p>
+  <div class="row">
+    <button type="button" class="btn ghost" id="qrBtn">他の端末を追加（QR）</button>
+    <button type="button" class="btn ghost" id="pingBtn">確認</button>
+  </div>
+  <div class="qr" id="qrBox" hidden></div>
+  <div class="f">
+    <span class="flabel">シートの重さ（日次ガントの 行×列）</span>
+    <div class="meter"><div class="bar"><i id="wBar" style="width:0"></i></div><span class="pct" id="wPct">–</span></div>
+    <p class="note" id="wNote">読み込み中…</p>
+    <button type="button" class="btn ghost sm" id="arcBtn" hidden>完了の古い行を移す</button>
+    <div id="arcBox" hidden>
+      <p class="note" id="arcLead"></p>
+      <div class="arclist" id="arcList"></div>
+      <div class="delask" id="arcAsk"></div>
+    </div>
+  </div>
+  <details>
+    <summary>接続を外す</summary>
+    <p class="note">この端末の接続設定だけを消します。スプシのデータは消えません。</p>
+    <button type="button" class="btn danger" id="discBtn">この端末の接続を外す</button>
+  </details>
+  <button type="button" class="btn ghost" id="confClose">閉じる</button>
+</div>
+
+<!-- 組み立ての反映前の確認 -->
+<div class="sheet" id="kmConf" role="dialog" aria-modal="true" aria-labelledby="kmConfTtl" hidden>
+  <span class="grab"></span>
+  <h3 id="kmConfTtl">反映の前に確認</h3>
+  <p class="note" id="kmConfLead"></p>
+  <p class="gainline" id="kmConfGain"></p>
+  <div class="chg" id="kmChg"></div>
+  <p class="note">完了済みのタスクは動かしません。「外す」は行を消さず、📅を空にして詳細に「🚫外す」を付けます。</p>
+  <div id="kmConfAsk"></div>
+</div>
+
+<!-- 完了にした瞬間：その案件が進んだことを見せる -->
+<div class="pop" id="pop" role="status" hidden>
+  <b id="popTitle"></b>
+  <div class="bar"><i id="popBar"></i></div>
+  <span id="popMs"></span>
+  <span class="popnext" id="popNext"></span>
+  <div class="row2"><button type="button" class="btn sm" id="popDo">次も今日やる</button><button type="button" class="btn ghost sm" id="popClose">閉じる</button></div>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="app.js"></script>
+<script src="kumitate.js"></script>
+</body>
+</html>
