@@ -471,4 +471,25 @@ t('案件の並び順：週次シートのA列（5行目から）の順を返す
   assert.deepStrictEqual(r.pjOrder, ['例）案件C', '例）案件A', '例）案件B']);
   assert.deepStrictEqual(call({ key: KEY, action: 'pj' }).pjOrder, ['例）案件C', '例）案件A', '例）案件B']);
 });
+
+t('段階の列がある表：段階と ToDo を分けて読み書きする（ない表は従来どおり「段階 | 子」）', () => {
+  const g = makeGas(); const sh2 = g.sh;
+  const heads = ['No', '完了', 'PJ', '段階', 'ToDo｜全部表示', '詳細', '工', '実働', '📅', '', '⏰', '👤', '前提', '✔日', '10/30'];
+  heads.forEach((h, i) => { sh2.cell(1, i + 1).v = h; });
+  sh2.cell(4, 2).v = false;
+  [[5, [1, false, '細溝邸', 'プラン①', 'たたき台作成', '', 1, '', new Date(2026, 9, 30), '', '🌅', '', '', '']]].forEach(([r, vals]) => vals.forEach((v, i) => { sh2.cell(r, i + 1).v = v; }));
+  g.ctx.taskApiSetup(); const K2 = g.props.TASK_API_KEY;
+  const l = g.call({ key: K2, action: 'list', withPj: true });
+  assert.ok(l.ok, JSON.stringify(l)); assert.strictEqual(l.stageColumn, true);
+  assert.strictEqual(l.tasks[0].stage, 'プラン①'); assert.strictEqual(l.tasks[0].todo, 'たたき台作成');
+  assert.strictEqual(l.all[0].stage, 'プラン①');
+  const a = g.call({ key: K2, action: 'add', pj: '細溝邸', parent: 'プラン②', todo: '修正案', ko: 1, date: '2026-10-30', slot: '朝' });
+  assert.ok(a.ok, JSON.stringify(a)); assert.strictEqual(a.task.stage, 'プラン②'); assert.strictEqual(a.task.todo, '修正案');
+  const k = g.call({ key: K2, action: 'kumitate', pj: '細溝邸', ops: [{ op: 'edit', no: 1, todo: 'たたき台作成', stage: 'プラン②' }] });
+  assert.ok(k.ok, JSON.stringify(k));
+  const after = g.call({ key: K2, action: 'list' }).tasks.find(x => x.no === 1);
+  assert.strictEqual(after.stage, 'プラン②'); assert.strictEqual(after.todo, 'たたき台作成');
+  const d = g.call({ key: K2, action: 'done', no: 1, todo: 'たたき台作成' });
+  assert.ok(d.ok); assert.ok(sh2.peek(after.row, 14).v instanceof Date, '✔日に完了日が入る');
+});
 console.log(`\n${passed} passed`);

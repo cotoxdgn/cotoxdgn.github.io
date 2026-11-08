@@ -154,7 +154,7 @@
     var all = T.pjTasks() || [], today = T.today();
     var mine = all.filter(function (t) { return t.pj === pj && !t.arc; });
     var items = mine.map(function (t) {
-      var d = parseDetail(t.detail), sp = splitTodo(t.todo), ms = isMsTodo(t.todo);
+      var d = parseDetail(t.detail), sp = t.stage ? { parent: t.stage, child: t.todo } : splitTodo(t.todo), ms = isMsTodo(t.todo);
       return { key: t.no + '|' + t.todo, no: t.no, todo: t.todo, parent: ms ? '◆' : (sp.parent || 'そのほか'), child: ms ? msName(t.todo) : sp.child,
         ko: t.ko == null ? 0.5 : t.ko, date: t.date, done: t.done, ms: ms, pre: t.pre, link: /⛓/.test(t.detail),
         ex0: d.ex, ex: d.ex, need0: d.need, need: d.need, wait0: d.wait, wait: d.wait, base: d.base, ko0: t.ko == null ? 0.5 : t.ko, child0: ms ? msName(t.todo) : sp.child, parent0: ms ? '◆' : (sp.parent || 'そのほか') };
@@ -428,7 +428,8 @@
     km.items.forEach(function (x) {
       if (x.done) return;
       var date = now.dates[x.key];
-      var todoNow = x.ms ? '◆' + x.child : (x.parent && x.parent !== 'そのほか' ? x.parent + ' | ' + x.child : x.child);
+      var stageMode = T.stageColumn && T.stageColumn();   // 段階の列がある表は、段階と ToDo を分けて書く
+      var todoNow = x.ms ? '◆' + x.child : (stageMode ? x.child : (x.parent && x.parent !== 'そのほか' ? x.parent + ' | ' + x.child : x.child));
       if (x.isNew) {
         if (x.ex) return;
         ops.push({ op: 'add', parent: x.ms ? '' : (x.parent === 'そのほか' ? '' : x.parent), todo: x.ms ? '◆' + x.child : x.child, ko: x.ms ? 0 : x.ko, date: date,
@@ -440,7 +441,10 @@
       if (!x.ex && x.ex0) ops.push({ op: 'restore', no: x.no, todo: x.todo, date: date, _label: x.todo });
       else if (date && date !== x.date) ops.push({ op: 'date', no: x.no, todo: x.todo, date: date, _from: x.date, _label: x.todo });
       var e = { op: 'edit', no: x.no, todo: x.todo, _label: x.todo }, ch = false;
-      if (x.child !== x.child0 || x.parent !== x.parent0) { e.newTodo = todoNow; ch = true; }
+      if (stageMode) {
+        if (x.child !== x.child0) { e.newTodo = todoNow; ch = true; }
+        if (x.parent !== x.parent0 && !x.ms) { e.stage = x.parent === 'そのほか' ? '' : x.parent; ch = true; }
+      } else if (x.child !== x.child0 || x.parent !== x.parent0) { e.newTodo = todoNow; ch = true; }
       if (x.ko !== x.ko0) { e.ko = x.ko; ch = true; }
       if (x.need !== x.need0 || x.wait !== x.wait0) { e.detail = composeDetail(x.base, x.need, x.wait, false); e._mark = (x.need ? '必要な◆：' + x.need : '必要な◆：なし') + (x.wait ? '・依頼の返事まで ' + x.wait + '日' : ''); ch = true; }
       if (ch) ops.push(e);
@@ -461,7 +465,7 @@
       if (o.op === 'add') sm = T.h(o.ko) + ' ・ 📅 ' + (o.date ? T.md(o.date) : '今日');
       if (o.op === 'exclude') sm = '行は消さず、集計から外します（ひな形づくりの材料として残ります）';
       if (o.op === 'restore') sm = '📅 ' + T.md(o.date) + ' で戻します';
-      if (o.op === 'edit') sm = [o.newTodo ? '名前 → ' + o.newTodo : '', o.ko !== undefined ? '工 → ' + T.h(o.ko) : '', o._mark ? o._mark : ''].filter(Boolean).join(' ・ ');
+      if (o.op === 'edit') sm = [o.newTodo ? '名前 → ' + o.newTodo : '', o.stage !== undefined ? '段階 → ' + (o.stage || 'なし') : '', o.ko !== undefined ? '工 → ' + T.h(o.ko) : '', o._mark ? o._mark : ''].filter(Boolean).join(' ・ ');
       tx.appendChild(el('small', '', sm)); r.appendChild(tx); list.appendChild(r);
     });
     var gain = msList().map(function (m) { var g = workDiff(km.now.dates[m.key], km.before.dates[m.key]); return g ? '◆' + m.child + ' ' + (g > 0 ? g + '日早まる' : -g + '日おそくなる') : ''; }).filter(Boolean);

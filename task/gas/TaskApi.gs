@@ -66,7 +66,8 @@ var TASKAPI = {
   INSERT_ROW: 4,   // 旧方式の挿入行（2026-11-05 以降は使っていない）
   FIRST_ROW: 4,    // ここから下をタスクとして読む
   ACTUAL_HEADER: '実働',
-  PRE_HEADER: '前提', // 前提タスクの列（「No.タイトル」。その No が未完了なら「前提待ち」）
+  PRE_HEADER: '前提',
+  STAGE_HEADER: '段階', // 段階（親タスク）の列。ある表では ToDo に「段階 | 」を付けずに分けて持つ // 前提タスクの列（「No.タイトル」。その No が未完了なら「前提待ち」）
   WAIT_HEADER: '👤',  // 待ち相手の列（空でなければ、アプリに「〇〇待ち」と出す）
   // 見出しの文字で列を探す（列の順番が変わっても動くように）。見つからなければ既定列を使う
   COLS: {
@@ -336,8 +337,10 @@ function taskApi_cols(sh) {
   // 待ち相手（👤）：見つからないときは読まない（違う列を「待ち」と表示しないため、既定列は使わない）
   c.pre = taskApi_findCol(heads, TASKAPI.PRE_HEADER, false);
   c.wait = taskApi_findCol(heads.map(function (x) { return x.replace(/[\uFE0E\uFE0F]/g, ''); }), TASKAPI.WAIT_HEADER, false);
+  // 段階（親タスク）の列：あればそこを段階として読み書きする。なければ ToDo の「段階 | 子」の形（2026-11-08）
+  c.stage = taskApi_findCol(heads, TASKAPI.STAGE_HEADER, true);
   // 読む幅は使う列の一番右まで（右側のガントの日付列は読まない＝行が増えても重くならない）
-  c.width = Math.max(c.no, c.done, c.pj, c.todo, c.ko, c.date, c.slot, c.detail, c.actual || 0, c.pre || 0, c.wait || 0);
+  c.width = Math.max(c.no, c.done, c.pj, c.todo, c.ko, c.date, c.slot, c.detail, c.actual || 0, c.pre || 0, c.wait || 0, c.stage || 0);
   c.heads = heads.length;
   return c;
 }
@@ -376,6 +379,7 @@ function taskApi_rowToTask(row, v, c, today) {
     actual: c.actual ? taskApi_num(v[c.actual - 1]) : null,
     wait: c.wait ? taskApi_text(v[c.wait - 1]).slice(0, 40) : '',
     pre: c.pre ? taskApi_text(v[c.pre - 1]).slice(0, 60) : '',
+    stage: c.stage ? taskApi_text(v[c.stage - 1]).slice(0, 100) : '',
     preWait: false   // taskApi_list で、前提の No が未完了かどうかを見て決める
   };
 }
@@ -422,7 +426,7 @@ function taskApi_list(sh, withPj) {
   var pseen = {}, people = [];
   all.forEach(function (t) { if (t.wait && !pseen[t.wait]) { pseen[t.wait] = true; people.push(t.wait); } });
   var out = { tasks: tasks, tomorrow: tomorrow, tomorrowDate: tomorrowDate, projects: pjs, actualColumn: !!c.actual, preOptions: preOptions, people: people.slice(0, 30),
-    waitColumn: !!c.wait, preColumn: !!c.pre };
+    waitColumn: !!c.wait, preColumn: !!c.pre, stageColumn: !!c.stage };
   if (withPj) { out.all = taskApi_pjFrom(all).tasks; out.pjOrder = taskApi_pjOrder(); }   // 案件のガント用（同じ読み込みを使い回す＝もう1回通信しない）
   return out;
 }
@@ -527,7 +531,8 @@ function taskApi_add(sh, req) {
   set[c.no] = no;
   set[c.done] = false;
   set[c.pj] = taskApi_text(req.pj);
-  set[c.todo] = parent ? parent + ' | ' + todo : todo;
+  if (c.stage) { set[c.stage] = parent; set[c.todo] = todo; }   // 段階の列がある表は分けて書く
+  else set[c.todo] = parent ? parent + ' | ' + todo : todo;
   set[c.ko] = ko;
   set[c.date] = date;
   set[c.slot] = slot ? TASKAPI.SLOTS[slot] : '';
@@ -732,7 +737,7 @@ function taskApi_pjOrder() {
   return out.slice(0, 200);
 }
 function taskApi_pjFrom(rows) {
-  var slim = function (t, arc) { return { no: t.no, done: t.done, pj: t.pj.slice(0, 60), todo: t.todo.slice(0, 120), ko: t.ko, date: t.date, pre: t.pre, wait: t.wait ? 1 : 0, detail: t.detail.slice(0, 200), arc: arc || undefined }; };
+  var slim = function (t, arc) { return { no: t.no, done: t.done, pj: t.pj.slice(0, 60), todo: t.todo.slice(0, 120), stage: t.stage || undefined, ko: t.ko, date: t.date, pre: t.pre, wait: t.wait ? 1 : 0, detail: t.detail.slice(0, 200), arc: arc || undefined }; };
   var out = rows.map(function (t) { return slim(t); });
   var ar = taskApi_archiveSheet(false);
   if (ar) {
@@ -882,6 +887,7 @@ function taskApi_kumitate(sh, req) {
     if (p.op === 'date') { sh.getRange(t.row, c.date).setValue(dt(o.date)); koutei.push({ t: t, date: o.date }); }
     if (p.op === 'edit') {
       if (o.newTodo !== undefined) sh.getRange(t.row, c.todo).setValue(taskApi_text(o.newTodo));
+      if (o.stage !== undefined && c.stage) sh.getRange(t.row, c.stage).setValue(taskApi_text(o.stage).slice(0, 100));
       if (o.ko !== undefined) sh.getRange(t.row, c.ko).setValue(taskApi_num(o.ko));
       if (o.detail !== undefined) sh.getRange(t.row, c.detail).setValue(taskApi_text(o.detail));
     }

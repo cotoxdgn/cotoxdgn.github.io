@@ -164,7 +164,7 @@
       if (!t.done) { body.setAttribute('role', 'button'); body.tabIndex = 0; body.setAttribute('aria-label', 'タスクの設定：' + t.todo);
         body.addEventListener('click', function () { openWait(t); });
         body.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openWait(t); } }); }
-      body.appendChild(el('div', 'tt', t.todo));
+      body.appendChild(el('div', 'tt', (t.stage ? t.stage + ' | ' : '') + t.todo));
       var meta = el('div', 'meta');
       if (t.pj) meta.appendChild(el('span', 'pj', t.pj));
       if (!t.done && t.wait) meta.appendChild(el('span', 'chip wait', '⏳ ' + t.wait + ' 待ち'));
@@ -193,7 +193,7 @@
       state.tasks = d.tasks || []; state.projects = d.projects || []; state.actualColumn = !!d.actualColumn; state.loaded = true;
       state.preOptions = d.preOptions || []; state.people = d.people || [];
       state.tomorrow = d.tomorrow || []; state.tomorrowDate = d.tomorrowDate || '';
-      state.waitColumn = d.waitColumn !== false; state.preColumn = d.preColumn !== false;
+      state.waitColumn = d.waitColumn !== false; state.preColumn = d.preColumn !== false; state.stageColumn = !!d.stageColumn;
       lsSet(CACHE_KEY, { tasks: state.tasks, projects: state.projects, today: state.today, actualColumn: state.actualColumn,
         preOptions: state.preOptions, people: state.people, tomorrow: state.tomorrow, tomorrowDate: state.tomorrowDate, at: Date.now() });
       $('status').textContent = '';
@@ -212,7 +212,8 @@
     var date = $('aDate').value || state.today || localYmd();
     $('quickMeta').textContent = [pj || '案件名なし', '工 ' + ($('aKo').value || '0') + 'h', '📅 ' + md(date) + '(' + dow(date) + ')', SLOT_EMOJI[slot] + ' ' + slot].join(' ・ ');
     var parent = $('aParent').value.trim(), todo = $('aTodo').value.trim();
-    $('preview').textContent = 'シートの ToDo 欄：' + (todo ? (parent ? parent + ' | ' + todo : todo) : '（タスク名）');
+    $('preview').textContent = state.stageColumn ? 'シートの 段階：' + (parent || '（なし）') + ' ／ ToDo：' + (todo || '（タスク名）')
+      : 'シートの ToDo 欄：' + (todo ? (parent ? parent + ' | ' + todo : todo) : '（タスク名）');
   }
   function resetForm() {
     $('aTodo').value = ''; $('aParent').value = ''; $('aDetail').value = '';
@@ -524,8 +525,9 @@
   var pjData = null, pjCur = '', pjOpenGroup = '';
   function isMs(t) { return /^\s*(◆|【確認】)/.test(t.todo); }
   function wgt(t) { return isMs(t) ? 0 : (t.ko > 0 ? t.ko : 0.5); }   // 工が空・0のタスクも少しは進みに数える
-  function parentOf(t) { var i = t.todo.indexOf(' | '); return i > 0 ? t.todo.slice(0, i) : (isMs(t) ? t.todo : 'そのほか'); }
-  function childOf(t) { var i = t.todo.indexOf(' | '); return i > 0 ? t.todo.slice(i + 3) : t.todo; }
+  // 段階：段階の列がある表はその値、ない表は ToDo の「段階 | 子」の前半
+  function parentOf(t) { if (t.stage) return t.stage; var i = t.todo.indexOf(' | '); return i > 0 ? t.todo.slice(0, i) : (isMs(t) ? t.todo : 'そのほか'); }
+  function childOf(t) { if (t.stage) return t.todo; var i = t.todo.indexOf(' | '); return i > 0 ? t.todo.slice(i + 3) : t.todo; }
   function ymdAdd(ymd, n) { var p = ymd.split('-').map(Number); return localYmd(new Date(p[0], p[1] - 1, p[2] + n)); }
   function dayDiff(a, b) { var x = a.split('-').map(Number), y = b.split('-').map(Number); return Math.round((new Date(y[0], y[1] - 1, y[2]) - new Date(x[0], x[1] - 1, x[2])) / 86400000); }
   function weekStart(ymd) { var p = ymd.split('-').map(Number), d = new Date(p[0], p[1] - 1, p[2]); return ymdAdd(ymd, -((d.getDay() + 6) % 7)); }
@@ -776,6 +778,7 @@
   window.TaskApp = {
     api: api, el: el, toast: toast, errText: errText, md: md, dow: dow, h: h, reqId: reqId,
     today: function () { return state.today || localYmd(); },
+    stageColumn: function () { return !!state.stageColumn; },
     pjTasks: function () { return pjData; },
     refreshPj: function (pj) { pjCur = pj; pjAt = Date.now(); showTab('pj'); load(true); }
   };
