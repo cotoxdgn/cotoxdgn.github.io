@@ -1,6 +1,7 @@
 /* 空間ひきだし帖：実績で使った商品・納まり、法規、おすすめを毎日1枚書いて身につけ、週1でHPとストーリーに公開する
  * レコード（自分用スプシの app=hikidashi）
- *   ストック：id st-xxxx  { kind:'stock', type, name（使ったもの・題）, from（元）, memo, workId, workName, src:'desk'|'archmap', srcId, cardId（カードにしたら）, at }
+ *   ストック：id st-xxxx  { kind:'stock', type, name（使ったもの・題）, from（元）, memo, workId, workName, src:'desk'|'archmap'|'csv', srcId, group（TheRの区分・CSVから）, cardId（カードにしたら）, at }
+ *             CSVから入れたものは id st-csv-<名前のハッシュ>
  *   カード  ：id cd-xxxx  { kind:'card', no, type, date（公開予定日）, stockId, from, to, phrase（60字）, checked（商品・納まり）,
  *                           article・checkedOn（法規。必須）, link（おすすめ：公式・出典。https）, noteUrl, illust・photo:{ id, thumb }|null,
  *                           fromWork（実務の案件から）, workPub（フジイの案件の通称）, status:'draft'|'done', doneOn, publishAt（公開予約した日）, at }
@@ -117,6 +118,12 @@
         var nx = awardNext(a);
         if (nx && nx.date <= add(t, 30)) al += '<div class="alert">要確認：' + esc(a.name) + ' の締切 ' + mdw(nx.date) + (nx.tentative ? '（去年の日付から仮）' : '') + (isUrl(a.url) ? ' <a href="' + esc(a.url) + '" target="_blank" rel="noopener">公式ページ</a>' : '') + '</div>';
       });
+    }
+    // 要確認がないときも、次の締切を1行だけ出す（一覧は 帖 › 設定）
+    if (!al && st.awards.length && t >= st.conf.alertFrom) {
+      var nxt = st.awards.map(function (a) { return { a: a, n: awardNext(a) }; }).filter(function (x) { return x.n; })
+        .sort(function (x, y) { return x.n.date < y.n.date ? -1 : 1; })[0];
+      if (nxt) al = '<div class="small muted" id="tNextAward">次の賞の締切：' + esc(nxt.a.name) + ' ' + mdw(nxt.n.date) + (nxt.n.tentative ? '（去年の日付から仮）' : '') + '　<a class="link" href="#settings">全' + st.awards.length + '件を見る</a></div>';
     }
     $('tAlerts').innerHTML = al;
   }
@@ -546,6 +553,89 @@
     if (url && !isUrl(url)) { Apps.toast('公式ページは https:// で始まるURLにしてください', true); return; }
     db.put({ kind: 'award', name: name, date: date, url: url, memo: $('aMemo').value.trim(), tentative: false }, awEdit || newId('aw-'));
     Apps.toast(awEdit ? '保存しました' : '追加しました'); resetAward();
+  });
+
+  // ---------- ストックのCSV取込（実績の仕様リストなど。列：kind,type,name,from,memo,src,group） ----------
+  var csvRows = [];
+  function parseCsv(text) {
+    text = String(text || '').replace(/^﻿/, '');
+    var rows = [], row = [], cell = '', q = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (q) {
+        if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+        else cell += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === ',') { row.push(cell); cell = ''; }
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); cell = ''; if (row.some(function (c) { return c !== ''; })) rows.push(row); row = [];
+      } else cell += ch;
+    }
+    row.push(cell); if (row.some(function (c) { return c !== ''; })) rows.push(row);
+    return rows;
+  }
+  function csvId(name) {   // 同じ名前は同じ id（2台で入れても重複しない）
+    var h1 = 0x811c9dc5, h2 = 0x01000193;
+    for (var i = 0; i < name.length; i++) { var c = name.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619) >>> 0; h2 = Math.imul(h2 ^ c, 2246822519) >>> 0; }
+    return 'st-csv-' + h1.toString(36) + h2.toString(36);
+  }
+  function csvRecords(rows) {
+    if (!rows.length) return [];
+    var head = rows[0].map(function (x) { return String(x).trim().toLowerCase(); });
+    var ix = function (k) { return head.indexOf(k); };
+    if (ix('name') < 0) return null;
+    return rows.slice(1).map(function (r) {
+      var g = function (k) { var i = ix(k); return i < 0 ? '' : String(r[i] == null ? '' : r[i]).trim(); };
+      var type = K[g('type')] ? g('type') : 'item';
+      return { kind: g('kind') || 'stock', type: type, name: g('name').slice(0, 120), from: g('from').slice(0, 120), memo: g('memo').slice(0, 200), group: g('group').slice(0, 80) };
+    }).filter(function (x) { return x.kind === 'stock' && x.name; });
+  }
+  function findStockByName(name) { return st.stocks.filter(function (s) { return s.name === name; })[0] || null; }
+  function renderCsv() {
+    var n = csvRows.length, dup = csvRows.filter(function (r) { return findStockByName(r.name); }).length;
+    $('cInfo').textContent = n ? ('読み込んだ ' + n + '件（新しく入る ' + (n - dup) + '件／同じ名前がすでにある ' + dup + '件）') : '';
+    $('cDupBox').hidden = !dup;
+    $('cGo').disabled = !n;
+  }
+  $('cFile').addEventListener('change', function () {
+    var f = this.files && this.files[0]; csvRows = []; $('cMsg').textContent = '';
+    if (!f) { renderCsv(); return; }
+    var rd = new FileReader();
+    rd.onload = function () {
+      var recs = csvRecords(parseCsv(rd.result));
+      if (recs === null) { $('cMsg').textContent = '1行目に name の列が見つかりません。取込用のCSVを選んでください'; csvRows = []; }
+      else csvRows = recs;
+      renderCsv();
+    };
+    rd.readAsText(f, 'utf-8');
+  });
+  $('cGo').addEventListener('click', function () {
+    if (!csvRows.length) return;
+    var over = $('cOver').checked, at = new Date().toISOString(), add = 0, upd = 0, skip = 0;
+    var jobs = csvRows.slice();
+    $('cGo').disabled = true; $('cMsg').textContent = '取り込み中…';
+    (function next() {
+      var r = jobs.shift();
+      if (!r) {
+        var msg = [];
+        if (add) msg.push('ストックに ' + add + '件入れました');
+        if (upd) msg.push(upd + '件を上書きしました');
+        if (skip) msg.push(skip + '件は同じ名前があるので飛ばしました');
+        $('cMsg').textContent = msg.join('・') || '入れるものはありませんでした';
+        csvRows = []; $('cFile').value = ''; renderCsv(); Apps.toast('取り込みました'); return;
+      }
+      var old = findStockByName(r.name), p;
+      if (old && !over) { skip++; return next(); }
+      if (old) {
+        upd++;
+        p = db.put(Object.assign({}, old, { type: r.type, from: r.from, memo: r.memo, group: r.group, id: undefined }), old.id);
+      } else {
+        add++;
+        p = db.put({ kind: 'stock', type: r.type, name: r.name, from: r.from, memo: r.memo, group: r.group, workId: '', workName: '', src: 'csv', srcId: '', cardId: '', at: at }, csvId(r.name));
+      }
+      Promise.resolve(p).then(next, next);
+    })();
   });
 
   // ---------- 画面の切り替え ----------

@@ -307,6 +307,15 @@ h2 { font-size: 16px; margin: 0; }
       <label class="f">メモ（HPに出ます）<input id="aMemo" maxlength="120"></label>
       <div class="row"><button class="ax-btn ax-btn-primary" type="button" id="aSave">追加</button><button class="link" type="button" id="aCancel" hidden>やめる</button></div>
     </div>
+    <div class="box">
+      <div class="between"><h2>ストックをCSVで取り込む</h2></div>
+      <div class="small muted">実績の仕様リストから作った取込用CSV（1行目：kind,type,name,from,memo,src,group）を選びます。お客様名・住所・原価の入ったファイルは入れないでください。</div>
+      <label class="f">CSVファイル<input type="file" id="cFile" accept=".csv,text/csv"></label>
+      <div class="small" id="cInfo"></div>
+      <div id="cDupBox" hidden class="small"><label><input type="radio" name="cDup" id="cSkip" checked> 同じ名前のものは飛ばす</label><br><label><input type="radio" name="cDup" id="cOver"> 同じ名前のものはメモなどを上書きする（カードにした分はそのまま）</label></div>
+      <div class="row"><button class="ax-btn ax-btn-primary" type="button" id="cGo" disabled>ストックに取り込む</button></div>
+      <p class="small muted" id="cMsg" style="margin:0"></p>
+    </div>
   </section>
 </main>
 

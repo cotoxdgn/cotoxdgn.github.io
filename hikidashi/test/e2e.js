@@ -276,6 +276,57 @@ async function notePhoto(page) {
     assert.strictEqual(aw.length, 7, '最初に入れた5つ＋2つ');
     assert.ok(aw.filter(a => /日本空間デザイン賞|グッドデザイン賞|住まいのリフォームコンクール|JID AWARD|リノベーション・オブ・ザ・イヤー/.test(a.name)).every(a => a.tentative && a.date.startsWith('2027-')), '2026年の締切は2027年に仮で繰り越し');
   });
+  await t('今日：要確認がない時期も、出し始める日を過ぎていれば次の賞の締切を1行出す', async () => {
+    // テストの賞（11/20）を消すと、30日以内の締切がなくなる
+    const ta = of('award').find(r => r.data.name === 'テストの賞');
+    await page.evaluate(id => Apps.collection('hikidashi').remove(id), ta.id);
+    await settled(page);
+    await go(page, '#today');
+    const tx = await text(page, '#tAlerts');
+    assert.ok(!/要確認/.test(tx), tx);
+    assert.match(tx, /次の賞の締切：去年の賞 3月1日/);
+    assert.match(tx, /全6件を見る/);
+  });
+  await t('設定：ストックをCSVで取り込む（同じ名前は飛ばす／上書きを選べる・2回入れても増えない）', async () => {
+    await go(page, '#settings');
+    const csv = '﻿kind,type,name,from,memo,src,group\n' +
+      'stock,item,LIXIL／洗濯水栓 LF-WJ50KQ,,"洗濯／発注はLF-WJ50KQA／実務で使用（7件）",desk,TheR標準・TheR.E1\n' +
+      'stock,item,"カクダイ／洗濯パン, ホワイト 426-411-W",,洗濯／実務で使用（6件）,desk,\n' +
+      'stock,detail,名古屋モザイク／エリアボーダー彩 LB-801-M,,洗面,desk,\n';
+    const f = path.join(os.tmpdir(), 'hiki-import.csv'); fs.writeFileSync(f, csv);
+    await page.setInputFiles('#cFile', f);
+    await page.waitForFunction(() => /読み込んだ 3件/.test(document.getElementById('cInfo').textContent));
+    await page.click('#cGo');
+    await page.waitForFunction(() => /ストックに 3件入れました/.test(document.getElementById('cMsg').textContent));
+    await settled(page);
+    let st = of('stock').filter(r => r.data.src === 'csv');
+    assert.strictEqual(st.length, 3);
+    assert.ok(st.every(r => /^st-csv-/.test(r.id)));
+    const pan = st.find(r => /洗濯パン/.test(r.data.name));
+    assert.strictEqual(pan.data.name, 'カクダイ／洗濯パン, ホワイト 426-411-W', '引用符の中のカンマ');
+    assert.strictEqual(st.find(r => /LF-WJ50KQ/.test(r.data.name)).data.group, 'TheR標準・TheR.E1');
+    assert.strictEqual(st.find(r => /LB-801-M/.test(r.data.name)).data.type, 'detail');
+    // 2回目：既定は飛ばす
+    await page.setInputFiles('#cFile', f);
+    await page.waitForFunction(() => /同じ名前がすでにある 3件/.test(document.getElementById('cInfo').textContent));
+    assert.ok(await page.isVisible('#cDupBox'));
+    await page.click('#cGo');
+    await page.waitForFunction(() => /3件は同じ名前があるので飛ばしました/.test(document.getElementById('cMsg').textContent));
+    await settled(page);
+    assert.strictEqual(of('stock').filter(r => r.data.src === 'csv').length, 3, '増えない');
+    // 3回目：上書き
+    fs.writeFileSync(f, csv.replace('洗濯／実務で使用（6件）', '洗濯／実務で使用（8件）'));
+    await page.setInputFiles('#cFile', f);
+    await page.waitForFunction(() => /同じ名前がすでにある 3件/.test(document.getElementById('cInfo').textContent));
+    await page.check('#cOver');
+    await page.click('#cGo');
+    await page.waitForFunction(() => /3件を上書きしました/.test(document.getElementById('cMsg').textContent));
+    await settled(page);
+    st = of('stock').filter(r => r.data.src === 'csv');
+    assert.strictEqual(st.length, 3);
+    assert.match(st.find(r => /洗濯パン/.test(r.data.name)).data.memo, /8件/);
+    await page.screenshot({ path: path.join(SHOT, 'csv-import.png'), fullPage: true });
+  });
   await noHScroll(page, 'today');
   for (const v of ['#write', '#week', '#cho', '#settings']) { await go(page, v); await page.waitForTimeout(150); await noHScroll(page, v); }
   await ctx.close();
