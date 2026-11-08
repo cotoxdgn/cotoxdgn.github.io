@@ -229,7 +229,10 @@
       }
       if (x.parent !== prevParent) {
         seg = el('div', 'kseg ' + colorOf(x.parent));
-        seg.appendChild(el('div', 'ksegname', x.parent));
+        var all = km.items.filter(function (y) { return !y.ms && !y.ex && y.parent === x.parent; });
+        var nm = el('div', 'ksegname'); nm.appendChild(document.createTextNode(x.parent));
+        nm.appendChild(el('span', 'kcount', all.filter(function (y) { return y.done; }).length + ' / ' + all.length + ' 済'));
+        seg.appendChild(nm);
         route.appendChild(seg); prevParent = x.parent;
       }
       var st = el('div', 'kst'); st.dataset.key = key;
