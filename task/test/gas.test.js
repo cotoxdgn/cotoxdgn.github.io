@@ -453,4 +453,13 @@ t('kumitate：工程表連動（⛓）の行は、工程表の開始日・終了
   assert.strictEqual(ks.peek(9, 7).f, '=F9+7'); assert.strictEqual(ks.peek(8, 6).v, '', 'ほかの行は変えない');
   sh.cell(x.row, 11).v = '';
 });
+
+t('list withPj：案件のガント用の全タスクを同じ読み込みで返す（読むだけ・ロックなし）', () => {
+  const before = snap(); sh.writes.length = 0;
+  const r = call({ key: KEY, action: 'list', withPj: true });
+  assert.ok(r.ok); assert.ok(Array.isArray(r.all) && r.all.length >= r.tasks.length);
+  assert.ok(r.all.some(x => x.arc === 1), 'アーカイブも入る');
+  assert.deepStrictEqual(snap(), before); assert.strictEqual(sh.writes.length, 0);
+  assert.strictEqual(call({ key: KEY, action: 'list' }).all, undefined, 'withPj なしでは付けない');
+});
 console.log(`\n${passed} passed`);

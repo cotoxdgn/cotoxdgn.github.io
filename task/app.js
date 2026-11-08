@@ -24,6 +24,7 @@
     bad_type: '繰り返しを選んでください', bad_when: '曜日・日を選んでください', bad_range: '終了日は開始日より後にしてください'
   };
   var $ = function (id) { return document.getElementById(id); };
+  var lastLoad = 0, pjAt = 0;   // 最後に読み込んだ時刻（同じものを何度も取りに行かない）
   var state = { tasks: [], projects: [], today: '', actualColumn: false, loaded: false, preOptions: [], people: [], waitColumn: true, preColumn: true };
 
   // ---------- 端末内の保存（失敗しても動く） ----------
@@ -183,7 +184,9 @@
 
   function load(quiet) {
     if (!quiet) $('status').textContent = '読み込み中…';
-    return api('list').then(function (d) {
+    lastLoad = Date.now();
+    return api('list', { withPj: true }).then(function (d) {
+      if (d.all) { pjData = d.all; pjAt = Date.now(); lsSet('task.pj.v1', { tasks: pjData, at: pjAt }); if (!$('pjView').hidden) { drawPjList(); if (pjCur) drawPjDetail(); } }
       state.tasks = d.tasks || []; state.projects = d.projects || []; state.actualColumn = !!d.actualColumn; state.loaded = true;
       state.preOptions = d.preOptions || []; state.people = d.people || [];
       state.tomorrow = d.tomorrow || []; state.tomorrowDate = d.tomorrowDate || '';
@@ -555,7 +558,7 @@
   function msName(t) { return t.todo.replace(/^\s*(◆|【確認】)\s*/, ''); }
   function loadPj(quiet) {
     if (!quiet) $('pjStatus').textContent = '読み込み中…';
-    return api('pj').then(function (d) { pjData = d.tasks || []; lsSet('task.pj.v1', { tasks: pjData, at: Date.now() }); $('pjStatus').textContent = ''; return pjData; },
+    return api('pj').then(function (d) { pjData = d.tasks || []; pjAt = Date.now(); lsSet('task.pj.v1', { tasks: pjData, at: pjAt }); $('pjStatus').textContent = ''; return pjData; },
       function (e) { $('pjStatus').textContent = errText(e) + (pjData ? '（前回の内容を表示中）' : ''); throw e; });
   }
   function showTab(which) {
@@ -568,7 +571,7 @@
     if (pj) {
       if (!pjData) { var c = lsGet('task.pj.v1'); if (c && c.tasks) pjData = c.tasks; }
       drawPjList(); if (pjCur) drawPjDetail();
-      loadPj(!!pjData).then(function () { drawPjList(); if (pjCur) drawPjDetail(); }, function () {});
+      if (!pjData || Date.now() - pjAt > 60000) loadPj(!!pjData).then(function () { drawPjList(); if (pjCur) drawPjDetail(); }, function () {});
     }
   }
   function drawPjList() {
@@ -741,7 +744,8 @@
   function hidePop() { clearTimeout(popTimer); $('pop').hidden = true; popNext = null; }
   function showProgress(t) {
     if (!t.pj) return;
-    loadPj(true).then(function (tasks) {
+    (pjData ? Promise.resolve(pjData) : loadPj(true)).then(function (tasks) {
+      tasks.forEach(function (x) { if (x.no === t.no && x.todo === t.todo) x.done = true; });   // 手元の分を完了にする（通信しない）
       var mine = tasks.filter(function (x) { return x.pj === t.pj && (x.detail || '').indexOf('🚫外す') < 0; });
       var me = mine.filter(function (x) { return x.no === t.no && x.todo === t.todo; })[0];
       if (!me) return;
@@ -765,7 +769,7 @@
     api: api, el: el, toast: toast, errText: errText, md: md, dow: dow, h: h, reqId: reqId,
     today: function () { return state.today || localYmd(); },
     pjTasks: function () { return pjData; },
-    refreshPj: function (pj) { pjCur = pj; showTab('pj'); load(true); }
+    refreshPj: function (pj) { pjCur = pj; pjAt = Date.now(); showTab('pj'); load(true); }
   };
   $('pjKumi').addEventListener('click', function () {
     if (!window.KumiUI || !pjCur) return;
@@ -1001,7 +1005,7 @@
   $('wsSlot').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; wslot = b.getAttribute('data-s'); drawSlot(); });
   $('wsTime').addEventListener('change', function () { if (this.value) { wslot = this.value; drawSlot(); } });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('dim').hidden) closeSheet(); });
-  $('reload').addEventListener('click', function () { if (conn()) load(); });
+  $('reload').addEventListener('click', function () { if (conn()) { pjAt = 0; load(); } });
   $('settings').addEventListener('click', function () { if (conn()) openConf(); else $('scanBtn').focus(); });
   $('confClose').addEventListener('click', closeSheet);
   $('qrBtn').addEventListener('click', showQr);
@@ -1013,7 +1017,7 @@
   $('photoBtn').addEventListener('click', function () { $('photo').click(); });
   $('photo').addEventListener('change', fromPhoto);
   $('pasteBtn').addEventListener('click', function () { finishConnect(parseConnect($('paste').value)); });
-  document.addEventListener('visibilitychange', function () { if (!document.hidden && conn() && $('sheet').hidden) load(true); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && conn() && $('sheet').hidden && Date.now() - lastLoad > 60000) load(true); });
 
   window.addEventListener('hashchange', function () { if (consumeHash()) { start(); toast('この端末をつなぎました'); } });
   var hashed = consumeHash();

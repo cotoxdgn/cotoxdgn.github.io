@@ -21,7 +21,10 @@ def check(name, cond):
     if not cond: raise AssertionError(name)
     ok += 1; print('ok -', name)
 
+CALLS = []
 def forward(route):
+    try: CALLS.append(json.loads(route.request.post_data).get('action'))
+    except Exception: pass
     req = urllib.request.Request(f'http://127.0.0.1:{API}/', data=route.request.post_data.encode(), method='POST')
     route.fulfill(status=200, content_type='application/json', body=urllib.request.urlopen(req).read().decode())
 
@@ -179,8 +182,12 @@ try:
         pg.wait_for_selector('#toast:has-text("保存しました")')
         check('詳細がシートに入る', any(r and len(r) > 10 and r[10] == 'メモ https://example.com/a' for r in sheet()))
 
-        # 案件：一覧 → ガント → 次の一歩
+        # 案件：一覧 → ガント → 次の一歩（読み込み済みなら、案件タブで通信しない）
+        pg.click('#reload'); pg.wait_for_timeout(1200)
+        n_before = len(CALLS)
         pg.click('#tabPj')
+        pg.wait_for_timeout(600)
+        check('案件タブを開いても追加の通信をしない（今日の読み込みで一緒にもらっている）', 'pj' not in CALLS[n_before:])
         pg.wait_for_selector('#pjList .pjc')
         check('案件の一覧が出る（今日の画面は隠れる）', pg.locator('#pjList .pjc').count() >= 1 and not pg.locator('#app').is_visible())
         check('作業時間（h）を出さない', 'h' not in pg.inner_text('#pjList').replace('ToDo', ''))

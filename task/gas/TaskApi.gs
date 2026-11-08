@@ -213,6 +213,28 @@ function taskApi_handle(req) {
     }
   }
 
+  // 読むだけの action は順番待ち（ロック）なしで返す（書き込みの終わりを待たない＝速い。2026-11-08）
+  var READ = { ping: 1, list: 1, pj: 1, weight: 1, recurList: 1, tmplList: 1, archivePreview: 1 };
+  if (READ[req.action]) {
+    try {
+      var rsh = taskApi_sheet(), rres;
+      switch (req.action) {
+        case 'ping': rres = { name: rsh.getParent().getName(), actualColumn: !!taskApi_findCol(taskApi_heads(rsh), TASKAPI.ACTUAL_HEADER, true) }; break;
+        case 'list': rres = taskApi_list(rsh, req.withPj === true); break;
+        case 'pj': rres = taskApi_pj(rsh); break;
+        case 'weight': rres = taskApi_weight(rsh); break;
+        case 'recurList': rres = taskApi_recurList(); break;
+        case 'tmplList': rres = taskApi_tmplList(); break;
+        case 'archivePreview': rres = taskApi_archivePreview(rsh); break;
+      }
+      if (rres.error) return rres.detail ? { ok: false, error: rres.error, detail: rres.detail } : { ok: false, error: rres.error };
+      rres.ok = true; rres.today = taskApi_ymd(new Date());
+      return rres;
+    } catch (err) {
+      return { ok: false, error: 'server', detail: String(err && err.message || err).slice(0, 200) };
+    }
+  }
+
   var lock = LockService.getScriptLock();
   try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'busy' }; }
   try {
@@ -360,6 +382,10 @@ function taskApi_readAll(sh, c, first) {
   first = first || TASKAPI.FIRST_ROW;
   var last = sh.getLastRow();
   if (last < first) return [];
+  // 下の方が数式だけの空き行なら、ToDo が入っている一番下の行までに縮めてから読む（読む量を減らす）
+  var todos = sh.getRange(first, c.todo, last - first + 1, 1).getValues();
+  while (last >= first && String(todos[last - first][0]).trim() === '') last--;
+  if (last < first) return [];
   var vals = sh.getRange(first, 1, last - first + 1, c.width).getValues();
   var today = taskApi_ymd(new Date());
   var out = [];
@@ -372,7 +398,7 @@ function taskApi_readAll(sh, c, first) {
 }
 
 // 今日のタスク：📅が今日以前の未完了（持ち越し含む）＋今日の完了済み。案件名の候補も返す
-function taskApi_list(sh) {
+function taskApi_list(sh, withPj) {
   var c = taskApi_cols(sh);
   var all = taskApi_readAll(sh, c);
   var today = taskApi_ymd(new Date());
@@ -392,8 +418,10 @@ function taskApi_list(sh) {
   // 👤の候補：これまでに入れたことのある名前
   var pseen = {}, people = [];
   all.forEach(function (t) { if (t.wait && !pseen[t.wait]) { pseen[t.wait] = true; people.push(t.wait); } });
-  return { tasks: tasks, tomorrow: tomorrow, tomorrowDate: tomorrowDate, projects: pjs, actualColumn: !!c.actual, preOptions: preOptions, people: people.slice(0, 30),
+  var out = { tasks: tasks, tomorrow: tomorrow, tomorrowDate: tomorrowDate, projects: pjs, actualColumn: !!c.actual, preOptions: preOptions, people: people.slice(0, 30),
     waitColumn: !!c.wait, preColumn: !!c.pre };
+  if (withPj) out.all = taskApi_pjFrom(all).tasks;   // 案件のガント用（同じ読み込みを使い回す＝もう1回通信しない）
+  return out;
 }
 
 // 前提：「No.タイトル」の No が完了済みなら待ちではない。番号が読めない・見つからないときは待ちとして扱う
@@ -674,10 +702,10 @@ function taskApi_writeActual(sh, c, row, value) {
 
 // ---------- 案件ごとのガント（2026-11-08） ----------
 // 全タスク（日次ガント＋アーカイブ）の、ガントに要る列だけを返す。集計はアプリ側で行う
-function taskApi_pj(sh) {
-  var c = taskApi_cols(sh);
+function taskApi_pj(sh) { return taskApi_pjFrom(taskApi_readAll(sh, taskApi_cols(sh))); }
+function taskApi_pjFrom(rows) {
   var slim = function (t, arc) { return { no: t.no, done: t.done, pj: t.pj.slice(0, 60), todo: t.todo.slice(0, 120), ko: t.ko, date: t.date, pre: t.pre, wait: t.wait ? 1 : 0, detail: t.detail.slice(0, 200), arc: arc || undefined }; };
-  var out = taskApi_readAll(sh, c).map(function (t) { return slim(t); });
+  var out = rows.map(function (t) { return slim(t); });
   var ar = taskApi_archiveSheet(false);
   if (ar) {
     var ac = taskApi_cols(ar);
